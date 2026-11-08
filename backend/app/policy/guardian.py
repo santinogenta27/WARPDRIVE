@@ -6,7 +6,9 @@ Los permisos se aplican en código, nunca en el prompt. Orden de controles:
   3. Identidad: si el manifiesto lo pide, el contacto está verificado.
   4. Dueño: el recurso (p. ej. el pedido) pertenece al contacto. Si no existe o es de otro, la
      respuesta es la misma, para no revelar que existe.
-  5. Ejecución contra la API del cliente.
+  5. Monto y riesgo: sobre `max_amount` se rechaza; riesgo alto o monto sobre `approval_over`
+     crea una aprobación humana y no se ejecuta.
+  6. Ejecución contra la API del cliente.
 """
 
 import uuid
@@ -15,6 +17,7 @@ from typing import Any, Literal
 
 import psycopg
 from jsonschema import Draft202012Validator
+from psycopg.types.json import Jsonb
 
 from app.contacts import hash_phone
 from app.db.connection import tenant_scope
@@ -54,6 +57,15 @@ def _denied(reason: str, message: str | None = None) -> GuardDecision:
     return GuardDecision("denied", {"error": message or reason}, reason=reason)
 
 
+def _amount(
+    manifest: dict[str, Any], tool_input: dict[str, Any], resources: dict[str, Any]
+) -> float | None:
+    source = manifest.get("amount_from", "input.amount")
+    scope, _, name = source.partition(".")
+    value = tool_input.get(name) if scope == "input" else (resources.get(scope) or {}).get(name)
+    return float(value) if isinstance(value, int | float) else None
+
+
 class Guardian:
     def __init__(self, conn: psycopg.Connection, runtime: ToolRuntime) -> None:
         self._conn = conn
@@ -80,6 +92,57 @@ class Guardian:
         tool_input: dict[str, Any],
         allowed: set[str],
     ) -> GuardDecision:
+        checked = self._precheck(tenant_id, contact, tool_name, tool_input, allowed)
+        if isinstance(checked, GuardDecision):
+            return checked
+        manifest, resources = checked
+        decision = self._apply_risk_policy(
+            tenant_id=tenant_id,
+            case_id=case_id,
+            manifest=manifest,
+            tool_input=tool_input,
+            resources=resources,
+            approved_by_human=False,
+        )
+        if decision is not None:
+            return decision
+        return self._run(manifest, tool_input, case_id, resources)
+
+    def execute_approved(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        case_id: uuid.UUID,
+        contact: ContactContext,
+        tool_name: str,
+        tool_input: dict[str, Any],
+    ) -> GuardDecision:
+        """Ejecuta una acción ya aprobada por un humano: repite todos los controles salvo la
+        aprobación (la herramienta pudo desaprobarse o el pedido cambiar de dueño o estado)."""
+        checked = self._precheck(tenant_id, contact, tool_name, tool_input, {tool_name})
+        if isinstance(checked, GuardDecision):
+            return checked
+        manifest, resources = checked
+        decision = self._apply_risk_policy(
+            tenant_id=tenant_id,
+            case_id=case_id,
+            manifest=manifest,
+            tool_input=tool_input,
+            resources=resources,
+            approved_by_human=True,
+        )
+        if decision is not None:
+            return decision
+        return self._run(manifest, tool_input, case_id, resources)
+
+    def _precheck(
+        self,
+        tenant_id: uuid.UUID,
+        contact: ContactContext,
+        tool_name: str,
+        tool_input: dict[str, Any],
+        allowed: set[str],
+    ) -> tuple[dict[str, Any], dict[str, Any]] | GuardDecision:
         if tool_name not in allowed:
             return _denied("Herramienta no habilitada para este tipo de caso.")
         found = self.manifests(tenant_id, [tool_name])
@@ -102,19 +165,8 @@ class Guardian:
             if owner is None:
                 return _denied("El recurso no pertenece al contacto.", NOT_FOUND_FOR_CONTACT)
             resources.update(owner)
+        return manifest, resources
 
-        decision = self._apply_risk_policy(
-            tenant_id=tenant_id,
-            case_id=case_id,
-            manifest=manifest,
-            tool_input=tool_input,
-            resources=resources,
-        )
-        if decision is not None:
-            return decision
-        return self._run(manifest, tool_input, case_id, resources)
-
-    # El control de riesgo, montos y aprobaciones se agrega en la tarea 8.
     def _apply_risk_policy(
         self,
         *,
@@ -123,8 +175,58 @@ class Guardian:
         manifest: dict[str, Any],
         tool_input: dict[str, Any],
         resources: dict[str, Any],
+        approved_by_human: bool,
     ) -> GuardDecision | None:
-        return None
+        """Riesgo bajo: se ejecuta. Riesgo alto o monto sobre `approval_over`: aprobación humana.
+        Monto sobre `max_amount`: se rechaza siempre, aun con aprobación."""
+        amount = _amount(manifest, tool_input, resources)
+        max_amount = manifest.get("max_amount")
+        if max_amount is not None and amount is not None and amount > max_amount:
+            return _denied("El monto supera el máximo permitido para esta herramienta.")
+        if approved_by_human:
+            return None
+        approval_over = manifest.get("approval_over")
+        needs_approval = manifest["risk"] == "high" or (
+            approval_over is not None and amount is not None and amount > approval_over
+        )
+        if not needs_approval:
+            return None
+        approval_id = self._request_approval(tenant_id, case_id, manifest["name"], tool_input)
+        return GuardDecision(
+            "approval_required",
+            {
+                "status": "approval_required",
+                "mensaje": "La acción quedó pendiente de aprobación de una persona del equipo.",
+            },
+            reason="Requiere aprobación humana.",
+            side_effect=True,
+            approval_id=approval_id,
+            resources=resources,
+        )
+
+    def _request_approval(
+        self, tenant_id: uuid.UUID, case_id: uuid.UUID, tool_name: str, params: dict[str, Any]
+    ) -> uuid.UUID:
+        """Crea la aprobación pendiente (o reusa la idéntica ya pendiente) y pausa el caso."""
+        with tenant_scope(self._conn, tenant_id):
+            row = self._conn.execute(
+                "select a.id from approvals a join tools t on t.id = a.tool_id"
+                " where a.case_id = %s and t.name = %s and a.params = %s and a.status = 'pending'",
+                (case_id, tool_name, Jsonb(params)),
+            ).fetchone()
+            if row is None:
+                row = self._conn.execute(
+                    "insert into approvals (tenant_id, case_id, tool_id, params)"
+                    " select %s, %s, id, %s from tools where name = %s returning id",
+                    (tenant_id, case_id, Jsonb(params), tool_name),
+                ).fetchone()
+            self._conn.execute(
+                "update cases set status = 'waiting_approval', updated_at = now() where id = %s",
+                (case_id,),
+            )
+        assert row is not None
+        approval_id: uuid.UUID = row[0]
+        return approval_id
 
     def _check_owner(
         self, manifest: dict[str, Any], tool_input: dict[str, Any], contact: ContactContext

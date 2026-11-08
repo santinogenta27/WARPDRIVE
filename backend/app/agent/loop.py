@@ -201,6 +201,11 @@ class Agent:
             return self._escalate(turn, str(data.get("motivo") or "Derivado por el agente."))
         message = str(data.get("mensaje") or "").strip()
         sources = [str(s) for s in data.get("fuentes") or []]
+        pending = next((d for d in turn.decisions if d.status == "approval_required"), None)
+        if pending is not None:
+            return self._finish(
+                turn, "pedir_aprobacion", message, sources=sources, approval_id=pending.approval_id
+            )
         action: Action = (
             "ejecutar"
             if any(d.status == "executed" and d.side_effect for d in turn.decisions)
