@@ -21,7 +21,7 @@ known-first-party = ["app", "acme_api"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["backend/app", "evals"]
+files = ["backend/app", "mocks/acme-api", "evals"]
 mypy_path = ["backend", "mocks/acme-api"]
 disallow_untyped_defs = true
 check_untyped_defs = true

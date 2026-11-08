@@ -1,0 +1,8 @@
+nombre: cancelar_pedido
+objetivo: Cancelar un pedido del cliente antes de que sea despachado
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido, cancelar_pedido]
+condiciones:
+  - Si el pedido ya fue despachado, explicá que no se puede cancelar y ofrecé iniciar un cambio o derivar.
+  - Si la cancelación queda en revisión, avisá que un humano la va a aprobar.
+cierre: Confirmá la cancelación y cómo se devuelve el dinero según la política de reembolsos.
