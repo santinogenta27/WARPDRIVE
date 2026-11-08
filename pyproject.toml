@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
-pythonpath = ["backend", "mocks/acme-api"]
+pythonpath = ["backend", "mocks/acme-api", "evals"]
 addopts = "-q"
 
 [tool.ruff]
