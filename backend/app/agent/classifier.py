@@ -2,12 +2,20 @@
 
 import html
 import uuid
+from dataclasses import dataclass
 
 from app.llm.client import LLMClient
+from app.llm.types import LLMResponse
 
 CLASSIFIER_MODEL = "claude-haiku-5-5"
 ASK_FOR_HUMAN = "derivar_humano"
 OTHER = "otro"
+
+
+@dataclass(frozen=True)
+class Classification:
+    label: str
+    response: LLMResponse  # para auditar modelo, tokens y costo
 
 
 def classify(
@@ -18,7 +26,7 @@ def classify(
     company: str,
     message: str,
     case_types: dict[str, str],
-) -> str:
+) -> Classification:
     """Devuelve el nombre de un tipo de caso activo, `derivar_humano` u `otro`."""
     labels = [*case_types, ASK_FOR_HUMAN, OTHER]
     catalog = "\n".join(f"- {name}: {goal}" for name, goal in case_types.items())
@@ -52,5 +60,5 @@ def classify(
     )
     for call in response.tool_calls:
         if call.name == "clasificar" and call.input.get("tipo") in labels:
-            return str(call.input["tipo"])
-    return OTHER
+            return Classification(str(call.input["tipo"]), response)
+    return Classification(OTHER, response)

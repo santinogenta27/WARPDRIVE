@@ -16,9 +16,12 @@ import yaml
 from app.agent import prompt
 from app.agent.classifier import ASK_FOR_HUMAN, classify
 from app.agent.grounding import GroundingVerdict, check_grounding
+from app.audit import log as audit_log
 from app.db.connection import tenant_scope
 from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
+from app.llm.pricing import cost_usd
+from app.llm.types import LLMResponse
 from app.policy.guardian import ContactContext, GuardDecision, Guardian
 from app.rag.search import SearchResult, hybrid_search
 
@@ -118,9 +121,10 @@ class Agent:
         case_id = self._open_case(tenant_id, contact_id)
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text)
+        self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
 
         case_types = self._active_case_types(tenant_id)
-        label = classify(
+        classification = classify(
             self._llm,
             tenant_id=tenant_id,
             case_id=case_id,
@@ -128,6 +132,9 @@ class Agent:
             message=text,
             case_types={name: goal for name, (goal, _) in case_types.items()},
         )
+        self._audit_model_call(turn, "clasificador", classification.response)
+        label = classification.label
+        self._audit(turn, "classified", {"case_type": label})
         if label == ASK_FOR_HUMAN:
             return self._escalate(turn, "El cliente pidió hablar con una persona.")
         if label not in case_types:
@@ -142,6 +149,15 @@ class Agent:
             return self._finish(turn, "responder", VERIFICATION_MESSAGE, verification=True)
 
         turn.documents = hybrid_search(self._conn, tenant_id, self._embedder, text, k=5)
+        self._audit(
+            turn,
+            "rag_search",
+            {
+                "query": text,
+                "sources": [d.source for d in turn.documents],
+                "chunk_ids": [str(d.chunk_id) for d in turn.documents],
+            },
+        )
         system = prompt.system_prompt(company, tone, instructions)
         messages: list[dict[str, Any]] = [
             {
@@ -174,6 +190,7 @@ class Agent:
                 max_tokens=4096,
                 output_config={"effort": "low"},
             )
+            self._audit_model_call(turn, "agente", response)
             if response.stop_reason == "refusal":
                 return self._escalate(turn, "El modelo no pudo responder este pedido.")
             final = next(
@@ -195,6 +212,11 @@ class Agent:
                 if final_name == "responder":
                     verdict = self._check_grounding(turn, final_input)
                     if not verdict.ok:
+                        self._audit(
+                            turn,
+                            "grounding_rejected",
+                            {"reason": verdict.reason, "rejected_message": final_input},
+                        )
                         if turn.grounding_retries >= 1:
                             return self._escalate(turn, f"Control de fundamento: {verdict.reason}.")
                         turn.grounding_retries += 1
@@ -224,6 +246,20 @@ class Agent:
                         ToolExecution(call.name, call.input, decision.status, decision.reason)
                     )
                     outcome = decision.result
+                    self._audit(
+                        turn,
+                        "tool_call",
+                        {
+                            "tool": call.name,
+                            "input": call.input,
+                            "status": decision.status,
+                            "reason": decision.reason,
+                            "result": outcome,
+                            "approval_id": str(decision.approval_id)
+                            if decision.approval_id
+                            else None,
+                        },
+                    )
                 results.append(
                     {
                         "type": "tool_result",
@@ -284,6 +320,7 @@ class Agent:
                 " where id = %s",
                 (json.dumps(summary, ensure_ascii=False), turn.case_id),
             )
+        self._audit(turn, "escalated", summary)
         return self._finish(turn, "derivar", ESCALATION_MESSAGE, summary=summary)
 
     def _finish(
@@ -298,6 +335,17 @@ class Agent:
         approval_id: uuid.UUID | None = None,
     ) -> AgentResult:
         self._save_message(turn.tenant_id, turn.case_id, "agent", message)
+        self._audit(
+            turn,
+            "final_action",
+            {
+                "action": action,
+                "message": message,
+                "sources": sources or [],
+                "verification_requested": verification,
+                "approval_id": str(approval_id) if approval_id else None,
+            },
+        )
         return AgentResult(
             case_id=turn.case_id,
             action=action,
@@ -308,6 +356,27 @@ class Agent:
             verification_requested=verification,
             escalation_summary=summary,
             approval_id=approval_id,
+        )
+
+    # -- auditoría -------------------------------------------------------------------------
+    def _audit(self, turn: _Turn, kind: str, payload: dict[str, Any]) -> None:
+        audit_log.record(self._conn, turn.tenant_id, turn.case_id, kind, payload)
+
+    def _audit_model_call(self, turn: _Turn, purpose: str, response: LLMResponse) -> None:
+        u = response.usage
+        self._audit(
+            turn,
+            "model_call",
+            {
+                "purpose": purpose,
+                "model": response.model,
+                "stop_reason": response.stop_reason,
+                "input_tokens": u.input_tokens,
+                "output_tokens": u.output_tokens,
+                "cache_creation_input_tokens": u.cache_creation_input_tokens,
+                "cache_read_input_tokens": u.cache_read_input_tokens,
+                "cost_usd": str(cost_usd(response.model, u)),
+            },
         )
 
     # -- datos -----------------------------------------------------------------------------

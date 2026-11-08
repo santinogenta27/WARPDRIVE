@@ -116,8 +116,8 @@ def test_audit_events_es_solo_insercion(conn: psycopg.Connection) -> None:
     a, _ = _seed_two_tenants(conn)
     with tenant_scope(conn, a):
         conn.execute(
-            "insert into audit_events (tenant_id, kind, payload, hash) "
-            "values (%s, 'prueba', '{}', 'h1')",
+            "insert into audit_events (tenant_id, seq, kind, payload, hash) "
+            "values (%s, 1, 'prueba', '{}', 'h1')",
             (a,),
         )
         conn.execute("savepoint antes_de_update")
