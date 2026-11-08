@@ -1,0 +1,29 @@
+[project]
+name = "enterprise-data-ai"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend", "mocks/acme-api"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "acme_api"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["backend/app", "evals"]
+mypy_path = ["backend", "mocks/acme-api"]
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_unused_ignores = true
+ignore_missing_imports = true
