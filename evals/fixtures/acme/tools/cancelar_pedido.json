@@ -13,6 +13,7 @@
   "approval_over": 100000,
   "amount_from": "order.total",
   "owner_check": "order.customer_phone == contact.phone",
+  "owner_lookup": {"method": "GET", "path": "/orders/{order_id}"},
   "upstream": {"method": "POST", "path": "/orders/{order_id}/cancel"},
   "idempotency_key": "case_id + order_id"
 }

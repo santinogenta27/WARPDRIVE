@@ -128,5 +128,16 @@ def test_audit_events_es_solo_insercion(conn: psycopg.Connection) -> None:
             conn.execute("delete from audit_events")
 
 
+def test_alcances_anidados_no_pierden_la_rls(conn: psycopg.Connection) -> None:
+    a, b = _seed_two_tenants(conn)
+    with tenant_scope(conn, a):
+        with tenant_scope(conn, a):
+            pass
+        names = [r[0] for r in conn.execute("select name from case_types")]
+        assert names == ["tipo_a"]  # el bloque interno no devolvió el rol dueño
+        with pytest.raises(RuntimeError), tenant_scope(conn, b):
+            pass
+
+
 def test_las_migraciones_son_idempotentes(migrated: str) -> None:
     assert migrate(migrated) == []

@@ -15,6 +15,7 @@
   "max_amount": null,
   "approval_over": null,
   "owner_check": "order.customer_phone == contact.phone",
+  "owner_lookup": {"method": "GET", "path": "/orders/{order_id}"},
   "upstream": {"method": "PATCH", "path": "/orders/{order_id}/address"},
   "idempotency_key": null
 }

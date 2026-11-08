@@ -15,6 +15,7 @@
   "max_amount": 50000,
   "approval_over": 0,
   "owner_check": "order.customer_phone == contact.phone",
+  "owner_lookup": {"method": "GET", "path": "/orders/{order_id}"},
   "upstream": {"method": "POST", "path": "/orders/{order_id}/refunds"},
   "idempotency_key": "case_id + order_id"
 }

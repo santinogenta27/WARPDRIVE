@@ -9,7 +9,7 @@ import psycopg
 
 from app.db.connection import tenant_scope
 from app.llm.pricing import PRICES, cost_usd
-from app.llm.types import LLMResponse, TokenUsage, UsageKind, UsageRecorder
+from app.llm.types import LLMResponse, TokenUsage, ToolCall, UsageKind, UsageRecorder
 
 
 class LLMProvider(Protocol):
@@ -57,6 +57,12 @@ class AnthropicProvider:
             model=message.model,
             stop_reason=message.stop_reason,
             usage=usage,
+            content=[block.model_dump(mode="json", exclude_none=True) for block in message.content],
+            tool_calls=[
+                ToolCall(id=block.id, name=block.name, input=dict(block.input))
+                for block in message.content
+                if block.type == "tool_use"
+            ],
             raw=message,
         )
 

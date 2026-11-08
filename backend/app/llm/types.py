@@ -1,5 +1,5 @@
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Literal, Protocol
 
@@ -15,12 +15,22 @@ class TokenUsage:
 
 
 @dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    input: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class LLMResponse:
     text: str
     model: str
     stop_reason: str | None
     usage: TokenUsage
-    raw: Any = None  # respuesta original del proveedor (bloques de herramientas, etc.)
+    # Bloques de la respuesta tal como hay que devolverlos en el turno siguiente.
+    content: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    raw: Any = None  # respuesta original del proveedor
 
 
 class UsageRecorder(Protocol):

@@ -12,6 +12,7 @@
   "max_amount": null,
   "approval_over": null,
   "owner_check": "order.customer_phone == contact.phone",
+  "owner_lookup": {"method": "GET", "path": "/orders/{order_id}"},
   "upstream": {"method": "GET", "path": "/orders/{order_id}"},
   "idempotency_key": null
 }
