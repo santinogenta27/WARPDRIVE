@@ -58,14 +58,12 @@ class SimulatedStack:
         return [r[0] for r in rows]
 
 
-def build_simulated_stack(
-    conn: psycopg.Connection, *, invent_when_unknown: bool = False
-) -> SimulatedStack:
+def build_simulated_stack(conn: psycopg.Connection, *, mode: str = "normal") -> SimulatedStack:
     recorder = PostgresUsageRecorder(conn)
     embedder = VoyageEmbedder(
         recorder=recorder, api_key="sim", http_client=httpx.Client(transport=voyage_transport())
     )
-    claude = SimulatedClaude(invent_when_unknown=invent_when_unknown)
+    claude = SimulatedClaude(mode=mode)
     sdk = anthropic.Anthropic(
         api_key="sim", http_client=httpx2.Client(transport=claude.transport()), max_retries=0
     )

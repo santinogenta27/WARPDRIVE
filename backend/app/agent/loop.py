@@ -15,6 +15,7 @@ import yaml
 
 from app.agent import prompt
 from app.agent.classifier import ASK_FOR_HUMAN, classify
+from app.agent.grounding import GroundingVerdict, check_grounding
 from app.db.connection import tenant_scope
 from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
@@ -67,6 +68,29 @@ class _Turn:
     tool_calls: list[ToolExecution] = field(default_factory=list)
     decisions: list[GuardDecision] = field(default_factory=list)
     documents: list[SearchResult] = field(default_factory=list)
+    grounding_retries: int = 0
+
+
+def _grounding_correction(tool_use_id: str | None, reason: str) -> dict[str, Any]:
+    """Devuelve al modelo la respuesta rechazada para que la reescriba (una sola vez)."""
+    text = (
+        f"Respuesta rechazada por el control de fundamento: {reason}. Usá solo datos de "
+        "<documentos> citando su id en fuentes, o resultados de herramientas; si no alcanza, "
+        "derivá."
+    )
+    if tool_use_id is None:
+        return {"role": "user", "content": text}
+    return {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": json.dumps({"error": text}, ensure_ascii=False),
+                "is_error": True,
+            }
+        ],
+    }
 
 
 class Agent:
@@ -157,12 +181,27 @@ class Agent:
             )
             business = [c for c in response.tool_calls if c.name not in prompt.FINAL_TOOL_NAMES]
 
-            if final is not None and not business:
-                return self._final_action(turn, final.name, final.input)
             if not response.tool_calls:  # texto suelto: se trata como respuesta sin fuentes
-                return self._final_action(
-                    turn, "responder", {"mensaje": response.text, "fuentes": [], "factual": True}
+                final_name, final_input, final_id = (
+                    "responder",
+                    {"mensaje": response.text, "fuentes": [], "factual": True},
+                    None,
                 )
+            elif final is not None and not business:
+                final_name, final_input, final_id = final.name, final.input, final.id
+            else:
+                final_name = ""
+            if final_name:
+                if final_name == "responder":
+                    verdict = self._check_grounding(turn, final_input)
+                    if not verdict.ok:
+                        if turn.grounding_retries >= 1:
+                            return self._escalate(turn, f"Control de fundamento: {verdict.reason}.")
+                        turn.grounding_retries += 1
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append(_grounding_correction(final_id, verdict.reason))
+                        continue
+                return self._final_action(turn, final_name, final_input)
 
             messages.append({"role": "assistant", "content": response.content})
             results: list[dict[str, Any]] = []
@@ -195,6 +234,20 @@ class Agent:
                 )
             messages.append({"role": "user", "content": results})
         return self._escalate(turn, f"Se alcanzó el límite de {self._max_steps} pasos.")
+
+    def _check_grounding(self, turn: _Turn, data: dict[str, Any]) -> GroundingVerdict:
+        documents: dict[str, str] = {}
+        for doc in turn.documents:
+            documents[doc.source] = f"{documents.get(doc.source, '')}\n{doc.text}"
+        evidence = [turn.text] + [json.dumps(d.result, ensure_ascii=False) for d in turn.decisions]
+        return check_grounding(
+            str(data.get("mensaje") or ""),
+            [str(s) for s in data.get("fuentes") or []],
+            bool(data.get("factual", True)),
+            documents,
+            evidence,
+            tool_backed=bool(turn.decisions),
+        )
 
     def _final_action(self, turn: _Turn, name: str, data: dict[str, Any]) -> AgentResult:
         if name == "derivar":

@@ -17,6 +17,7 @@ import httpx2
 
 from simulated.voyage import tokens
 
+INVENTED = "¡Sí, claro! Lo hacemos sin ningún problema y sin costo."
 _GENERIC = {"tiene", "quier", "puedo", "hacen", "pedid", "acme", "hola", "graci", "neces"}
 _STATUS = {
     "paid": "pagado y todavía no fue despachado",
@@ -30,7 +31,10 @@ _STATUS = {
 class SimulatedClaude:
     """Estado observable del modelo simulado (para los tests)."""
 
-    invent_when_unknown: bool = False  # modo "modelo que inventa", para probar el fundamento
+    # Modos para probar el control de fundamento: "normal", "invent" (inventa siempre),
+    # "invent_once" (inventa y, corregido, responde bien), "fake_source" (cita una fuente que no
+    # recibió), "sneaky_number" (mete un dato sin respaldo sin declararlo factual).
+    mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
 
@@ -81,7 +85,11 @@ class SimulatedClaude:
             m.group(1): html.unescape(m.group(2))
             for m in re.finditer(r'<documento id="([^"]+)">\n(.*?)\n</documento>', first, re.S)
         }
-        results = _tool_results(body["messages"])
+        all_results = _tool_results(body["messages"])
+        corrected = any(name == "responder" for name, _, _ in all_results) or any(
+            isinstance(m["content"], str) for m in body["messages"][1:] if m["role"] == "user"
+        )
+        results = [r for r in all_results if r[0] not in {"responder", "derivar"}]
         order_id = (re.search(r"\b(1\d{3})\b", message) or [None, None])[1]
 
         def reply(text: str, sources: list[str] | None = None, factual: bool = True) -> list[Any]:
@@ -106,12 +114,16 @@ class SimulatedClaude:
         if order_id and "consultar_pedido" in tool_names:
             return [self._tool_use("consultar_pedido", {"order_id": order_id})]
 
+        if self.mode == "invent" or (self.mode == "invent_once" and not corrected):
+            return reply(INVENTED, factual=True)
+        if self.mode == "fake_source":
+            return reply("Según nuestra política interna, sí.", ["politica_secreta"])
+        if self.mode == "sneaky_number":
+            return reply("Sí, y te llega en 72 horas.", factual=False)  # 72 no está en ningún doc
         best = _best_document(message, docs)
         if best is not None:
             source, sentence = best
             return reply(sentence, [source])
-        if self.invent_when_unknown:
-            return reply("¡Sí, claro! Lo hacemos sin ningún problema y sin costo.", factual=True)
         return escalate("No encontré la respuesta en los documentos")
 
     def _after_tool(
