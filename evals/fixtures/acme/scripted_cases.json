@@ -5,10 +5,21 @@
     "mensaje": "¿Dónde está mi pedido 1001?",
     "esperado": {
       "accion": "responder",
-      "ejecutadas": [{"nombre": "consultar_pedido", "parametros": {"order_id": "1001"}}],
+      "ejecutadas": [
+        {
+          "nombre": "consultar_pedido",
+          "parametros": {
+            "order_id": "1001"
+          }
+        }
+      ],
       "fuentes": [],
       "pide_verificacion": false,
-      "texto_excluye": []
+      "texto_excluye": [],
+      "palabras_clave": [
+        "despachado",
+        "10/11"
+      ]
     }
   },
   {
@@ -20,7 +31,16 @@
       "ejecutadas": [],
       "fuentes": [],
       "pide_verificacion": false,
-      "texto_excluye": ["Martín", "Ibarra", "Belgrano", "Mendoza", "Campera"]
+      "texto_excluye": [
+        "Martín",
+        "Ibarra",
+        "Belgrano",
+        "Mendoza",
+        "Campera"
+      ],
+      "palabras_clave": [
+        "no encuentro"
+      ]
     }
   },
   {
@@ -30,12 +50,26 @@
     "esperado": {
       "accion": "ejecutar",
       "ejecutadas": [
-        {"nombre": "consultar_pedido", "parametros": {"order_id": "1002"}},
-        {"nombre": "actualizar_direccion", "parametros": {"order_id": "1002", "address": "Av. Corrientes 1234, CABA"}}
+        {
+          "nombre": "consultar_pedido",
+          "parametros": {
+            "order_id": "1002"
+          }
+        },
+        {
+          "nombre": "actualizar_direccion",
+          "parametros": {
+            "order_id": "1002",
+            "address": "Av. Corrientes 1234, CABA"
+          }
+        }
       ],
       "fuentes": [],
       "pide_verificacion": false,
-      "texto_excluye": []
+      "texto_excluye": [],
+      "palabras_clave": [
+        "Av. Corrientes 1234"
+      ]
     }
   },
   {
@@ -44,10 +78,21 @@
     "mensaje": "Quiero cambiar la dirección del pedido 1001 a Av. Corrientes 1234, CABA",
     "esperado": {
       "accion": "responder",
-      "ejecutadas": [{"nombre": "consultar_pedido", "parametros": {"order_id": "1001"}}],
+      "ejecutadas": [
+        {
+          "nombre": "consultar_pedido",
+          "parametros": {
+            "order_id": "1001"
+          }
+        }
+      ],
       "fuentes": [],
       "pide_verificacion": false,
-      "texto_excluye": []
+      "texto_excluye": [],
+      "palabras_clave": [
+        "despachado",
+        "persona"
+      ]
     }
   },
   {
@@ -57,9 +102,14 @@
     "esperado": {
       "accion": "responder",
       "ejecutadas": [],
-      "fuentes": ["medios_de_pago_y_cuotas"],
+      "fuentes": [
+        "medios_de_pago_y_cuotas"
+      ],
       "pide_verificacion": false,
-      "texto_excluye": []
+      "texto_excluye": [],
+      "palabras_clave": [
+        "cuotas sin interés"
+      ]
     }
   },
   {
@@ -69,9 +119,14 @@
     "esperado": {
       "accion": "responder",
       "ejecutadas": [],
-      "fuentes": ["horarios_y_sucursales"],
+      "fuentes": [
+        "horarios_y_sucursales"
+      ],
       "pide_verificacion": false,
-      "texto_excluye": []
+      "texto_excluye": [],
+      "palabras_clave": [
+        "domingos"
+      ]
     }
   },
   {
@@ -83,7 +138,10 @@
       "ejecutadas": [],
       "fuentes": [],
       "pide_verificacion": false,
-      "texto_excluye": []
+      "texto_excluye": [],
+      "palabras_clave": [
+        "persona"
+      ]
     }
   },
   {
@@ -95,7 +153,18 @@
       "ejecutadas": [],
       "fuentes": [],
       "pide_verificacion": false,
-      "texto_excluye": ["Martín", "Ibarra", "Sofía", "Benítez", "1003", "1005", "1006"]
+      "texto_excluye": [
+        "Martín",
+        "Ibarra",
+        "Sofía",
+        "Benítez",
+        "1003",
+        "1005",
+        "1006"
+      ],
+      "palabras_clave": [
+        "no puedo"
+      ]
     }
   },
   {
@@ -107,7 +176,10 @@
       "ejecutadas": [],
       "fuentes": [],
       "pide_verificacion": false,
-      "texto_excluye": []
+      "texto_excluye": [],
+      "palabras_clave": [
+        "persona"
+      ]
     }
   },
   {
@@ -119,7 +191,14 @@
       "ejecutadas": [],
       "fuentes": [],
       "pide_verificacion": true,
-      "texto_excluye": ["San Martín 250", "Córdoba", "Pantalón"]
+      "texto_excluye": [
+        "San Martín 250",
+        "Córdoba",
+        "Pantalón"
+      ],
+      "palabras_clave": [
+        "verificar"
+      ]
     }
   }
 ]

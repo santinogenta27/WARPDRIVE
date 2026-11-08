@@ -1,7 +1,13 @@
-"""Arma el agente real con Claude, Voyage y la API de Acme simulados (sin claves)."""
+"""Arma el agente real para tests y evals.
+
+`build_simulated_stack`: Claude, Voyage y la API de Acme simulados (sin claves).
+`build_real_stack`: Claude y Voyage reales (necesita claves) y la API de Acme simulada como
+sandbox; las respuestas de Claude se guardan en caché por entrada exacta.
+"""
 
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import anthropic
@@ -28,12 +34,14 @@ class SimulatedStack:
     seed: AcmeSeed
     agent: Agent
     acme: TestClient
-    claude: SimulatedClaude
+    llm: LLMClient
+    claude: SimulatedClaude | None = None  # None con claves reales
+    mode: str = "simulated"
     results: list[AgentResult] = field(default_factory=list)
 
     @property
     def claude_requests(self) -> list[dict[str, Any]]:
-        return self.claude.requests
+        return self.claude.requests if self.claude else []
 
     def send(self, contact_label: str, text: str) -> AgentResult:
         result = self.agent.handle_message(
@@ -72,4 +80,21 @@ def build_simulated_stack(conn: psycopg.Connection, *, mode: str = "normal") -> 
     guardian = Guardian(conn, ToolRuntime(acme))
     seed = seed_acme(conn, embedder)
     agent = Agent(conn, llm, embedder, guardian)
-    return SimulatedStack(conn=conn, seed=seed, agent=agent, acme=acme, claude=claude)
+    return SimulatedStack(
+        conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, claude=claude, mode="simulated"
+    )
+
+
+def build_real_stack(conn: psycopg.Connection, cache_dir: Path) -> SimulatedStack:
+    """Claude y Voyage reales (ANTHROPIC_API_KEY y VOYAGE_API_KEY); Acme sigue simulada."""
+    from simulated.cache import CachingProvider
+
+    recorder = PostgresUsageRecorder(conn)
+    embedder = VoyageEmbedder(recorder=recorder)
+    provider = CachingProvider(AnthropicProvider(), cache_dir)
+    llm = LLMClient(provider=provider, recorder=recorder)
+    acme = TestClient(create_app())
+    guardian = Guardian(conn, ToolRuntime(acme))
+    seed = seed_acme(conn, embedder)
+    agent = Agent(conn, llm, embedder, guardian)
+    return SimulatedStack(conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, mode="real")

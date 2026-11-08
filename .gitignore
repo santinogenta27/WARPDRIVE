@@ -12,6 +12,10 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 
+# Evals: caché de respuestas reales y último reporte (local)
+evals/.cache/
+evals/last_report.json
+
 # Node (panel)
 node_modules/
 .next/

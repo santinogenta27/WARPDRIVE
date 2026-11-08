@@ -1,0 +1,61 @@
+"""Caché de respuestas de Claude por entrada exacta, para no pagar dos veces la misma llamada en
+los evals (spec: "caché por entrada exacta"). Un acierto devuelve uso cero: no hubo gasto."""
+
+import hashlib
+import json
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from app.llm.client import LLMProvider
+from app.llm.types import LLMResponse, TokenUsage, ToolCall
+
+
+class CachingProvider:
+    def __init__(self, inner: LLMProvider, directory: Path) -> None:
+        self._inner = inner
+        self._dir = directory
+        self._dir.mkdir(parents=True, exist_ok=True)
+
+    def create(
+        self,
+        *,
+        model: str,
+        messages: list[dict[str, Any]],
+        max_tokens: int,
+        system: str | None = None,
+        **options: Any,
+    ) -> LLMResponse:
+        request = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "system": system,
+            **options,
+        }
+        key = hashlib.sha256(
+            json.dumps(request, sort_keys=True, ensure_ascii=False, default=str).encode()
+        ).hexdigest()
+        path = self._dir / f"{key}.json"
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return LLMResponse(
+                text=data["text"],
+                model=data["model"],
+                stop_reason=data["stop_reason"],
+                usage=TokenUsage(input_tokens=0, output_tokens=0),
+                content=data["content"],
+                tool_calls=[ToolCall(**call) for call in data["tool_calls"]],
+            )
+        response = self._inner.create(
+            model=model, messages=messages, max_tokens=max_tokens, system=system, **options
+        )
+        payload = {
+            "text": response.text,
+            "model": response.model,
+            "stop_reason": response.stop_reason,
+            "content": response.content,
+            "tool_calls": [asdict(call) for call in response.tool_calls],
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        return response
