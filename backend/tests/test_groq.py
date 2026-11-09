@@ -122,7 +122,7 @@ def test_traduce_el_turno_del_agente_al_formato_de_groq() -> None:
         output_config={"effort": "low"},
     )
     body = fake.requests[0]
-    assert body["model"] == "openai/gpt-oss-120b"  # agente por defecto
+    assert body["model"] == "openai/gpt-oss-20b"  # agente por defecto: el mejor en los evals
     assert body["max_completion_tokens"] == 4096
     assert body["reasoning_effort"] == "low"
     assert body["tool_choice"] == "required"

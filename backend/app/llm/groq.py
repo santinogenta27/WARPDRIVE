@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Modelos gratuitos con tool calling disponibles en la cuenta; se cambian con GROQ_AGENT_MODEL y
 # GROQ_CLASSIFIER_MODEL. Cada modelo tiene sus propios límites (1000 pedidos por día y 8000
-# tokens por minuto en el plan gratuito), así que conviene que agente y clasificador difieran.
-DEFAULT_AGENT_MODEL = "openai/gpt-oss-120b"
+# tokens por minuto en el plan gratuito). gpt-oss-20b fue el mejor en los evals de Acme: 10/10,
+# contra 7/10 de gpt-oss-120b y 8/10 de qwen3.8-27b (decisión 020).
+DEFAULT_AGENT_MODEL = "openai/gpt-oss-20b"
 DEFAULT_CLASSIFIER_MODEL = "openai/gpt-oss-20b"
 REASONING_MODELS = ("openai/gpt-oss",)  # aceptan reasoning_effort
 RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}

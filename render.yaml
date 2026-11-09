@@ -23,8 +23,18 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: GROQ_API_KEY
+        sync: false
       - key: ENCRYPTION_KEY
         sync: false
+      # El agente corre con Groq: gpt-oss-20b resolvió 10/10 casos de Acme (decisión 020).
+      # Gemini hace los embeddings y queda de respaldo si Groq se queda sin cuota.
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_AGENT_MODEL
+        value: openai/gpt-oss-20b
+      - key: GROQ_CLASSIFIER_MODEL
+        value: openai/gpt-oss-20b
       - key: GEMINI_AGENT_MODEL
         value: gemini-3.5-flash-lite
       - key: GEMINI_CLASSIFIER_MODEL
