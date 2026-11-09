@@ -1,7 +1,8 @@
 """Runner de evals de la empresa de demo Acme.
 
 Uso:
-  python evals/runner.py                    # simulado si no hay ANTHROPIC_API_KEY; real si la hay
+  python evals/runner.py                    # real con ANTHROPIC_API_KEY, gemini con
+                                            # GEMINI_API_KEY, simulado sin ninguna
   python evals/runner.py --update-baseline  # fija la línea base del modo (commit deliberado)
 
 Calificación por caso (spec v1.1, "Cómo se califican los evals"):
@@ -19,7 +20,6 @@ puntos o si el puntaje medio del juez baja más de 0,05 respecto de la línea ba
 import argparse
 import html
 import json
-import os
 import sys
 import warnings
 from dataclasses import asdict, dataclass, field
@@ -41,9 +41,14 @@ from app.agent.loop import AgentResult  # noqa: E402
 from app.config import load_dotenv  # noqa: E402
 from app.db.connection import connect, tenant_scope  # noqa: E402
 from app.db.migrate import migrate  # noqa: E402
+from app.llm.factory import llm_backend  # noqa: E402
 
 CASES_PATH = HERE / "fixtures" / "acme" / "scripted_cases.json"
-BASELINES = {"simulated": HERE / "baseline.simulated.json", "real": HERE / "baseline.real.json"}
+BASELINES = {
+    "simulated": HERE / "baseline.simulated.json",
+    "real": HERE / "baseline.real.json",
+    "gemini": HERE / "baseline.gemini.json",
+}
 CACHE_DIR = HERE / ".cache"
 JUDGE_MODEL = "claude-opus-5-5"
 MAX_RESOLUTION_DROP = 0.02
@@ -214,7 +219,7 @@ def _close(conn: psycopg.Connection) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evals de Acme")
-    parser.add_argument("--real", action="store_true", help="usar Claude y Voyage reales")
+    parser.add_argument("--real", action="store_true", help="usar modelos y embeddings reales")
     parser.add_argument("--simulated-mode", default="normal", help=argparse.SUPPRESS)
     parser.add_argument("--baseline", type=Path, help="archivo de línea base")
     parser.add_argument("--report", type=Path, default=HERE / "last_report.json")
@@ -222,8 +227,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     load_dotenv()
-    real = args.real or bool(os.environ.get("ANTHROPIC_API_KEY"))
-    mode = "real" if real else "simulated"
+    backend = llm_backend()
+    real = args.real or backend is not None
+    mode = ("gemini" if backend == "gemini" else "real") if real else "simulated"
     baseline_path: Path = args.baseline or BASELINES[mode]
 
     conn = _connect()

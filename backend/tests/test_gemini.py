@@ -10,8 +10,11 @@ from decimal import Decimal
 from typing import Any
 
 import httpx
+import pytest
 
-from app.llm.client import LLMClient
+from app.llm.client import AnthropicProvider, LLMClient
+from app.llm.embedder import VoyageEmbedder
+from app.llm.factory import embedder_from_env, provider_from_env
 from app.llm.gemini import GeminiEmbedder, GeminiProvider, GeminiTransport
 from app.llm.types import TokenUsage, UsageKind
 
@@ -246,6 +249,26 @@ def test_embedder_gemini_marca_documentos_y_consultas_y_registra_uso() -> None:
         ("embedding", "gemini-embedding-2", 709, Decimal(0)),
         ("embedding", "gemini-embedding-2", 4, Decimal(0)),
     ]
+
+
+def test_elige_proveedor_y_embedder_por_las_claves_del_entorno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key in ("ANTHROPIC_API_KEY", "VOYAGE_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+        provider_from_env()
+
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    assert isinstance(provider_from_env(), GeminiProvider)
+    assert isinstance(embedder_from_env(MemoryRecorder()), GeminiEmbedder)
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
+    assert isinstance(provider_from_env(), AnthropicProvider)
+    assert isinstance(embedder_from_env(MemoryRecorder()), GeminiEmbedder)  # sin Voyage
+
+    monkeypatch.setenv("VOYAGE_API_KEY", "v")
+    assert isinstance(embedder_from_env(MemoryRecorder()), VoyageEmbedder)
 
 
 def test_haiku_usa_flash_lite_y_un_bloqueo_es_rechazo() -> None:

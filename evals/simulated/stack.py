@@ -1,8 +1,9 @@
 """Arma el agente real para tests y evals.
 
 `build_simulated_stack`: Claude, Voyage y la API de Acme simulados (sin claves).
-`build_real_stack`: Claude y Voyage reales (necesita claves) y la API de Acme simulada como
-sandbox; las respuestas de Claude se guardan en caché por entrada exacta.
+`build_real_stack`: modelos y embeddings reales según las claves del entorno (Claude o Gemini,
+Voyage o Gemini; ver app/llm/factory.py) y la API de Acme simulada como sandbox; las respuestas
+del modelo se guardan en caché por entrada exacta, en una carpeta por proveedor.
 """
 
 import uuid
@@ -22,6 +23,7 @@ from app.db.connection import tenant_scope
 from app.demo.acme import AcmeSeed, seed_acme
 from app.llm.client import AnthropicProvider, LLMClient, PostgresUsageRecorder
 from app.llm.embedder import VoyageEmbedder
+from app.llm.factory import embedder_from_env, llm_backend, provider_from_env
 from app.policy.guardian import Guardian
 from app.tools.runtime import ToolRuntime
 from simulated.claude import SimulatedClaude
@@ -86,15 +88,17 @@ def build_simulated_stack(conn: psycopg.Connection, *, mode: str = "normal") -> 
 
 
 def build_real_stack(conn: psycopg.Connection, cache_dir: Path) -> SimulatedStack:
-    """Claude y Voyage reales (ANTHROPIC_API_KEY y VOYAGE_API_KEY); Acme sigue simulada."""
+    """Modelos y embeddings reales según las claves del entorno; Acme sigue simulada."""
     from simulated.cache import CachingProvider
 
+    backend = llm_backend()
     recorder = PostgresUsageRecorder(conn)
-    embedder = VoyageEmbedder(recorder=recorder)
-    provider = CachingProvider(AnthropicProvider(), cache_dir)
+    embedder = embedder_from_env(recorder)
+    provider = CachingProvider(provider_from_env(), cache_dir / str(backend))
     llm = LLMClient(provider=provider, recorder=recorder)
     acme = TestClient(create_app())
     guardian = Guardian(conn, ToolRuntime(acme))
     seed = seed_acme(conn, embedder)
     agent = Agent(conn, llm, embedder, guardian)
-    return SimulatedStack(conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, mode="real")
+    mode = "gemini" if backend == "gemini" else "real"
+    return SimulatedStack(conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, mode=mode)

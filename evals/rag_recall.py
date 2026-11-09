@@ -1,13 +1,12 @@
 """Mide Recall@1 y Recall@5 del RAG híbrido con las preguntas de Acme.
 
-Con VOYAGE_API_KEY usa embeddings reales de Voyage; si no, los simulados. No deja datos:
-corre en una transacción que se revierte.
+Con VOYAGE_API_KEY usa embeddings reales de Voyage; si no, con GEMINI_API_KEY los de Gemini; si
+no, los simulados. No deja datos: corre en una transacción que se revierte.
 
 Uso: python evals/rag_recall.py
 """
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -25,13 +24,14 @@ from app.db.migrate import migrate  # noqa: E402
 from app.demo.acme import ACME_DIR, index_acme_documents  # noqa: E402
 from app.llm.client import PostgresUsageRecorder  # noqa: E402
 from app.llm.embedder import VoyageEmbedder  # noqa: E402
+from app.llm.factory import embedder_from_env, embedding_backend  # noqa: E402
 from app.rag.search import hybrid_search  # noqa: E402
 
 
 def main() -> int:
     load_dotenv()
     migrate()
-    real = bool(os.environ.get("VOYAGE_API_KEY"))
+    backend = embedding_backend()
     questions = json.loads((ACME_DIR / "rag_questions.json").read_text(encoding="utf-8"))
     conn = connect()
     try:
@@ -39,8 +39,8 @@ def main() -> int:
         assert row is not None
         recorder = PostgresUsageRecorder(conn)
         embedder = (
-            VoyageEmbedder(recorder=recorder)
-            if real
+            embedder_from_env(recorder)
+            if backend
             else VoyageEmbedder(
                 recorder, "sim", http_client=httpx.Client(transport=voyage_transport())
             )
@@ -54,7 +54,8 @@ def main() -> int:
             if item["expected"] not in sources:
                 print(f"  falla: {item['question']} -> {sources}")
         total = len(questions)
-        print(f"Embeddings {'Voyage reales' if real else 'simulados'}:")
+        labels = {"voyage": "Voyage reales", "gemini": "Gemini reales"}
+        print(f"Embeddings {labels.get(str(backend), 'simulados')}:")
         print(f"  Recall@1 = {at1}/{total} ({at1 / total:.0%})")
         print(f"  Recall@5 = {at5}/{total} ({at5 / total:.0%})  (meta de la spec: >= 90%)")
         return 0 if at5 / total >= 0.9 else 1
