@@ -236,6 +236,34 @@ def test_celular_argentino_fuera_de_la_lista_se_reintenta_sin_el_9() -> None:
     assert wamid == "wamid.ok" and tried == ["5491155550000", "541155550000"]
 
 
+def test_si_el_numero_no_esta_permitido_no_se_reintenta(
+    api: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    """131030 no se arregla reintentando: solo volvería a correr el agente y gastaría cuota."""
+    attempts: list[str] = []
+
+    def rejects(request: httpx.Request) -> httpx.Response:
+        attempts.append(json.loads(request.content)["to"])
+        error = {"code": 131030, "message": "Recipient phone number not in allowed list"}
+        return httpx.Response(400, json={"error": error})
+
+    client = WhatsAppClient(http=httpx.Client(transport=httpx.MockTransport(rejects)))
+    deps = WhatsAppDeps(agent=lambda c: stack.agent, client=client, token="token-meta")
+    assert post(api, inbound("wamid.N", "¿Abren los domingos?")) == 200
+    job = queued(conn)[0]
+
+    handle_message_job(conn, job, deps)  # no lanza: el worker no reprograma el job
+
+    assert attempts == [CUSTOMER, "54" + CUSTOMER[3:]]  # con y sin el 9, una vez cada uno
+    with tenant_scope(conn, stack.seed.tenant_id):
+        failed = conn.execute(
+            "select e.payload from audit_events e where e.kind = 'whatsapp_send_failed'"
+        ).fetchone()
+    assert failed is not None and failed[0]["code"] == 131030
+    payload = conn.execute("select payload from jobs where id = %s", (job.id,)).fetchone()
+    assert payload is not None and "sender" not in payload[0]
+
+
 def test_un_numero_desconocido_se_descarta(
     api: TestClient, conn: psycopg.Connection, stack: SimulatedStack
 ) -> None:

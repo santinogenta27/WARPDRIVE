@@ -15,7 +15,7 @@ import psycopg
 
 from app.agent.loop import Agent
 from app.audit import log as audit_log
-from app.channels.whatsapp.client import WhatsAppClient
+from app.channels.whatsapp.client import WhatsAppClient, WhatsAppError
 from app.channels.whatsapp.outbound import flush_pending
 from app.channels.whatsapp.routing import channel_for_number
 from app.channels.whatsapp.webhook import JOB_KIND, InboundMessage
@@ -29,6 +29,9 @@ __all__ = ["JOB_KIND", "WhatsAppDeps", "handle_message_job", "production_deps"]
 logger = logging.getLogger(__name__)
 IGNORED_TYPES = {"sticker", "reaction", "unsupported", "system"}
 UNSUPPORTED_MESSAGE = "Por ahora solo puedo leer mensajes de texto. ¿Me lo escribís?"
+# Rechazos de Meta que no se arreglan reintentando: número fuera de la lista permitida del
+# número de prueba (131030) y mensaje imposible de entregar (131026).
+PERMANENT_SEND_ERRORS = {131030, 131026}
 
 
 @dataclass
@@ -72,9 +75,25 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
         reply, case_id = result.message, result.case_id
     else:
         reply = UNSUPPORTED_MESSAGE
-    wamid = deps.client.send_text(
-        token=token, phone_number_id=message.phone_number_id, to=message.sender, body=reply
-    )
+    try:
+        wamid = deps.client.send_text(
+            token=token, phone_number_id=message.phone_number_id, to=message.sender, body=reply
+        )
+    except WhatsAppError as error:
+        if error.code not in PERMANENT_SEND_ERRORS:
+            raise  # transitorio: el worker reprograma el job
+        # Reintentar no lo arregla y volvería a correr el agente: se registra y se cierra.
+        logger.error("WhatsApp no aceptó la respuesta (código %s): %s", error.code, error)
+        if case_id is not None:
+            audit_log.record(
+                conn,
+                tenant_id,
+                case_id,
+                "whatsapp_send_failed",
+                {"code": error.code, "in_reply_to": message.wamid},
+            )
+        _forget_sender(conn, job)
+        return
     if case_id is not None:
         audit_log.record(
             conn,
