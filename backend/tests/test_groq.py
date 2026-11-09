@@ -262,6 +262,28 @@ def test_respeta_los_tokens_por_minuto_de_cada_modelo() -> None:
     assert fake.sleeps == [7.5]
 
 
+def test_reintenta_una_salida_que_groq_no_pudo_interpretar() -> None:
+    """gpt-oss a veces escribe el razonamiento en lugar de llamar a la herramienta (400
+    output_parse_failed): se pide de nuevo."""
+    failed = {
+        "error": {
+            "message": "Parsing failed. The model generated output that could not be parsed.",
+            "type": "invalid_request_error",
+            "code": "output_parse_failed",
+            "failed_generation": "We have info: shipped. Use responder.",
+        }
+    }
+    fake = FakeGroq(
+        httpx.Response(400, json=failed),
+        httpx.Response(400, json=failed),
+        httpx.Response(200, json=completion({"content": "ok"})),
+    )
+    response = GroqProvider(transport=fake.transport()).create(
+        model="claude-sonnet-5-5", messages=[], max_tokens=10, tools=TOOLS
+    )
+    assert response.text == "ok" and len(fake.requests) == 3
+
+
 def test_reintenta_una_llamada_a_herramienta_mal_generada() -> None:
     failed = {
         "error": {

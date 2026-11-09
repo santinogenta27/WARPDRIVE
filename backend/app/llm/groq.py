@@ -63,7 +63,8 @@ class GroqTransport:
       (encabezados x-ratelimit-*), espera a que se renueven.
     * Ante 429, 408 o 5xx reintenta con la espera de `retry-after` o exponencial con jitter.
     * Si la espera pedida supera `max_wait` (cuota diaria), lanza GroqQuotaExhausted sin esperar.
-    * Un 400 `tool_use_failed` (el modelo generó mal una llamada a herramienta) se reintenta.
+    * Un 400 `tool_use_failed` u `output_parse_failed` (el modelo generó una salida que Groq no
+      pudo interpretar) se reintenta.
     """
 
     def __init__(
@@ -145,12 +146,21 @@ class GroqTransport:
         return min(self._max_wait, 2.0 * 2**attempt) * random.uniform(1.0, 1.25)
 
 
+GENERATION_ERRORS = {"tool_use_failed", "output_parse_failed"}
+
+
 def _tool_use_failed(response: httpx.Response) -> bool:
+    """El modelo generó una salida que Groq no pudo interpretar (una llamada a herramienta mal
+    armada, o razonamiento en lugar de la llamada): pedirla de nuevo suele alcanzar."""
     try:
         error = response.json().get("error") or {}
     except ValueError:
         return False
-    return error.get("code") == "tool_use_failed" or "tool call" in str(error.get("message", ""))
+    return (
+        error.get("code") in GENERATION_ERRORS
+        or "failed_generation" in error
+        or "tool call" in str(error.get("message", ""))
+    )
 
 
 def models_from_env() -> dict[str, str]:
