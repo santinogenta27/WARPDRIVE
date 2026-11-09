@@ -107,21 +107,40 @@ def build_simulated_stack(conn: psycopg.Connection, *, mode: str = "normal") -> 
     )
 
 
+def model_profile(backend: str | None) -> str:
+    """Modelos reales del proveedor según el entorno (clave de la caché de los evals)."""
+    if backend == "groq":
+        from app.llm.groq import models_from_env as groq_models
+
+        return "groq:" + ",".join(sorted(set(groq_models().values())))
+    if backend == "gemini":
+        from app.llm.gemini import models_from_env as gemini_models
+
+        return "gemini:" + ",".join(sorted(set(gemini_models().values())))
+    return str(backend)
+
+
 def build_real_stack(conn: psycopg.Connection, cache_dir: Path) -> SimulatedStack:
-    """Modelos y embeddings reales según las claves del entorno; Acme sigue simulada."""
+    """Modelos y embeddings reales según las claves del entorno; Acme sigue simulada. Mide un
+    solo proveedor: sin respaldo automático al otro gratuito."""
+    import os
+
     from simulated.cache import CachingProvider
 
+    os.environ["LLM_FALLBACK"] = "off"
     backend = llm_backend()
     recorder = PostgresUsageRecorder(conn)
     embedder = embedder_from_env(recorder)
-    provider = CachingProvider(provider_from_env(), cache_dir / str(backend))
+    provider = CachingProvider(
+        provider_from_env(), cache_dir / str(backend), profile=model_profile(backend)
+    )
     llm = LLMClient(provider=provider, recorder=recorder)
     acme = TestClient(create_app())
     guardian = Guardian(conn, ToolRuntime(acme))
     seed = seed_acme(conn, embedder)
     mailer = RecordingMailer()
     agent = Agent(conn, llm, embedder, guardian, mailer=mailer)
-    mode = "gemini" if backend == "gemini" else "real"
+    mode = backend if backend in ("gemini", "groq") else "real"
     return SimulatedStack(
         conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, mode=mode, mailer=mailer
     )

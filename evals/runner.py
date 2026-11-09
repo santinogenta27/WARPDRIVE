@@ -1,8 +1,9 @@
 """Runner de evals de la empresa de demo Acme.
 
 Uso:
-  python evals/runner.py                    # real con ANTHROPIC_API_KEY, gemini con
-                                            # GEMINI_API_KEY, simulado sin ninguna
+  python evals/runner.py                    # real con ANTHROPIC_API_KEY; gemini o groq con
+                                            # sus claves (LLM_PROVIDER elige); simulado sin
+                                            # ninguna
   python evals/runner.py --update-baseline  # fija la línea base del modo (commit deliberado)
   python evals/runner.py --restart          # descarta el avance guardado y empieza de cero
 
@@ -24,6 +25,7 @@ puntos o si el puntaje medio del juez baja más de 0,05 respecto de la línea ba
 import argparse
 import html
 import json
+import os
 import sys
 import warnings
 from dataclasses import asdict, dataclass, field
@@ -46,20 +48,22 @@ from app.audit.log import reconstruct_case  # noqa: E402
 from app.config import load_dotenv  # noqa: E402
 from app.db.connection import connect, tenant_scope  # noqa: E402
 from app.db.migrate import migrate  # noqa: E402
+from app.llm.errors import QuotaExhausted  # noqa: E402
 from app.llm.factory import llm_backend  # noqa: E402
-from app.llm.gemini import GeminiQuotaExhausted  # noqa: E402
 
 CASES_PATH = HERE / "fixtures" / "acme" / "scripted_cases.json"
 BASELINES = {
     "simulated": HERE / "baseline.simulated.json",
     "real": HERE / "baseline.real.json",
     "gemini": HERE / "baseline.gemini.json",
+    "groq": HERE / "baseline.groq.json",
 }
 CACHE_DIR = HERE / ".cache"
 JUDGE_MODEL = "claude-opus-5-5"
 # Con Gemini gratis el juez usa Flash-Lite: Flash permite 20 pedidos por día y el agente solo ya
-# usa unos 11 en una corrida completa (decisión 012).
-JUDGE_MODELS = {"gemini": "gemini-3.5-flash-lite"}
+# usa unos 11 en una corrida completa (decisión 012). Con Groq, un modelo distinto del agente y
+# del clasificador, así no comparte sus tokens por minuto (decisión 020).
+JUDGE_MODELS = {"gemini": "gemini-3.5-flash-lite", "groq": "qwen/qwen3.8-27b"}
 MAX_RESOLUTION_DROP = 0.02
 MAX_JUDGE_DROP = 0.05
 _EPSILON = 1e-9
@@ -177,7 +181,14 @@ def _tool_evidence(stack: SimulatedStack, result: AgentResult) -> list[dict[str,
 
 
 def judge_model(mode: str) -> str:
-    return JUDGE_MODELS.get(mode, JUDGE_MODEL)
+    return os.environ.get("EVAL_JUDGE_MODEL") or JUDGE_MODELS.get(mode, JUDGE_MODEL)
+
+
+def mode_for(backend: str | None) -> str:
+    """Modo de los evals según el proveedor: cada uno tiene su línea base."""
+    if backend is None:
+        return "simulated"
+    return backend if backend in ("gemini", "groq") else "real"
 
 
 def judge(stack: SimulatedStack, case: dict[str, Any], result: AgentResult) -> float:
@@ -269,13 +280,13 @@ def _close(conn: psycopg.Connection) -> None:
     conn.close()
 
 
-def _print_quota_stop(error: GeminiQuotaExhausted, progress: Path | None) -> None:
+def _print_quota_stop(error: QuotaExhausted, progress: Path | None) -> None:
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     done = _load_progress(progress)
     pending = [c["id"] for c in cases if c["id"] not in done]
     resolved = sum(r.resolved for r in done.values())
     kind = "diaria" if error.daily else "por minuto (tras todos los reintentos)"
-    print(f"Cuota {kind} de Gemini agotada: {error}")
+    print(f"Cuota {kind} del modelo agotada: {error}")
     print(
         f"Avance guardado: {len(done)} de {len(cases)} casos hechos ({resolved} resueltos). "
         f"Faltan {len(pending)}: {', '.join(pending)}."
@@ -304,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
     load_dotenv()
     backend = llm_backend()
     real = args.real or backend is not None
-    mode = ("gemini" if backend == "gemini" else "real") if real else "simulated"
+    mode = mode_for(backend or "anthropic") if real else "simulated"
     baseline_path: Path = args.baseline or BASELINES[mode]
     # El modo simulado (CI) siempre corre completo; los reales pueden retomar.
     progress = None if mode == "simulated" else CACHE_DIR / f"progress-{mode}.json"
@@ -322,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
 
             stack = build_simulated_stack(conn, mode=args.simulated_mode)
         report = run_evals(stack, progress)
-    except GeminiQuotaExhausted as error:
+    except QuotaExhausted as error:
         _print_quota_stop(error, progress)
         return 2
     finally:

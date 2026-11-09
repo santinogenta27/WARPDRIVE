@@ -21,6 +21,7 @@ from app.llm.pricing import PRICES
 from app.llm.types import LLMResponse, TokenUsage
 
 ENV_KEYS = (
+    "LLM_FALLBACK",
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
     "GROQ_API_KEY",
@@ -343,5 +344,39 @@ def test_elige_proveedor_y_respaldo_por_las_claves_del_entorno(
     assert llm_backend() == "groq" and isinstance(provider, FallbackProvider)
     assert isinstance(provider.primary, GroqProvider)
 
+    monkeypatch.setenv("LLM_FALLBACK", "off")  # los evals miden un solo modelo
+    assert isinstance(provider_from_env(), GroqProvider)
+    monkeypatch.delenv("LLM_FALLBACK")
+
     monkeypatch.setenv("ANTHROPIC_API_KEY", "a")  # con Claude no hay respaldo gratuito
     assert isinstance(provider_from_env(), AnthropicProvider)
+
+
+def test_los_evals_con_groq_tienen_su_modo_juez_y_cache_por_modelo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    import runner
+    from simulated.cache import CachingProvider
+    from simulated.stack import model_profile
+
+    assert runner.mode_for("groq") == "groq" and runner.mode_for("gemini") == "gemini"
+    assert runner.mode_for("anthropic") == "real" and runner.mode_for(None) == "simulated"
+    assert runner.judge_model("groq") in PRICES and "groq" in runner.BASELINES
+
+    monkeypatch.setenv("GROQ_AGENT_MODEL", "openai/gpt-oss-120b")
+    first = model_profile("groq")
+    monkeypatch.setenv("GROQ_AGENT_MODEL", "qwen/qwen3.8-27b")
+    assert model_profile("groq") != first  # otro modelo, otra caché
+
+    calls: list[str] = []
+
+    class Inner:
+        def create(self, **kwargs: Any) -> LLMResponse:
+            calls.append(kwargs["model"])
+            return LLMResponse(text="ok", model="m", stop_reason="end_turn", usage=TokenUsage(1, 1))
+
+    for profile in ("a", "a", "b"):
+        CachingProvider(Inner(), tmp_path, profile=profile).create(
+            model="claude-sonnet-5-5", messages=[], max_tokens=10
+        )
+    assert len(calls) == 2  # el perfil "a" repetido sale de la caché

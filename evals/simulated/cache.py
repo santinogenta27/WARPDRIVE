@@ -12,9 +12,13 @@ from app.llm.types import LLMResponse, TokenUsage, ToolCall
 
 
 class CachingProvider:
-    def __init__(self, inner: LLMProvider, directory: Path) -> None:
+    """`profile` identifica los modelos reales detrás de los nombres que pide el agente (p. ej.
+    qué modelo de Groq reemplaza a claude-sonnet-5-5): otro perfil, otra entrada de caché."""
+
+    def __init__(self, inner: LLMProvider, directory: Path, *, profile: str = "") -> None:
         self._inner = inner
         self._dir = directory
+        self._profile = profile
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def create(
@@ -27,6 +31,7 @@ class CachingProvider:
         **options: Any,
     ) -> LLMResponse:
         request = {
+            **({"profile": self._profile} if self._profile else {}),
             "model": model,
             "messages": messages,
             "max_tokens": max_tokens,
