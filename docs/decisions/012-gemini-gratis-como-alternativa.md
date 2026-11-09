@@ -16,8 +16,9 @@ Todavía no hay `ANTHROPIC_API_KEY` ni `VOYAGE_API_KEY`, así que el agente solo
   - `output_config.effort` pasa a `thinkingConfig.thinkingLevel`.
   - Un bloqueo o un corte por seguridad se traduce como `refusal`, y el agente ya deriva en ese caso.
 - **Modelos del nivel gratuito** (página de precios de Google, consultada el 9 de noviembre de 2026):
-  - Agente (`claude-sonnet-5-5`) y juez (`claude-opus-5-5`): `gemini-3.6-flash`, estable.
+  - Agente (`claude-sonnet-5-5`): `gemini-3.6-flash`, estable.
   - Clasificador (`claude-haiku-5-5`): `gemini-3.5-flash-lite`, estable.
+  - Juez de evals: `gemini-3.5-flash-lite`, fijado en el runner para el modo `gemini` (`JUDGE_MODELS`). Flash permite 20 pedidos por día y una corrida completa con el juez en Flash usaba unos 25; con el juez en Flash-Lite, Flash queda en unos 11. Si otro código pide `claude-opus-5-5`, el mapeo del proveedor lo sigue llevando a Flash.
   - Embeddings: `gemini-embedding-2` con `outputDimensionality` 1024, igual que la columna `vector(1024)`. La API los normaliza sola. Este modelo no acepta `task_type`, así que la tarea va como prefijo del texto: `title: none | text: …` para documentos y `task: search result | query: …` para consultas.
   - Se descartaron `gemini-3.8-flash`, que es nuevo, y `gemini-2.5-flash`, que está deprecado y desde el 1 de diciembre de 2026 se redirige a 3.5 Flash-Lite.
 - **Costo cero:** los tres modelos están en `pricing.py` con precio 0 (nivel gratuito). `LLMClient` ahora registra en `usage` el modelo que respondió y no el que pidió el agente. Con Claude es el mismo; con Gemini, `usage` dice `gemini-3.6-flash` a costo 0 en vez de inventar un costo de Sonnet.

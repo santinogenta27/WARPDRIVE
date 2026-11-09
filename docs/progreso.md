@@ -57,6 +57,8 @@ Ninguna falla crítica: no hubo datos de otro cliente, ni acciones de riesgo sin
 
 Para retomar: `make evals` después de la medianoche del Pacífico. Para empezar de cero: `python evals/runner.py --restart`.
 
+**Cambios después de la primera corrida** (misma rama): el juez recibe los resultados de las herramientas y acepta la negrita de WhatsApp (`*texto*`). El clasificador tiene la categoría `pedido_no_permitido`, con negativa fija y sin derivar (decisión 013). La negrita `**texto**` se convierte a `*texto*` antes de enviar. Con Gemini, el juez usa `gemini-3.5-flash-lite`. Estos cambios invalidan el avance guardado de la primera corrida: la próxima tiene que empezar de cero con `--restart`.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

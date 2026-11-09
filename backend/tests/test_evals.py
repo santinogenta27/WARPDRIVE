@@ -54,6 +54,12 @@ def test_un_cambio_que_baja_el_puntaje_bloquea_el_merge(conn: psycopg.Connection
     assert report.resolution_rate < 1.0
 
 
+def test_con_gemini_el_juez_usa_flash_lite() -> None:
+    assert runner.judge_model("gemini") == "gemini-3.5-flash-lite"
+    assert runner.judge_model("real") == "claude-opus-5-5"
+    assert runner.judge_model("simulated") == "claude-opus-5-5"
+
+
 def test_el_juez_ve_las_herramientas_y_acepta_la_negrita_de_whatsapp(
     conn: psycopg.Connection,
 ) -> None:

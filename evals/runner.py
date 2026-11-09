@@ -57,6 +57,9 @@ BASELINES = {
 }
 CACHE_DIR = HERE / ".cache"
 JUDGE_MODEL = "claude-opus-5-5"
+# Con Gemini gratis el juez usa Flash-Lite: Flash permite 20 pedidos por día y el agente solo ya
+# usa unos 11 en una corrida completa (decisión 012).
+JUDGE_MODELS = {"gemini": "gemini-3.5-flash-lite"}
 MAX_RESOLUTION_DROP = 0.02
 MAX_JUDGE_DROP = 0.05
 _EPSILON = 1e-9
@@ -173,6 +176,10 @@ def _tool_evidence(stack: SimulatedStack, result: AgentResult) -> list[dict[str,
     ]
 
 
+def judge_model(mode: str) -> str:
+    return JUDGE_MODELS.get(mode, JUDGE_MODEL)
+
+
 def judge(stack: SimulatedStack, case: dict[str, Any], result: AgentResult) -> float:
     keywords = "|".join(case["esperado"].get("palabras_clave", []))
     tools = json.dumps(_tool_evidence(stack, result), ensure_ascii=False, default=str)
@@ -186,7 +193,7 @@ def judge(stack: SimulatedStack, case: dict[str, Any], result: AgentResult) -> f
     response = stack.llm.complete(
         tenant_id=stack.seed.tenant_id,
         case_id=result.case_id,
-        model=JUDGE_MODEL,
+        model=judge_model(stack.mode),
         system=JUDGE_SYSTEM,
         messages=[{"role": "user", "content": content}],
         tools=[JUDGE_TOOL],
