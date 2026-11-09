@@ -7,6 +7,7 @@ import httpx
 GRAPH_URL = "https://graph.facebook.com"
 GRAPH_VERSION = "v27.0"  # la más reciente según el changelog de la Graph API (noviembre de 2026)
 NOT_IN_ALLOWED_LIST = 131030
+OUTSIDE_WINDOW = 131047  # pasaron más de 24 h desde el último mensaje del cliente
 
 
 class WhatsAppError(RuntimeError):
@@ -24,6 +25,32 @@ class WhatsAppClient:
     def send_text(self, *, token: str, phone_number_id: str, to: str, body: str) -> str:
         """Envía un mensaje libre (dentro de la ventana de 24 h). Devuelve el wamid."""
         message = {"type": "text", "text": {"preview_url": False, "body": body}}
+        return self._send(token, phone_number_id, to, message)
+
+    def send_template(
+        self,
+        *,
+        token: str,
+        phone_number_id: str,
+        to: str,
+        name: str,
+        language: str,
+        params: list[str],
+    ) -> str:
+        """Envía una plantilla aprobada por Meta (fuera de la ventana de 24 h)."""
+        message = {
+            "type": "template",
+            "template": {
+                "name": name,
+                "language": {"code": language},
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [{"type": "text", "text": p} for p in params],
+                    }
+                ],
+            },
+        }
         return self._send(token, phone_number_id, to, message)
 
     def _send(self, token: str, phone_number_id: str, to: str, message: dict[str, Any]) -> str:

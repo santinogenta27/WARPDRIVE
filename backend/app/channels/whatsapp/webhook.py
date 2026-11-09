@@ -32,10 +32,11 @@ JOB_KIND = "whatsapp_message"
 class InboundMessage:
     phone_number_id: str  # número de la empresa que recibió el mensaje
     wamid: str
-    sender: str  # wa_id del cliente; se borra del job una vez respondido
+    sender: str  # wa_id del cliente; se borra del job una vez procesado
     timestamp: int
     type: str
     text: str
+    name: str = ""  # nombre de perfil de WhatsApp (para el saludo de las plantillas)
 
 
 def parse_webhook(payload: dict[str, Any]) -> list[InboundMessage]:
@@ -45,6 +46,10 @@ def parse_webhook(payload: dict[str, Any]) -> list[InboundMessage]:
         for change in entry.get("changes") or []:
             value = change.get("value") or {}
             number = str((value.get("metadata") or {}).get("phone_number_id", ""))
+            names = {
+                str(c.get("wa_id")): str((c.get("profile") or {}).get("name") or "")
+                for c in value.get("contacts") or []
+            }
             for message in value.get("messages") or []:
                 sender = str(message.get("from") or "")
                 if not number or not sender or not message.get("id"):
@@ -57,6 +62,7 @@ def parse_webhook(payload: dict[str, Any]) -> list[InboundMessage]:
                         timestamp=int(message.get("timestamp") or 0),
                         type=str(message.get("type") or "unknown"),
                         text=str((message.get("text") or {}).get("body") or ""),
+                        name=names.get(sender, ""),
                     )
                 )
     return found

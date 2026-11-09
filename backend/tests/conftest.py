@@ -14,6 +14,12 @@ from app.db.connection import connect
 from app.db.migrate import migrate
 
 
+@pytest.fixture(autouse=True)
+def encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clave de cifrado propia de los tests (no depende del .env local)."""
+    monkeypatch.setenv("ENCRYPTION_KEY", "s3gMcV8bfYlqsO1y1V2N2rU0n-c4Wcq1xYQq0p6CwVU=")
+
+
 @pytest.fixture(scope="session")
 def db_url() -> str:
     url = database_url()

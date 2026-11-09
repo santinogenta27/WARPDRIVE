@@ -4,6 +4,7 @@ Corre dentro de la transacción del worker (app/jobs/worker.py): si el envío fa
 todo y el job se reintenta.
 """
 
+import json
 import logging
 import os
 import uuid
@@ -15,8 +16,11 @@ import psycopg
 from app.agent.loop import Agent
 from app.audit import log as audit_log
 from app.channels.whatsapp.client import WhatsAppClient
+from app.channels.whatsapp.outbound import flush_pending
+from app.channels.whatsapp.routing import tenant_for_number
 from app.channels.whatsapp.webhook import JOB_KIND, InboundMessage
 from app.contacts import hash_phone
+from app.crypto import encrypt
 from app.db.connection import tenant_scope
 from app.jobs.queue import Job
 
@@ -34,15 +38,6 @@ class WhatsAppDeps:
     token: str
 
 
-def tenant_for_number(conn: psycopg.Connection, phone_number_id: str) -> uuid.UUID | None:
-    """Empresa dueña del número. Única consulta fuera de un tenant: es el ruteo del webhook."""
-    row = conn.execute(
-        "select id from tenants where settings -> 'whatsapp' ->> 'phone_number_id' = %s",
-        (phone_number_id,),
-    ).fetchone()
-    return row[0] if row else None
-
-
 def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -> None:
     message = InboundMessage(**job.payload)
     tenant_id = tenant_for_number(conn, message.phone_number_id)
@@ -54,6 +49,18 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
         return
     contact_id = _touch_contact(conn, tenant_id, message)
     if message.type in IGNORED_TYPES:
+        _forget_sender(conn, job)
+        return
+    # Si había mensajes esperando que se abra la ventana (el cliente respondió la plantilla),
+    # se envían y este mensaje no pasa por el agente.
+    if flush_pending(
+        conn,
+        tenant_id,
+        contact_id,
+        phone_number_id=message.phone_number_id,
+        to=message.sender,
+        deps=deps,
+    ):
         _forget_sender(conn, job)
         return
     case_id: uuid.UUID | None = None
@@ -79,15 +86,18 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
 def _touch_contact(
     conn: psycopg.Connection, tenant_id: uuid.UUID, message: InboundMessage
 ) -> uuid.UUID:
-    """Crea el contacto si no existe y registra la hora del último mensaje del cliente."""
+    """Crea el contacto si no existe, registra la hora del último mensaje del cliente (abre la
+    ventana de 24 h) y guarda cifrada la dirección para escribirle después."""
+    address = encrypt(json.dumps({"wa_id": message.sender, "name": message.name}))
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
-            "insert into contacts (tenant_id, phone_hash, last_customer_message_at)"
-            " values (%s, %s, to_timestamp(%s))"
+            "insert into contacts (tenant_id, phone_hash, last_customer_message_at, wa_address_enc)"
+            " values (%s, %s, to_timestamp(%s), %s)"
             " on conflict (tenant_id, phone_hash) do update set last_customer_message_at ="
-            " greatest(contacts.last_customer_message_at, excluded.last_customer_message_at)"
+            " greatest(contacts.last_customer_message_at, excluded.last_customer_message_at),"
+            " wa_address_enc = excluded.wa_address_enc"
             " returning id",
-            (tenant_id, hash_phone(message.sender), message.timestamp),
+            (tenant_id, hash_phone(message.sender), message.timestamp, address),
         ).fetchone()
     assert row is not None
     contact_id: uuid.UUID = row[0]
@@ -95,8 +105,8 @@ def _touch_contact(
 
 
 def _forget_sender(conn: psycopg.Connection, job: Job) -> None:
-    """El teléfono en claro solo hace falta para responder: después se borra del job."""
-    conn.execute("update jobs set payload = payload - 'sender' where id = %s", (job.id,))
+    """El teléfono y el nombre en claro solo hacen falta para responder: después se borran."""
+    conn.execute("update jobs set payload = payload - 'sender' - 'name' where id = %s", (job.id,))
 
 
 def production_deps() -> WhatsAppDeps:
