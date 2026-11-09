@@ -123,12 +123,13 @@ class LLMClient:
         response = self._provider.create(
             model=model, messages=messages, max_tokens=max_tokens, system=system, **options
         )
+        # Se registra el modelo que respondió: con Gemini no es el que pidió el agente.
         self._recorder.record(
             tenant_id=tenant_id,
             case_id=case_id,
             kind="llm",
-            model=model,
+            model=response.model,
             usage=response.usage,
-            cost_usd=cost_usd(model, response.usage),
+            cost_usd=cost_usd(response.model, response.usage),
         )
         return response
