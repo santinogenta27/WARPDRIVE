@@ -106,6 +106,30 @@ def test_el_token_del_canal_se_guarda_cifrado(conn: psycopg.Connection) -> None:
     assert channel_for_number(conn, "999") is None
 
 
+def test_el_setup_de_la_demo_asigna_el_chat_web_y_los_canales_configurados(
+    conn: psycopg.Connection,
+) -> None:
+    from app.channels.web.channel import DEMO_ADDRESS
+    from app.demo.whatsapp_setup import assign_channels
+
+    row = conn.execute("insert into tenants (name) values ('Demo') returning id").fetchone()
+    assert row is not None
+    assert assign_channels(conn, row[0], {}) == [f"chat web {DEMO_ADDRESS}"]
+    web = channel_for_number(conn, DEMO_ADDRESS, kind="web")
+    assert web is not None and web.tenant_id == row[0]
+
+    env = {
+        "TWILIO_ACCOUNT_SID": "AC1",
+        "TWILIO_AUTH_TOKEN": "t",
+        "TWILIO_WHATSAPP_FROM": "whatsapp:+15550002222",
+        "WHATSAPP_PHONE_NUMBER_ID": "444",
+        "WHATSAPP_ACCESS_TOKEN": "token-meta",
+    }
+    assert len(assign_channels(conn, row[0], env)) == 3
+    assert channel_for_number(conn, "444") is not None
+    assert channel_for_number(conn, "whatsapp:+15550002222", kind="twilio_whatsapp") is not None
+
+
 def test_un_canal_de_twilio_se_rutea_por_su_tipo(conn: psycopg.Connection) -> None:
     """La prueba de WhatsApp de Twilio identifica a la empresa por su número de envío."""
     row = conn.execute("insert into tenants (name) values ('Delta') returning id").fetchone()

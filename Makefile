@@ -8,7 +8,7 @@ PYTHON ?= $(if $(wildcard $(VENV_PY)),$(VENV_PY),python)
 
 export PYTHONPATH := backend
 
-.PHONY: install dev migrate test evals lint api worker whatsapp-setup
+.PHONY: install dev migrate test evals lint api worker whatsapp-setup demo-setup
 
 install:
 	$(PYTHON) -m pip install -r backend/requirements-dev.txt
@@ -22,14 +22,15 @@ test:
 evals:
 	$(PYTHON) evals/runner.py
 
-# WhatsApp (ver docs/whatsapp.md): API con el webhook, worker que corre el agente y alta de Acme.
+# Demo (ver docs/whatsapp.md y docs/chat-web.md): API con el chat web y los webhooks, worker
+# que corre el agente para WhatsApp, y alta de Acme con sus canales.
 api:
 	$(PYTHON) -m uvicorn app.main:app --port 8000
 
 worker:
 	$(PYTHON) -m app.jobs
 
-whatsapp-setup:
+demo-setup whatsapp-setup:
 	$(PYTHON) -m app.demo.whatsapp_setup
 
 lint:
