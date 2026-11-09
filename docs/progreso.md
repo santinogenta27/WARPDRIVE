@@ -59,6 +59,16 @@ Para retomar: `make evals` después de la medianoche del Pacífico. Para empezar
 
 **Cambios después de la primera corrida** (misma rama): el juez recibe los resultados de las herramientas y acepta la negrita de WhatsApp (`*texto*`). El clasificador tiene la categoría `pedido_no_permitido`, con negativa fija y sin derivar (decisión 013). La negrita `**texto**` se convierte a `*texto*` antes de enviar. Con Gemini, el juez usa `gemini-3.5-flash-lite`. Estos cambios invalidan el avance guardado de la primera corrida: la próxima tiene que empezar de cero con `--restart`.
 
+## Hito 3 — WhatsApp (rama `hito-3`, sale de `gemini-gratis`)
+
+| Tarea | Estado | Test de aceptación |
+|---|---|---|
+| 12. Webhook de WhatsApp, firma y envío | Hecha | `test_whatsapp.py`: un mensaje al número de prueba recibe respuesta (webhook firmado → cola → agente → Cloud API simulada); el mismo wamid no se procesa dos veces; una firma inválida se rechaza |
+| 12d. Plantillas y ventana de 24 h | Hecha | `test_whatsapp_window.py`: una respuesta humana a las 25 h sale como plantilla, y el texto se envía cuando el cliente responde |
+| 12e. Tabla `channels` y ruteo por `phone_number_id` | Hecha | `test_channels.py`: dos tenants con números distintos no se mezclan; el token del canal se guarda cifrado |
+
+Decisiones 014 a 016. Cómo probarlo desde el celular: `docs/whatsapp.md`.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
