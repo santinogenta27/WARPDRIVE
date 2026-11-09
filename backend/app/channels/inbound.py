@@ -1,8 +1,10 @@
-"""Procesa un mensaje encolado por el webhook de cualquier `Channel`: corre el agente y responde.
+"""Procesa un mensaje entrante de cualquier `Channel`: corre el agente y responde.
 
-Corre dentro de la transacción del worker (app/jobs/worker.py): si el envío falla de forma
-transitoria, se revierte todo y el job se reintenta. La Cloud API de Meta tiene su propio
-handler (app/channels/whatsapp/handler.py) por las plantillas y la ventana de 24 h.
+`handle_inbound_job` lo hace para los mensajes que encola un webhook (Twilio), dentro de la
+transacción del worker: si el envío falla de forma transitoria, se revierte todo y el job se
+reintenta. El chat web llama a `handle_inbound` directamente, dentro de su pedido HTTP. La Cloud
+API de Meta tiene su propio handler (app/channels/whatsapp/handler.py) por las plantillas y la
+ventana de 24 h.
 """
 
 import logging
@@ -35,7 +37,17 @@ def handle_inbound_job(
     channel: Channel,
     agent: Callable[[psycopg.Connection], Agent],
 ) -> None:
-    message = InboundMessage(**job.payload)
+    handle_inbound(conn, InboundMessage(**job.payload), channel=channel, agent=agent)
+    forget_sender(conn, job)  # el teléfono en claro no queda en el job
+
+
+def handle_inbound(
+    conn: psycopg.Connection,
+    message: InboundMessage,
+    *,
+    channel: Channel,
+    agent: Callable[[psycopg.Connection], Agent],
+) -> None:
     route = channel_for_number(conn, message.phone_number_id, kind=channel.kind)
     if route is None:  # número desconocido: se registra en el log y se descarta
         logger.warning(
@@ -43,12 +55,10 @@ def handle_inbound_job(
             channel.kind,
             message.phone_number_id,
         )
-        forget_sender(conn, job)
         return
     tenant_id = route.tenant_id
     contact_id = touch_contact(conn, tenant_id, message)
     if message.type in IGNORED_TYPES:
-        forget_sender(conn, job)
         return
     case_id: uuid.UUID | None = None
     if message.type == "text" and message.text.strip():
@@ -71,14 +81,12 @@ def handle_inbound_job(
                 "whatsapp_send_failed",
                 {"code": error.code, "in_reply_to": message.wamid, "channel": channel.kind},
             )
-        forget_sender(conn, job)
         return
     if case_id is not None:
         audit_log.record(
             conn,
             tenant_id,
             case_id,
-            "whatsapp_sent",
+            "whatsapp_sent" if "whatsapp" in channel.kind else f"{channel.kind}_sent",
             {"wamid": sent_id, "in_reply_to": message.wamid, "channel": channel.kind},
         )
-    forget_sender(conn, job)

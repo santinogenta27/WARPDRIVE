@@ -5,7 +5,7 @@ import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import psycopg
 from fastapi.testclient import TestClient
@@ -16,6 +16,9 @@ from app.contacts import hash_phone
 from app.db.connection import tenant_scope
 from app.llm.embedder import Embedder
 from app.rag.indexer import index_document
+
+if TYPE_CHECKING:
+    from app.agent.loop import Agent
 
 ACME_DIR = REPO_ROOT / "evals" / "fixtures" / "acme"
 
@@ -114,6 +117,20 @@ def acme_sandbox_client() -> TestClient:
     from acme_api import create_app
 
     return TestClient(create_app())
+
+
+def build_demo_agent(conn: psycopg.Connection, acme: TestClient) -> "Agent":
+    """Agente de la demo: modelos del entorno (Claude o Gemini) y la API de Acme simulada."""
+    from app.agent.loop import Agent
+    from app.llm.client import LLMClient, PostgresUsageRecorder
+    from app.llm.factory import embedder_from_env, provider_from_env
+    from app.policy.guardian import Guardian
+    from app.tools.runtime import ToolRuntime
+
+    recorder = PostgresUsageRecorder(conn)
+    llm = LLMClient(provider=provider_from_env(), recorder=recorder)
+    guardian = Guardian(conn, ToolRuntime(acme))
+    return Agent(conn, llm, embedder_from_env(recorder), guardian)
 
 
 def _title(text: str, fallback: str) -> str:

@@ -108,21 +108,14 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
 
 def production_deps() -> WhatsAppDeps:
     """Agente con los modelos del entorno y la API de Acme simulada en proceso (sandbox)."""
-    from app.demo.acme import acme_sandbox_client
-    from app.llm.client import LLMClient, PostgresUsageRecorder
-    from app.llm.factory import embedder_from_env, provider_from_env
-    from app.policy.guardian import Guardian
-    from app.tools.runtime import ToolRuntime
+    from app.demo.acme import acme_sandbox_client, build_demo_agent
 
     agents: dict[int, Agent] = {}
     acme = acme_sandbox_client()
 
     def agent(conn: psycopg.Connection) -> Agent:
-        if id(conn) not in agents:
-            recorder = PostgresUsageRecorder(conn)
-            llm = LLMClient(provider=provider_from_env(), recorder=recorder)
-            guardian = Guardian(conn, ToolRuntime(acme))
-            agents[id(conn)] = Agent(conn, llm, embedder_from_env(recorder), guardian)
+        if id(conn) not in agents:  # el worker usa una sola conexión
+            agents[id(conn)] = build_demo_agent(conn, acme)
         return agents[id(conn)]
 
     return WhatsAppDeps(

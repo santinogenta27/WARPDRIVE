@@ -13,7 +13,7 @@ from typing import Protocol
 
 import psycopg
 
-from app.contacts import hash_phone
+from app.contacts import hash_address
 from app.crypto import encrypt
 from app.db.connection import tenant_scope
 from app.jobs.queue import Job
@@ -74,7 +74,7 @@ def touch_contact(
             " greatest(contacts.last_customer_message_at, excluded.last_customer_message_at),"
             " wa_address_enc = excluded.wa_address_enc"
             " returning id",
-            (tenant_id, hash_phone(message.sender), message.timestamp, address),
+            (tenant_id, hash_address(message.sender), message.timestamp, address),
         ).fetchone()
     assert row is not None
     contact_id: uuid.UUID = row[0]

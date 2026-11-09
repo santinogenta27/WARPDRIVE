@@ -1,0 +1,202 @@
+"""Tarea 12b — test de aceptación: un caso guionado se resuelve igual por web y por WhatsApp.
+
+El chat web es otro `Channel`: mismo agente, guardián y auditoría, con el tenant Acme. Las
+respuestas llegan por Server-Sent Events y cada sesión tiene un límite de 20 mensajes. Sin login:
+para datos de cuenta, el cliente se verifica con el código que llega al email.
+"""
+
+import json
+import re
+import time
+import uuid
+from collections.abc import Iterator
+from contextlib import nullcontext
+from pathlib import Path
+from typing import Any
+
+import httpx
+import psycopg
+import pytest
+from fastapi.testclient import TestClient
+from psycopg.types.json import Jsonb
+from simulated.stack import SimulatedStack, build_simulated_stack
+
+from app.channels.base import Channel
+from app.channels.web.channel import DEMO_ADDRESS, WebChannel
+from app.channels.web.routes import MESSAGE_LIMIT, WebDeps, web_deps
+from app.channels.whatsapp.client import WhatsAppClient
+from app.channels.whatsapp.handler import WhatsAppDeps, handle_message_job
+from app.channels.whatsapp.routing import register_whatsapp_channel
+from app.db.connection import tenant_scope
+from app.jobs.queue import Job
+from app.main import app
+
+SCRIPTED = {
+    case["id"]: case
+    for case in json.loads(
+        (Path(__file__).resolve().parents[2] / "evals/fixtures/acme/scripted_cases.json").read_text(
+            encoding="utf-8"
+        )
+    )
+}
+
+
+@pytest.fixture
+def stack(conn: psycopg.Connection) -> SimulatedStack:
+    stack = build_simulated_stack(conn)
+    register_whatsapp_channel(conn, stack.seed.tenant_id, phone_number_id=DEMO_ADDRESS, kind="web")
+    return stack
+
+
+@pytest.fixture
+def api(conn: psycopg.Connection, stack: SimulatedStack) -> Iterator[TestClient]:
+    # La transacción del test se revierte al final: el chat no confirma nada.
+    app.dependency_overrides[web_deps] = lambda: WebDeps(
+        connection=lambda: nullcontext(conn), agent=lambda c: stack.agent
+    )
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def new_session(api: TestClient) -> str:
+    response = api.post("/chat/session")
+    assert response.status_code == 201
+    body = response.json()
+    assert body["remaining"] == MESSAGE_LIMIT == 20
+    session: str = body["session"]
+    return session
+
+
+def chat(api: TestClient, session: str, text: str) -> list[tuple[str, dict[str, Any]]]:
+    """Manda un mensaje y devuelve los eventos SSE (evento, datos) en orden."""
+    response = api.post("/chat/messages", json={"session": session, "text": text})
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = []
+    for block in response.text.strip().split("\n\n"):
+        fields = dict(line.split(": ", 1) for line in block.splitlines())
+        events.append((fields["event"], json.loads(fields["data"])))
+    return events
+
+
+def reply(events: list[tuple[str, dict[str, Any]]]) -> str:
+    return " ".join(data["text"] for name, data in events if name == "message")
+
+
+def final_actions(conn: psycopg.Connection, stack: SimulatedStack) -> list[dict[str, Any]]:
+    with tenant_scope(conn, stack.seed.tenant_id):
+        rows = conn.execute(
+            "select payload from audit_events where kind in ('final_action', 'tool_call')"
+            " order by seq"
+        ).fetchall()
+    return [r[0] for r in rows]
+
+
+def test_web_cumple_la_interfaz_channel() -> None:
+    channel: Channel = WebChannel()
+    assert channel.kind == "web"
+
+
+def test_un_caso_guionado_se_resuelve_igual_por_web_y_por_whatsapp(
+    api: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    case = SCRIPTED["01_donde_esta_mi_pedido"]
+    expected = case["esperado"]
+
+    # Por WhatsApp: Lucía escribe desde su teléfono, que ya está verificado.
+    register_whatsapp_channel(conn, stack.seed.tenant_id, phone_number_id="PN1", token="t")
+    sent: list[str] = []
+
+    def graph(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content)["text"]["body"])
+        return httpx.Response(200, json={"messages": [{"id": "wamid.out"}]})
+
+    payload = {
+        "phone_number_id": "PN1",
+        "wamid": f"wamid.{uuid.uuid4().hex}",
+        "sender": stack.seed.phones["lucia"].lstrip("+"),
+        "timestamp": int(time.time()),
+        "type": "text",
+        "text": case["mensaje"],
+    }
+    row = conn.execute(
+        "insert into jobs (kind, payload) values ('whatsapp_message', %s) returning id",
+        (Jsonb(payload),),
+    ).fetchone()
+    assert row is not None
+    client = WhatsAppClient(http=httpx.Client(transport=httpx.MockTransport(graph)))
+    handle_message_job(
+        conn,
+        Job(row[0], "whatsapp_message", payload, 1, 5),
+        WhatsAppDeps(agent=lambda c: stack.agent, client=client, token="t"),
+    )
+    by_whatsapp = final_actions(conn, stack)
+
+    # Por web: misma consulta; sin login, se verifica con el código que llega al email.
+    session = new_session(api)
+    asked = reply(chat(api, session, case["mensaje"]))
+    assert "verificar" in asked
+    chat(api, session, "lucia@example.com")
+    code = re.search(r"\b(\d{6})\b", stack.mailer.sent[-1].body)
+    assert code is not None and stack.mailer.sent[-1].to == "lucia@example.com"
+    answer = reply(chat(api, session, code.group(1)))
+    by_web = final_actions(conn, stack)[len(by_whatsapp) :]
+
+    for keyword in expected["palabras_clave"]:
+        assert keyword in sent[0] and keyword in answer, keyword
+    consulted = {"tool": "consultar_pedido", "input": {"order_id": "1001"}, "status": "executed"}
+    for events in (by_whatsapp, by_web):
+        tools = [{k: e[k] for k in consulted} for e in events if "tool" in e]
+        assert tools == [consulted]
+        assert events[-1]["action"] == expected["accion"]
+
+
+def test_las_respuestas_llegan_por_server_sent_events(api: TestClient) -> None:
+    events = chat(api, new_session(api), "¿Abren los domingos?")
+    names = [name for name, _ in events]
+    assert names == ["typing", "message", "done"]
+    assert "domingos" in events[1][1]["text"]
+    assert events[2][1] == {"remaining": MESSAGE_LIMIT - 1}
+
+
+def test_cada_sesion_tiene_un_limite_de_20_mensajes(
+    api: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    session = new_session(api)
+    chat(api, session, "¿Abren los domingos?")
+    with tenant_scope(conn, stack.seed.tenant_id):
+        conn.execute("update web_sessions set messages = %s", (MESSAGE_LIMIT - 1,))
+    last = chat(api, session, "¿Tienen cuotas sin interés?")
+    assert last[-1] == ("done", {"remaining": 0})
+    with tenant_scope(conn, stack.seed.tenant_id):
+        before = conn.execute("select count(*) from case_messages").fetchone()
+    blocked = chat(api, session, "¿Y los sábados?")
+    assert [name for name, _ in blocked] == ["limit"]
+    with tenant_scope(conn, stack.seed.tenant_id):
+        after = conn.execute("select count(*) from case_messages").fetchone()
+    assert before == after  # el agente no corrió
+
+
+def test_cada_sesion_es_un_contacto_distinto_sin_datos_en_claro(
+    api: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    first, second = new_session(api), new_session(api)
+    chat(api, first, "¿Abren los domingos?")
+    chat(api, second, "¿Abren los domingos?")
+    with tenant_scope(conn, stack.seed.tenant_id):
+        rows = conn.execute(
+            "select c.phone_hash from contacts c join cases k on k.contact_id = c.id"
+            " where c.created_at > now() - interval '1 minute'"
+        ).fetchall()
+        tokens = conn.execute("select token_hash from web_sessions").fetchall()
+    assert len({r[0] for r in rows}) == 2
+    stored = json.dumps([r[0] for r in rows + tokens])
+    assert first not in stored and second not in stored  # el token de sesión no se guarda
+
+
+def test_una_sesion_inexistente_se_rechaza(api: TestClient) -> None:
+    response = api.post("/chat/messages", json={"session": "x" * 32, "text": "hola"})
+    assert response.status_code == 401
+    assert api.post("/chat/messages", json={"text": "hola"}).status_code == 401
