@@ -24,10 +24,13 @@ from app.channels.base import Channel
 from app.channels.inbound import handle_inbound_job
 from app.channels.twilio.channel import JOB_KIND, TwilioWhatsApp
 from app.channels.twilio.webhook import twilio_channel, twilio_store
+from app.channels.whatsapp.client import WhatsAppClient
+from app.channels.whatsapp.handler import WhatsAppDeps
 from app.channels.whatsapp.routing import register_whatsapp_channel
 from app.channels.whatsapp.webhook import ConnectionStore
 from app.contacts import hash_phone
 from app.db.connection import tenant_scope
+from app.jobs.__main__ import build_handlers
 from app.jobs.queue import Job
 from app.main import app
 
@@ -200,6 +203,13 @@ def test_si_twilio_rechaza_el_envio_no_se_reintenta(
             "select payload from audit_events where kind = 'whatsapp_send_failed'"
         ).fetchone()
     assert failed is not None and failed[0]["code"] == 63015
+
+
+def test_el_worker_atiende_twilio_solo_si_esta_configurado() -> None:
+    meta = WhatsAppDeps(agent=lambda c: None, client=WhatsAppClient(), token="")  # type: ignore[arg-type,return-value]
+    with_twilio = build_handlers(meta, FakeTwilio().channel())
+    assert set(with_twilio) == {"whatsapp_message", JOB_KIND}
+    assert set(build_handlers(meta, None)) == {"whatsapp_message"}
 
 
 def test_un_numero_de_twilio_desconocido_se_descarta(
