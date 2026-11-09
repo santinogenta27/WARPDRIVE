@@ -1,6 +1,8 @@
 """Tarea 11 — test de aceptación: un cambio que baja el puntaje bloquea el merge."""
 
+import html
 import json
+import re
 from pathlib import Path
 
 import psycopg
@@ -50,6 +52,24 @@ def test_un_cambio_que_baja_el_puntaje_bloquea_el_merge(conn: psycopg.Connection
     verdict = runner.compare(report, PERFECT)
     assert verdict.blocked
     assert report.resolution_rate < 1.0
+
+
+def test_el_juez_ve_las_herramientas_y_acepta_la_negrita_de_whatsapp(
+    conn: psycopg.Connection,
+) -> None:
+    stack = build_simulated_stack(conn)
+    cases = json.loads(runner.CASES_PATH.read_text(encoding="utf-8"))
+    case = next(c for c in cases if c["id"] == "03_cambiar_direccion_no_despachado")
+    result = stack.send(case["contacto"], case["mensaje"])
+    runner.judge(stack, case, result)
+
+    body = stack.claude_requests[-1]["body"]
+    found = re.search(r"<herramientas>(.*)</herramientas>", body["messages"][0]["content"], re.S)
+    assert found is not None
+    tools = html.unescape(found.group(1))
+    # La fecha de entrega sale de la herramienta: el juez no debe tomarla como inventada.
+    assert "actualizar_direccion" in tools and "2026-11-14" in tools
+    assert "*texto*" in body["system"]
 
 
 def test_si_se_agota_la_cuota_guarda_el_avance_y_retoma(
