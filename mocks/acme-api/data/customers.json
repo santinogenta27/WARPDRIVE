@@ -1,0 +1,5 @@
+[
+  {"id": "C-101", "name": "Lucía Ferrari", "email": "lucia@example.com", "phone": "+5491155550101"},
+  {"id": "C-202", "name": "Martín Ibarra", "email": "martin@example.com", "phone": "+5491155550202"},
+  {"id": "C-303", "name": "Sofía Benítez", "email": "sofia@example.com", "phone": "+5491155550303"}
+]

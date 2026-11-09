@@ -19,6 +19,7 @@ SPEC: dict[str, Any] = json.loads(Path(OPENAPI_PATH).read_text(encoding="utf-8")
 # (método, ruta del contrato, ruta concreta, cuerpo, headers, código esperado)
 EXAMPLES: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str], int]] = [
     ("get", "/orders", "/orders?customer_phone=%2B5491155550101", None, {}, 200),
+    ("get", "/customers", "/customers?email=lucia%40example.com", None, {}, 200),
     ("get", "/orders/{order_id}", "/orders/1001", None, {}, 200),
     ("get", "/orders/{order_id}", "/orders/9999", None, {}, 404),
     (
@@ -143,6 +144,15 @@ def test_herramientas_de_acme_cumplen_el_manifiesto_y_apuntan_a_la_api() -> None
         "actualizar_direccion": "low",
         "cancelar_pedido": "medium",
         "iniciar_reembolso": "high",
+    }
+
+
+def test_busca_clientes_por_email_sin_distinguir_mayusculas() -> None:
+    client = TestClient(create_app())
+    found = client.get("/customers", params={"email": " Lucia@Example.com "}).json()["customers"]
+    assert [c["phone"] for c in found] == ["+5491155550101"]
+    assert client.get("/customers", params={"email": "nadie@example.com"}).json() == {
+        "customers": []
     }
 
 

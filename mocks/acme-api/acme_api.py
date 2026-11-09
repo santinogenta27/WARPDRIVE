@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 HERE = Path(__file__).resolve().parent
 OPENAPI_PATH = HERE / "openapi.json"
 ORDERS_PATH = HERE / "data" / "orders.json"
+CUSTOMERS_PATH = HERE / "data" / "customers.json"
 NOT_SHIPPED = {"paid"}
 
 
@@ -44,6 +45,13 @@ def create_app(orders: list[dict[str, Any]] | None = None) -> FastAPI:
 
     app = FastAPI(title="Acme Store — API de pedidos (simulada)")
     app.openapi = lambda: json.loads(OPENAPI_PATH.read_text(encoding="utf-8"))  # type: ignore[method-assign]
+
+    customers = json.loads(CUSTOMERS_PATH.read_text(encoding="utf-8"))
+
+    @app.get("/customers")
+    def find_customers(email: str) -> dict[str, Any]:
+        wanted = email.strip().lower()
+        return {"customers": [c for c in customers if c["email"].lower() == wanted]}
 
     @app.get("/orders")
     def list_orders(customer_phone: str) -> dict[str, Any]:

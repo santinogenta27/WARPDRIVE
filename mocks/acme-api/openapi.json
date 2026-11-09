@@ -6,6 +6,21 @@
     "description": "API ficticia de la tienda de demo Acme Store. Datos sintéticos; sirve para desarrollo, CI y demos."
   },
   "paths": {
+    "/customers": {
+      "get": {
+        "operationId": "buscarClientes",
+        "summary": "Clientes con un email registrado (sin distinguir mayúsculas); lista vacía si no hay",
+        "parameters": [
+          {"name": "email", "in": "query", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Clientes encontrados",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CustomerList"}}}
+          }
+        }
+      }
+    },
     "/orders": {
       "get": {
         "operationId": "listarPedidos",
@@ -148,6 +163,23 @@
           "id", "customer_phone", "customer_name", "status", "items", "total", "currency",
           "shipping_address", "created_at", "shipped_at", "estimated_delivery"
         ],
+        "additionalProperties": false
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "email": {"type": "string"},
+          "phone": {"type": "string"}
+        },
+        "required": ["id", "name", "email", "phone"],
+        "additionalProperties": false
+      },
+      "CustomerList": {
+        "type": "object",
+        "properties": {"customers": {"type": "array", "items": {"$ref": "#/components/schemas/Customer"}}},
+        "required": ["customers"],
         "additionalProperties": false
       },
       "OrderList": {
