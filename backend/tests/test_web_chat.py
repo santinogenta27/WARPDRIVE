@@ -22,7 +22,7 @@ from psycopg.types.json import Jsonb
 from simulated.stack import SimulatedStack, build_simulated_stack
 
 from app.channels.base import Channel
-from app.channels.web.channel import DEMO_ADDRESS, WebChannel
+from app.channels.web.channel import WebChannel
 from app.channels.web.routes import MESSAGE_LIMIT, WebDeps, web_deps
 from app.channels.whatsapp.client import WhatsAppClient
 from app.channels.whatsapp.handler import WhatsAppDeps, handle_message_job
@@ -42,17 +42,23 @@ SCRIPTED = {
 
 
 @pytest.fixture
-def stack(conn: psycopg.Connection) -> SimulatedStack:
+def address() -> str:
+    """Dirección propia del test: la de la demo (DEMO_ADDRESS) puede existir en la base."""
+    return f"web:test-{uuid.uuid4().hex}"
+
+
+@pytest.fixture
+def stack(conn: psycopg.Connection, address: str) -> SimulatedStack:
     stack = build_simulated_stack(conn)
-    register_whatsapp_channel(conn, stack.seed.tenant_id, phone_number_id=DEMO_ADDRESS, kind="web")
+    register_whatsapp_channel(conn, stack.seed.tenant_id, phone_number_id=address, kind="web")
     return stack
 
 
 @pytest.fixture
-def api(conn: psycopg.Connection, stack: SimulatedStack) -> Iterator[TestClient]:
+def api(conn: psycopg.Connection, stack: SimulatedStack, address: str) -> Iterator[TestClient]:
     # La transacción del test se revierte al final: el chat no confirma nada.
     app.dependency_overrides[web_deps] = lambda: WebDeps(
-        connection=lambda: nullcontext(conn), agent=lambda c: stack.agent
+        connection=lambda: nullcontext(conn), agent=lambda c: stack.agent, address=address
     )
     try:
         yield TestClient(app)

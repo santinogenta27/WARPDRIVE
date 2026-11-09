@@ -27,11 +27,15 @@ from app.llm.factory import embedder_from_env
 
 
 def assign_channels(
-    conn: psycopg.Connection, tenant_id: uuid.UUID, env: Mapping[str, str]
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    env: Mapping[str, str],
+    *,
+    web_address: str = DEMO_ADDRESS,
 ) -> list[str]:
     """Asigna al tenant el chat web y los canales configurados en `env`; devuelve cuáles."""
-    register_whatsapp_channel(conn, tenant_id, phone_number_id=DEMO_ADDRESS, kind="web")
-    assigned = [f"chat web {DEMO_ADDRESS}"]
+    register_whatsapp_channel(conn, tenant_id, phone_number_id=web_address, kind="web")
+    assigned = [f"chat web {web_address}"]
     number, token = env.get("WHATSAPP_PHONE_NUMBER_ID"), env.get("WHATSAPP_ACCESS_TOKEN")
     if number and token:
         register_whatsapp_channel(conn, tenant_id, phone_number_id=number, token=token)

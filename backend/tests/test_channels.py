@@ -109,13 +109,14 @@ def test_el_token_del_canal_se_guarda_cifrado(conn: psycopg.Connection) -> None:
 def test_el_setup_de_la_demo_asigna_el_chat_web_y_los_canales_configurados(
     conn: psycopg.Connection,
 ) -> None:
-    from app.channels.web.channel import DEMO_ADDRESS
     from app.demo.whatsapp_setup import assign_channels
 
     row = conn.execute("insert into tenants (name) values ('Demo') returning id").fetchone()
     assert row is not None
-    assert assign_channels(conn, row[0], {}) == [f"chat web {DEMO_ADDRESS}"]
-    web = channel_for_number(conn, DEMO_ADDRESS, kind="web")
+    # Dirección propia: la de la demo (web:acme-demo) puede existir en la base de desarrollo.
+    address = f"web:test-{uuid.uuid4().hex}"
+    assert assign_channels(conn, row[0], {}, web_address=address) == [f"chat web {address}"]
+    web = channel_for_number(conn, address, kind="web")
     assert web is not None and web.tenant_id == row[0]
 
     env = {
@@ -125,7 +126,7 @@ def test_el_setup_de_la_demo_asigna_el_chat_web_y_los_canales_configurados(
         "WHATSAPP_PHONE_NUMBER_ID": "444",
         "WHATSAPP_ACCESS_TOKEN": "token-meta",
     }
-    assert len(assign_channels(conn, row[0], env)) == 3
+    assert len(assign_channels(conn, row[0], env, web_address=address)) == 3
     assert channel_for_number(conn, "444") is not None
     assert channel_for_number(conn, "whatsapp:+15550002222", kind="twilio_whatsapp") is not None
 
