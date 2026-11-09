@@ -17,7 +17,7 @@ from app.agent.loop import Agent
 from app.audit import log as audit_log
 from app.channels.whatsapp.client import WhatsAppClient
 from app.channels.whatsapp.outbound import flush_pending
-from app.channels.whatsapp.routing import tenant_for_number
+from app.channels.whatsapp.routing import channel_for_number
 from app.channels.whatsapp.webhook import JOB_KIND, InboundMessage
 from app.contacts import hash_phone
 from app.crypto import encrypt
@@ -35,18 +35,20 @@ UNSUPPORTED_MESSAGE = "Por ahora solo puedo leer mensajes de texto. ¿Me lo escr
 class WhatsAppDeps:
     agent: Callable[[psycopg.Connection], Agent]
     client: WhatsAppClient
-    token: str
+    token: str  # token por defecto (WHATSAPP_ACCESS_TOKEN) si el canal no tiene uno guardado
 
 
 def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -> None:
     message = InboundMessage(**job.payload)
-    tenant_id = tenant_for_number(conn, message.phone_number_id)
-    if tenant_id is None:
+    channel = channel_for_number(conn, message.phone_number_id)
+    if channel is None:  # número desconocido: se registra en el log y se descarta (spec)
         logger.warning(
             "Mensaje para un número sin empresa (%s): se descarta", message.phone_number_id
         )
         _forget_sender(conn, job)
         return
+    tenant_id = channel.tenant_id
+    token = channel.token or deps.token
     contact_id = _touch_contact(conn, tenant_id, message)
     if message.type in IGNORED_TYPES:
         _forget_sender(conn, job)
@@ -59,7 +61,8 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
         contact_id,
         phone_number_id=message.phone_number_id,
         to=message.sender,
-        deps=deps,
+        client=deps.client,
+        token=token,
     ):
         _forget_sender(conn, job)
         return
@@ -70,7 +73,7 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
     else:
         reply = UNSUPPORTED_MESSAGE
     wamid = deps.client.send_text(
-        token=deps.token, phone_number_id=message.phone_number_id, to=message.sender, body=reply
+        token=token, phone_number_id=message.phone_number_id, to=message.sender, body=reply
     )
     if case_id is not None:
         audit_log.record(

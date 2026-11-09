@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING, Literal
 import psycopg
 
 from app.audit import log as audit_log
-from app.channels.whatsapp.client import OUTSIDE_WINDOW, WhatsAppError
+from app.channels.whatsapp.client import OUTSIDE_WINDOW, WhatsAppClient, WhatsAppError
 from app.channels.whatsapp.format import to_whatsapp
-from app.channels.whatsapp.routing import number_for_tenant
+from app.channels.whatsapp.routing import channel_for_tenant
 from app.crypto import decrypt
 from app.db.connection import tenant_scope
 
@@ -50,9 +50,10 @@ def reply_as_human(
 ) -> Delivery:
     """Respuesta de una persona del equipo a un caso (tras una derivación)."""
     now = now or datetime.now(UTC)
-    phone_number_id = number_for_tenant(conn, tenant_id)
-    if phone_number_id is None:
+    channel = channel_for_tenant(conn, tenant_id)
+    if channel is None:
         raise LookupError("La empresa no tiene un número de WhatsApp asignado")
+    phone_number_id, token = channel.phone_number_id, channel.token or deps.token
     text = to_whatsapp(text)
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
@@ -72,7 +73,7 @@ def reply_as_human(
     if last_in is not None and now - last_in < WINDOW:
         try:
             wamid = deps.client.send_text(
-                token=deps.token, phone_number_id=phone_number_id, to=address["wa_id"], body=text
+                token=token, phone_number_id=phone_number_id, to=address["wa_id"], body=text
             )
         except WhatsAppError as error:
             if error.code != OUTSIDE_WINDOW:
@@ -84,7 +85,7 @@ def reply_as_human(
             return Delivery("text", wamid)
 
     wamid = deps.client.send_template(
-        token=deps.token,
+        token=token,
         phone_number_id=phone_number_id,
         to=address["wa_id"],
         name=CASE_UPDATED_TEMPLATE,
@@ -114,7 +115,8 @@ def flush_pending(
     *,
     phone_number_id: str,
     to: str,
-    deps: "WhatsAppDeps",
+    client: WhatsAppClient,
+    token: str,
 ) -> int:
     """El cliente volvió a escribir: envía los mensajes pendientes. Devuelve cuántos envió."""
     with tenant_scope(conn, tenant_id):
@@ -124,9 +126,7 @@ def flush_pending(
             (contact_id,),
         ).fetchall()
     for message_id, case_id, text in pending:
-        wamid = deps.client.send_text(
-            token=deps.token, phone_number_id=phone_number_id, to=to, body=text
-        )
+        wamid = client.send_text(token=token, phone_number_id=phone_number_id, to=to, body=text)
         with tenant_scope(conn, tenant_id):
             conn.execute(
                 "update outbound_messages set status = 'sent', sent_at = now() where id = %s",

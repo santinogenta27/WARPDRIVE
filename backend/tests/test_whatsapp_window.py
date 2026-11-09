@@ -20,6 +20,7 @@ from app.agent.loop import Agent
 from app.channels.whatsapp.client import WhatsAppClient
 from app.channels.whatsapp.handler import WhatsAppDeps, handle_message_job
 from app.channels.whatsapp.outbound import reply_as_human
+from app.channels.whatsapp.routing import register_whatsapp_channel
 from app.db.connection import tenant_scope
 from app.jobs.queue import Job
 
@@ -47,9 +48,8 @@ class FakeGraph:
 @pytest.fixture
 def stack(conn: psycopg.Connection) -> SimulatedStack:
     stack = build_simulated_stack(conn)
-    conn.execute(
-        "update tenants set settings = settings || %s where id = %s",
-        (Jsonb({"whatsapp": {"phone_number_id": PHONE_NUMBER_ID}}), stack.seed.tenant_id),
+    register_whatsapp_channel(
+        conn, stack.seed.tenant_id, phone_number_id=PHONE_NUMBER_ID, token="token-meta"
     )
     return stack
 

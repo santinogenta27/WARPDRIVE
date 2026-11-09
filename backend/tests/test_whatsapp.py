@@ -15,11 +15,11 @@ import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from psycopg.types.json import Jsonb
 from simulated.stack import SimulatedStack, build_simulated_stack
 
 from app.channels.whatsapp.client import WhatsAppClient
 from app.channels.whatsapp.handler import JOB_KIND, WhatsAppDeps, handle_message_job
+from app.channels.whatsapp.routing import register_whatsapp_channel
 from app.channels.whatsapp.webhook import (
     ConnectionStore,
     WebhookSettings,
@@ -94,9 +94,8 @@ class FakeGraph:
 @pytest.fixture
 def stack(conn: psycopg.Connection) -> SimulatedStack:
     stack = build_simulated_stack(conn)
-    conn.execute(
-        "update tenants set settings = settings || %s where id = %s",
-        (Jsonb({"whatsapp": {"phone_number_id": PHONE_NUMBER_ID}}), stack.seed.tenant_id),
+    register_whatsapp_channel(
+        conn, stack.seed.tenant_id, phone_number_id=PHONE_NUMBER_ID, token="token-meta"
     )
     return stack
 
