@@ -1,9 +1,9 @@
 """Ciclo del agente por mensaje entrante (spec: "Agente en producción").
 
-Pasos: caso abierto o nuevo → clasificación (Haiku; una inyección o un pedido de datos en masa
-recibe una negativa fija) → tipo activo → verificación de identidad
-→ RAG → ciclo de herramientas con Sonnet (máximo 8 pasos) → una de cuatro acciones:
-responder, ejecutar, pedir_aprobacion o derivar.
+Pasos: caso abierto o nuevo → verificación por código en curso (email o código del cliente) →
+clasificación (Haiku; una inyección o un pedido de datos en masa recibe una negativa fija) →
+tipo activo → verificación de identidad → RAG → ciclo de herramientas con Sonnet (máximo 8
+pasos) → una de cuatro acciones: responder, ejecutar, pedir_aprobacion o derivar.
 """
 
 import json
@@ -20,10 +20,12 @@ from app.agent.grounding import GroundingVerdict, check_grounding
 from app.audit import log as audit_log
 from app.channels.whatsapp.format import to_whatsapp
 from app.db.connection import tenant_scope
+from app.identity import email_code
 from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
+from app.mailer import ConsoleMailer, Email, Mailer
 from app.policy.guardian import ContactContext, GuardDecision, Guardian
 from app.rag.search import SearchResult, hybrid_search
 
@@ -42,6 +44,22 @@ REFUSAL_MESSAGE = (
     "Perdón, con eso no puedo ayudarte. Sí puedo darte una mano con tus propios pedidos o con "
     "cualquier consulta sobre la tienda."
 )
+# Verificación por código: misma respuesta exista o no el email, para no revelarlo.
+CODE_SENT_MESSAGE = (
+    "Si ese email está registrado en una compra, te llega un código de 6 dígitos. "
+    "Escribilo acá para confirmar que sos el titular. Vence en 10 minutos."
+)
+VERIFIED_PREFIX = "¡Listo, ya verifiqué tu identidad! "
+CODE_EXPIRED_MESSAGE = "Ese código ya venció. Pasame de nuevo tu email y te mando uno nuevo."
+CODE_LOCKED_MESSAGE = (
+    "Ese código tampoco es correcto y ya no quedan intentos. Si querés, pasame de nuevo tu "
+    "email y te mando un código nuevo."
+)
+
+
+def _wrong_code_message(remaining: int) -> str:
+    left = "Te queda 1 intento" if remaining == 1 else f"Te quedan {remaining} intentos"
+    return f"Ese código no es correcto. {left}."
 
 
 @dataclass
@@ -78,6 +96,7 @@ class _Turn:
     decisions: list[GuardDecision] = field(default_factory=list)
     documents: list[SearchResult] = field(default_factory=list)
     grounding_retries: int = 0
+    prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
 
 
 def _grounding_correction(tool_use_id: str | None, reason: str) -> dict[str, Any]:
@@ -112,6 +131,7 @@ class Agent:
         *,
         model: str = AGENT_MODEL,
         max_steps: int = MAX_STEPS,
+        mailer: Mailer | None = None,
     ) -> None:
         self._conn = conn
         self._llm = llm
@@ -119,6 +139,7 @@ class Agent:
         self._guardian = guardian
         self._model = model
         self._max_steps = max_steps
+        self._mailer = mailer or ConsoleMailer()
 
     # -- entrada ---------------------------------------------------------------------------
     def handle_message(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
@@ -128,7 +149,60 @@ class Agent:
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text)
         self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
+        if not contact.verified:
+            pending = email_code.open_verification(self._conn, tenant_id, contact_id)
+            if pending is not None:
+                handled = self._continue_verification(turn, pending, company, tone)
+                if handled is not None:
+                    return handled
+        return self._respond(turn, company, tone)
 
+    def _continue_verification(
+        self, turn: _Turn, pending: email_code.Verification, company: str, tone: str
+    ) -> AgentResult | None:
+        """El cliente manda el email o el código. None: es otro mensaje, sigue el flujo normal."""
+        email = email_code.EMAIL.search(turn.text)
+        if email is not None:
+            phone = self._guardian.customer_phone(turn.tenant_id, email.group(0))
+            code = email_code.send_code(self._conn, turn.tenant_id, pending, phone)
+            if phone is not None:
+                self._mailer.send(
+                    Email(
+                        to=email.group(0),
+                        subject=f"Tu código de verificación de {company}",
+                        body=(
+                            f"Tu código para verificar tu identidad en {company} es {code}. "
+                            f"Vence en {email_code.CODE_TTL_MINUTES} minutos."
+                        ),
+                    )
+                )
+            self._audit(turn, "verification_code_sent", {"registered": phone is not None})
+            return self._finish(turn, "responder", CODE_SENT_MESSAGE, verification=True)
+        code_match = email_code.CODE.search(turn.text)
+        if pending.status != "code_sent" or code_match is None:
+            return None
+        outcome, remaining = email_code.check_code(
+            self._conn, turn.tenant_id, turn.contact.id, pending, code_match.group(0)
+        )
+        self._audit(turn, "verification_checked", {"result": outcome})
+        if outcome == "verified":
+            # Responde la consulta que había quedado pendiente, ya como cliente verificado.
+            turn.contact = self._contact(turn.tenant_id, turn.contact.id)
+            turn.text = pending.question
+            turn.prefix = VERIFIED_PREFIX
+            return self._respond(turn, company, tone)
+        if outcome == "wrong":
+            return self._finish(
+                turn, "responder", _wrong_code_message(remaining), verification=True
+            )
+        email_code.request_email(
+            self._conn, turn.tenant_id, turn.contact.id, turn.case_id, pending.question
+        )
+        message = CODE_EXPIRED_MESSAGE if outcome == "expired" else CODE_LOCKED_MESSAGE
+        return self._finish(turn, "responder", message, verification=True)
+
+    def _respond(self, turn: _Turn, company: str, tone: str) -> AgentResult:
+        tenant_id, case_id, contact, text = turn.tenant_id, turn.case_id, turn.contact, turn.text
         case_types = self._active_case_types(tenant_id)
         classification = classify(
             self._llm,
@@ -154,6 +228,7 @@ class Agent:
         tool_names = list(yaml.safe_load(instructions).get("herramientas") or [])
         manifests = self._guardian.manifests(tenant_id, tool_names)
         if not contact.verified and any(m["requires_verified_contact"] for m in manifests):
+            email_code.request_email(self._conn, tenant_id, contact.id, case_id, text)
             return self._finish(turn, "responder", VERIFICATION_MESSAGE, verification=True)
 
         turn.documents = hybrid_search(self._conn, tenant_id, self._embedder, text, k=5)
@@ -342,7 +417,8 @@ class Agent:
         summary: dict[str, Any] | None = None,
         approval_id: uuid.UUID | None = None,
     ) -> AgentResult:
-        message = to_whatsapp(message)  # se guarda y se envía tal como lo ve el cliente
+        # Se guarda y se envía tal como lo ve el cliente.
+        message = to_whatsapp(turn.prefix + message)
         self._save_message(turn.tenant_id, turn.case_id, "agent", message)
         self._audit(
             turn,
@@ -401,8 +477,8 @@ class Agent:
     def _contact(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> ContactContext:
         with tenant_scope(self._conn, tenant_id):
             row = self._conn.execute(
-                "select id, phone_hash, coalesce(verified_until > now(), false)"
-                " from contacts where id = %s",
+                "select id, coalesce(verified_phone_hash, phone_hash),"
+                " coalesce(verified_until > now(), false) from contacts where id = %s",
                 (contact_id,),
             ).fetchone()
         if row is None:

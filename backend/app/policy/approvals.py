@@ -33,7 +33,8 @@ def decide(
     así dos decisiones simultáneas no ejecutan dos veces."""
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
-            "select a.status, a.case_id, a.params, t.name, c.id, c.phone_hash,"
+            "select a.status, a.case_id, a.params, t.name, c.id,"
+            " coalesce(c.verified_phone_hash, c.phone_hash),"
             " coalesce(c.verified_until > now(), false)"
             " from approvals a"
             " join tools t on t.id = a.tool_id"

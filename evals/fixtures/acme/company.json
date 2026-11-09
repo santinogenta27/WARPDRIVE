@@ -2,6 +2,13 @@
   "name": "Acme Store",
   "description": "Tienda online argentina de ropa y calzado, con envíos a todo el país. Empresa ficticia de demo.",
   "tone": "rioplatense",
+  "identity_lookup": {
+    "method": "GET",
+    "path": "/customers",
+    "email_param": "email",
+    "list_field": "customers",
+    "phone_field": "phone"
+  },
   "case_types": [
     {"name": "donde_esta_mi_pedido", "active": true},
     {"name": "cambiar_direccion", "active": true},

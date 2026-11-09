@@ -5,6 +5,7 @@ import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from fastapi.testclient import TestClient
@@ -26,12 +27,22 @@ class AcmeSeed:
     phones: dict[str, str]
 
 
+def _company() -> dict[str, Any]:
+    data: dict[str, Any] = json.loads((ACME_DIR / "company.json").read_text(encoding="utf-8"))
+    return data
+
+
+def _settings(company: dict[str, Any]) -> dict[str, Any]:
+    """Tono y búsqueda del cliente por email (verificación por código) del tenant."""
+    return {"tone": company["tone"], "identity_lookup": company["identity_lookup"]}
+
+
 def seed_acme(conn: psycopg.Connection, embedder: Embedder) -> AcmeSeed:
     """Crea el tenant Acme con sus tipos de caso, herramientas aprobadas, contactos y documentos."""
-    company = json.loads((ACME_DIR / "company.json").read_text(encoding="utf-8"))
+    company = _company()
     row = conn.execute(
         "insert into tenants (name, settings) values (%s, %s) returning id",
-        (company["name"], Jsonb({"tone": company["tone"]})),
+        (company["name"], Jsonb(_settings(company))),
     ).fetchone()
     assert row is not None
     tenant_id: uuid.UUID = row[0]
@@ -83,14 +94,15 @@ def find_demo_tenant(conn: psycopg.Connection) -> uuid.UUID | None:
 
 
 def ensure_demo_tenant(conn: psycopg.Connection, embedder: Embedder) -> uuid.UUID:
-    """Crea una sola vez el tenant Acme permanente para probar el agente por WhatsApp."""
+    """Crea una sola vez el tenant Acme permanente de la demo. Si ya existe, actualiza su
+    configuración (tono y búsqueda por email) desde el fixture."""
     tenant_id = find_demo_tenant(conn)
     if tenant_id is None:
         tenant_id = seed_acme(conn, embedder).tenant_id
-        conn.execute(
-            "update tenants set settings = settings || %s where id = %s",
-            (Jsonb({"demo": "acme"}), tenant_id),
-        )
+    conn.execute(
+        "update tenants set settings = settings || %s where id = %s",
+        (Jsonb({**_settings(_company()), "demo": "acme"}), tenant_id),
+    )
     return tenant_id
 
 

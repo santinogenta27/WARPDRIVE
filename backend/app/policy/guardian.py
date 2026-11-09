@@ -31,7 +31,7 @@ _HIDDEN_FIELDS = {"customer_phone"}  # el modelo no necesita el teléfono en cla
 @dataclass(frozen=True)
 class ContactContext:
     id: uuid.UUID
-    phone_hash: str
+    phone_hash: str  # del cliente verificado por email si lo hay; si no, del contacto
     verified: bool
 
 
@@ -81,6 +81,29 @@ class Guardian:
             ).fetchall()
         found = {row[0]: row[1] for row in rows}
         return [found[n] for n in names if n in found]
+
+    def customer_phone(self, tenant_id: uuid.UUID, email: str) -> str | None:
+        """Teléfono del cliente con ese email en el sistema de la empresa, para verificar la
+        identidad por código. Usa `settings.identity_lookup` del tenant; None si no está
+        configurado, si no hay un único cliente o si la API falla."""
+        with tenant_scope(self._conn, tenant_id):
+            row = self._conn.execute(
+                "select settings -> 'identity_lookup' from tenants where id = %s", (tenant_id,)
+            ).fetchone()
+        lookup = row[0] if row else None
+        if not isinstance(lookup, dict):
+            return None
+        try:
+            found = self._runtime.call(
+                lookup["method"], lookup["path"], {lookup.get("email_param", "email"): email}
+            )
+        except RuntimeError:
+            return None
+        if not found.ok or not isinstance(found.data, dict):
+            return None
+        matches = found.data.get(lookup.get("list_field", "customers")) or []
+        phones = [m.get(lookup.get("phone_field", "phone")) for m in matches]
+        return phones[0] if len(phones) == 1 and isinstance(phones[0], str) else None
 
     def execute(
         self,

@@ -24,10 +24,21 @@ from app.demo.acme import AcmeSeed, seed_acme
 from app.llm.client import AnthropicProvider, LLMClient, PostgresUsageRecorder
 from app.llm.embedder import VoyageEmbedder
 from app.llm.factory import embedder_from_env, llm_backend, provider_from_env
+from app.mailer import Email
 from app.policy.guardian import Guardian
 from app.tools.runtime import ToolRuntime
 from simulated.claude import SimulatedClaude
 from simulated.voyage import voyage_transport
+
+
+@dataclass
+class RecordingMailer:
+    """Mailer de los tests y evals: guarda los emails en lugar de enviarlos."""
+
+    sent: list[Email] = field(default_factory=list)
+
+    def send(self, email: Email) -> None:
+        self.sent.append(email)
 
 
 @dataclass
@@ -40,6 +51,7 @@ class SimulatedStack:
     claude: SimulatedClaude | None = None  # None con claves reales
     mode: str = "simulated"
     results: list[AgentResult] = field(default_factory=list)
+    mailer: RecordingMailer = field(default_factory=RecordingMailer)
 
     @property
     def claude_requests(self) -> list[dict[str, Any]]:
@@ -81,9 +93,17 @@ def build_simulated_stack(conn: psycopg.Connection, *, mode: str = "normal") -> 
     acme = TestClient(create_app())
     guardian = Guardian(conn, ToolRuntime(acme))
     seed = seed_acme(conn, embedder)
-    agent = Agent(conn, llm, embedder, guardian)
+    mailer = RecordingMailer()
+    agent = Agent(conn, llm, embedder, guardian, mailer=mailer)
     return SimulatedStack(
-        conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, claude=claude, mode="simulated"
+        conn=conn,
+        seed=seed,
+        agent=agent,
+        acme=acme,
+        llm=llm,
+        claude=claude,
+        mode="simulated",
+        mailer=mailer,
     )
 
 
@@ -99,6 +119,9 @@ def build_real_stack(conn: psycopg.Connection, cache_dir: Path) -> SimulatedStac
     acme = TestClient(create_app())
     guardian = Guardian(conn, ToolRuntime(acme))
     seed = seed_acme(conn, embedder)
-    agent = Agent(conn, llm, embedder, guardian)
+    mailer = RecordingMailer()
+    agent = Agent(conn, llm, embedder, guardian, mailer=mailer)
     mode = "gemini" if backend == "gemini" else "real"
-    return SimulatedStack(conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, mode=mode)
+    return SimulatedStack(
+        conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, mode=mode, mailer=mailer
+    )
