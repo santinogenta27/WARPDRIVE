@@ -104,3 +104,15 @@ def test_el_token_del_canal_se_guarda_cifrado(conn: psycopg.Connection) -> None:
     channel = channel_for_number(conn, "333")
     assert channel is not None and channel.tenant_id == row[0] and channel.token == "token-secreto"
     assert channel_for_number(conn, "999") is None
+
+
+def test_un_canal_de_twilio_se_rutea_por_su_tipo(conn: psycopg.Connection) -> None:
+    """La prueba de WhatsApp de Twilio identifica a la empresa por su número de envío."""
+    row = conn.execute("insert into tenants (name) values ('Delta') returning id").fetchone()
+    assert row is not None
+    address = "whatsapp:+15550001111"
+    register_whatsapp_channel(conn, row[0], phone_number_id=address, kind="twilio_whatsapp")
+    channel = channel_for_number(conn, address, kind="twilio_whatsapp")
+    assert channel is not None and channel.tenant_id == row[0]
+    assert channel.token is None  # las credenciales de Twilio vienen del entorno
+    assert channel_for_number(conn, address) is None  # no es un número de la Cloud API de Meta
