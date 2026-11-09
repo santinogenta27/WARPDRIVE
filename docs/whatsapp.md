@@ -56,6 +56,20 @@ En la terminal del worker vas a ver cada mensaje procesado.
 - **El worker se queda reintentando Gemini:** el modelo está saturado (503) o sin cuota. Cambiá `GEMINI_AGENT_MODEL` en `.env` a otro modelo gratuito de `pricing.py` y reiniciá `make worker`.
 - **Consultas de pedidos:** tu número no es cliente de Acme, así que el agente te pide verificar tu email. Ese flujo de código por mail todavía no está implementado. Las consultas generales (horarios, cuotas, envíos, cambios) funcionan.
 
+## Alternativa: la prueba de WhatsApp de Twilio
+
+Sirve mientras la cuenta de Meta esté bloqueada (error 131031). Usa el mismo agente con Acme y los mismos tres procesos.
+
+1. En `.env`, cargá `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` y `TWILIO_WHATSAPP_FROM` (por ejemplo `whatsapp:+14155238886`) y corré `make whatsapp-setup`. Asigna ese número a Acme.
+2. Levantá `make api`, `make worker` y el túnel, igual que en el paso 2.
+3. En la consola de Twilio, entrá a **Messaging → Try it out → Send a WhatsApp message**, pestaña **Sandbox settings** (en algunas cuentas, **Receive a message**). En **When a message comes in**:
+   - URL: `https://<tu-url>.trycloudflare.com/webhooks/twilio`
+   - Método: **POST**
+   - Tocá **Save**.
+4. Desde el celular unido al sandbox (`join <palabra>`), escribile al número de Twilio.
+
+La URL tiene que ser exactamente la que guardaste en Twilio: Twilio la usa para firmar cada mensaje y la API rechaza con 401 los que no coinciden. Si cambia el túnel, cambiá también la URL en Twilio. La unión al sandbox vence a los 3 días; para renovarla, se manda de nuevo `join <palabra>`.
+
 ## Plantilla `caso_actualizado` (para respuestas humanas fuera de las 24 h)
 
 Creala en WhatsApp Manager → Plantillas de mensajes:

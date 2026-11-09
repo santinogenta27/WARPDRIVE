@@ -69,6 +69,10 @@ Para retomar: `make evals` después de la medianoche del Pacífico. Para empezar
 
 Decisiones 014 a 016. Cómo probarlo desde el celular: `docs/whatsapp.md`.
 
+**Cuenta de Meta bloqueada (9 de noviembre de 2026):** los envíos fallan con 131031. Según `health_status`, Meta pide un método de pago válido, completar el perfil de la empresa (nombre legal, país y sitio web) y la verificación de la empresa. El camino Meta → túnel → API → agente funciona hasta el envío: Meta lo acepta y después no lo entrega.
+
+**Canal `twilio_whatsapp`** (decisión 017): la prueba de WhatsApp de Twilio, detrás de la interfaz `Channel` de la spec, con el mismo agente, guardián y auditoría. Test: `test_twilio.py`. Un mensaje firmado por Twilio recibe respuesta; una firma inválida se rechaza; un rechazo de Twilio no se reintenta.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
