@@ -20,12 +20,13 @@ from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from app.agent.loop import Agent
 from app.channels.base import InboundMessage, InvalidSignature
@@ -107,6 +108,16 @@ def _used(conn: psycopg.Connection, tenant_id: uuid.UUID, token: str, *, lock: b
         raise UnknownSession
     used: int = row[0]
     return used
+
+
+PAGE = Path(__file__).resolve().parent / "static" / "index.html"
+
+
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+@router.get("/chat", response_class=HTMLResponse, include_in_schema=False)
+def page() -> HTMLResponse:
+    """Página del chat de Acme Store (un solo archivo, sin recursos externos)."""
+    return HTMLResponse(PAGE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
 
 @router.post("/chat/session", status_code=201)
