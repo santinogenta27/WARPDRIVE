@@ -78,7 +78,9 @@ Decisiones 014 a 018. Cómo probarlo desde el celular: `docs/whatsapp.md` (Whats
 | 12b. Chat web con la interfaz `Channel` | Hecha | `test_web_chat.py`: un caso guionado (01, dónde está mi pedido) se resuelve igual por web y por WhatsApp; respuestas por SSE; límite de 20 mensajes por sesión. `test_web_page.py`: la página de Acme Store con el aviso de demo |
 | 13. Verificación de identidad (parcial: código al email) | Hecha la parte del código | `test_identity_verification.py`: sin verificar no hay datos de cuenta; el código vence a los 10 minutos, admite 3 intentos y no revela si el email existe |
 
-**Verificación por email en la demo: el código aparece en la consola del servidor.** Todavía no hay `Mailer` real (proveedor de email), así que `ConsoleMailer` escribe el código en la terminal de `make api` y no envía ningún email. Para probar: `lucia@example.com`, `martin@example.com` o `sofia@example.com`. Cómo probar el chat: `docs/chat-web.md`. Decisión 018.
+**Chat web en Render (link fijo, plan gratis):** `render.yaml` y paso a paso en `docs/render.md`. Para no agotar Gemini, la demo pública tiene un límite de mensajes por IP por día (30) y uno total por día (300), además de los 20 por sesión (decisión 019). Test: `test_web_chat.py` y `test_deploy.py`.
+
+**Verificación por email en la demo: el código aparece en la consola del servidor** (en Render, en la pestaña **Logs** del servicio). Todavía no hay `Mailer` real (proveedor de email), así que `ConsoleMailer` escribe el código en la terminal de `make api` y no envía ningún email. Para probar: `lucia@example.com`, `martin@example.com` o `sofia@example.com`. Cómo probar el chat: `docs/chat-web.md`. Decisión 018.
 
 **Canal `twilio_whatsapp`** (decisión 017): la prueba de WhatsApp de Twilio, detrás de la interfaz `Channel` de la spec, con el mismo agente, guardián y auditoría. Test: `test_twilio.py`. Un mensaje firmado por Twilio recibe respuesta; una firma inválida se rechaza; un rechazo de Twilio no se reintenta.
 
