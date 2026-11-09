@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 
 from app.llm.embedder import InputType
+from app.llm.errors import QuotaExhausted
 from app.llm.pricing import PRICES, cost_usd
 from app.llm.types import LLMResponse, TokenUsage, ToolCall, UsageRecorder
 
@@ -41,13 +42,9 @@ RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 LOCAL_ID_PREFIX = "gemini_local_"
 
 
-class GeminiQuotaExhausted(RuntimeError):
+class GeminiQuotaExhausted(QuotaExhausted):
     """Se agotó la cuota del nivel gratuito. `daily`: la diaria, que se renueva a medianoche
     del Pacífico; si no, la por minuto siguió agotada después de todos los reintentos."""
-
-    def __init__(self, message: str, *, daily: bool) -> None:
-        super().__init__(message)
-        self.daily = daily
 
 
 class GeminiTransport:

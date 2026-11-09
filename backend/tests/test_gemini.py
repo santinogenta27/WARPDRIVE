@@ -28,8 +28,9 @@ TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 @pytest.fixture(autouse=True)
 def _default_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Los tests usan los modelos por defecto aunque el .env local elija otros."""
-    for key in ("GEMINI_AGENT_MODEL", "GEMINI_CLASSIFIER_MODEL"):
+    """Los tests usan los modelos por defecto aunque el .env local elija otros, y sin Groq
+    (con su clave, el factory arma un respaldo)."""
+    for key in ("GEMINI_AGENT_MODEL", "GEMINI_CLASSIFIER_MODEL", "GROQ_API_KEY", "LLM_PROVIDER"):
         monkeypatch.delenv(key, raising=False)
 
 

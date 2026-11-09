@@ -116,7 +116,7 @@ def test_la_cli_sale_con_error_si_hay_regresion(
     monkeypatch.setattr(runner, "_close", lambda c: None)
     # Modo simulado aunque el .env local tenga claves reales.
     monkeypatch.setattr(runner, "load_dotenv", lambda: None)
-    for key in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+    for key in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "LLM_PROVIDER"):
         monkeypatch.delenv(key, raising=False)
     args = ["--baseline", str(baseline), "--report", str(tmp_path / "r.json")]
     assert runner.main([*args, "--simulated-mode", "normal"]) == 0

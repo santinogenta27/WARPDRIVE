@@ -32,6 +32,11 @@ PRICES: dict[str, Price] = {
     "gemini-3.6-flash": Price(_d("0"), _d("0"), _d("0"), _d("0")),
     "gemini-3.5-flash-lite": Price(_d("0"), _d("0"), _d("0"), _d("0")),
     "gemini-embedding-2": Price(_d("0"), _d("0"), _d("0"), _d("0")),
+    # Groq, plan gratuito: sin cargo (decisión 020). En el plan Developer, gpt-oss-120b cuesta
+    # 0,15/0,60 y gpt-oss-20b 0,075/0,30 por millón (docs de Groq, noviembre de 2026).
+    "openai/gpt-oss-120b": Price(_d("0"), _d("0"), _d("0"), _d("0")),
+    "openai/gpt-oss-20b": Price(_d("0"), _d("0"), _d("0"), _d("0")),
+    "qwen/qwen3.8-27b": Price(_d("0"), _d("0"), _d("0"), _d("0")),
 }
 
 
