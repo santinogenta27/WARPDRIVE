@@ -246,8 +246,10 @@ def test_una_espera_larga_es_cuota_agotada_y_no_reintenta() -> None:
     assert fake.sleeps == []
 
 
-def test_respeta_los_tokens_por_minuto_de_cada_modelo() -> None:
-    """Con pocos tokens restantes del minuto, espera a que se renueven antes de llamar."""
+def test_respeta_los_tokens_por_minuto_de_cada_modelo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Con pocos tokens restantes del minuto, espera a que se renueven antes de llamar. Los
+    límites son por modelo: con un clasificador distinto, ese no espera."""
+    monkeypatch.setenv("GROQ_CLASSIFIER_MODEL", "qwen/qwen3.8-27b")
     tight = {"x-ratelimit-remaining-tokens": "900", "x-ratelimit-reset-tokens": "7.5s"}
     fake = FakeGroq(
         httpx.Response(200, headers=tight, json=completion({"content": "uno"})),
