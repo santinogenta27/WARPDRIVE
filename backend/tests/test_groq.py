@@ -284,6 +284,24 @@ def test_reintenta_una_salida_que_groq_no_pudo_interpretar() -> None:
     assert response.text == "ok" and len(fake.requests) == 3
 
 
+def test_si_el_modelo_sigue_generando_mal_es_un_rechazo_y_el_agente_deriva() -> None:
+    """Tras 3 salidas inválidas seguidas no se insiste: se devuelve un rechazo (stop_reason
+    refusal), que el agente convierte en derivación sin inventar nada."""
+    failed = {
+        "error": {
+            "message": "Tool call validation failed",
+            "code": "tool_use_failed",
+            "failed_generation": '{"name": "json"}',
+        }
+    }
+    fake = FakeGroq(*(httpx.Response(400, json=failed) for _ in range(3)))
+    response = GroqProvider(transport=fake.transport()).create(
+        model="claude-sonnet-5-5", messages=[], max_tokens=10, tools=TOOLS
+    )
+    assert response.stop_reason == "refusal" and response.tool_calls == []
+    assert len(fake.requests) == 3
+
+
 def test_reintenta_una_llamada_a_herramienta_mal_generada() -> None:
     failed = {
         "error": {

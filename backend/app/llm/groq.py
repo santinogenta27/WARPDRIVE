@@ -6,6 +6,7 @@ Groq no tiene embeddings: siguen con Gemini o Voyage (docs/decisions/020).
 """
 
 import json
+import logging
 import os
 import random
 import re
@@ -20,6 +21,7 @@ from app.llm.errors import QuotaExhausted
 from app.llm.pricing import PRICES
 from app.llm.types import LLMResponse, TokenUsage, ToolCall
 
+logger = logging.getLogger(__name__)
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Modelos gratuitos con tool calling disponibles en la cuenta; se cambian con GROQ_AGENT_MODEL y
 # GROQ_CLASSIFIER_MODEL. Cada modelo tiene sus propios límites (1000 pedidos por día y 8000
@@ -39,6 +41,13 @@ STOP_REASONS = {
 
 class GroqQuotaExhausted(QuotaExhausted):
     """Groq pidió esperar más de lo razonable (cuota diaria) o el 429 siguió tras reintentar."""
+
+
+class GroqGenerationFailed(RuntimeError):
+    """El modelo siguió generando salidas que Groq no pudo interpretar."""
+
+
+MAX_BAD_GENERATIONS = 3
 
 
 def _seconds(value: str | None) -> float | None:
@@ -91,6 +100,7 @@ class GroqTransport:
 
     def post(self, body: dict[str, Any]) -> dict[str, Any]:
         model = str(body["model"])
+        bad_generations = 0
         for attempt in range(self._max_retries + 1):
             last = attempt == self._max_retries
             self._respect_tokens(model)
@@ -107,7 +117,12 @@ class GroqTransport:
             if response.status_code < 400:
                 data: dict[str, Any] = response.json()
                 return data
-            if response.status_code == 400 and _tool_use_failed(response) and not last:
+            if response.status_code == 400 and _tool_use_failed(response):
+                bad_generations += 1
+                if bad_generations >= MAX_BAD_GENERATIONS:
+                    raise GroqGenerationFailed(
+                        f"{model} generó {bad_generations} salidas inválidas seguidas"
+                    )
                 continue  # el modelo generó mal la llamada: se pide de nuevo
             if response.status_code not in RETRYABLE_STATUS:
                 raise httpx.HTTPStatusError(
@@ -202,7 +217,18 @@ class GroqProvider:
     ) -> LLMResponse:
         target = self._target(model)
         body = _request(target, messages, max_tokens, system, options)
-        return _response(self._transport.post(body))
+        try:
+            return _response(self._transport.post(body))
+        except GroqGenerationFailed as error:
+            # Sin una salida válida no hay nada que mostrar: un rechazo hace que el agente
+            # derive (o que el clasificador devuelva "otro") en lugar de inventar.
+            logger.warning("Groq: %s; se devuelve como rechazo", error)
+            return LLMResponse(
+                text="",
+                model=target,
+                stop_reason="refusal",
+                usage=TokenUsage(input_tokens=0, output_tokens=0),
+            )
 
 
 # -- pedido ----------------------------------------------------------------------------------
