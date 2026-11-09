@@ -264,6 +264,42 @@ def test_si_el_numero_no_esta_permitido_no_se_reintenta(
     assert payload is not None and "sender" not in payload[0]
 
 
+def test_un_envio_que_meta_no_entrega_queda_en_el_log(
+    api: TestClient, conn: psycopg.Connection, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Meta acepta el envío (200) y avisa después, por webhook, si no lo pudo entregar."""
+    failed = {
+        "id": "wamid.saliente.1",
+        "status": "failed",
+        "timestamp": "1762700100",
+        "recipient_id": CUSTOMER,
+        "errors": [{"code": 131026, "title": "Message undeliverable"}],
+    }
+    payload = {
+        "object": "whatsapp_business_account",
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "field": "messages",
+                        "value": {
+                            "metadata": {"phone_number_id": PHONE_NUMBER_ID},
+                            "statuses": [failed, {"id": "wamid.saliente.2", "status": "read"}],
+                        },
+                    }
+                ]
+            }
+        ],
+    }
+    with caplog.at_level("WARNING", logger="app.channels.whatsapp.webhook"):
+        assert post(api, payload) == 200
+    assert queued(conn) == []
+    logged = [r.getMessage() for r in caplog.records]
+    assert len(logged) == 1
+    assert "131026" in logged[0] and "wamid.saliente.1" in logged[0]
+    assert CUSTOMER not in logged[0]  # el teléfono no va al log
+
+
 def test_un_numero_desconocido_se_descarta(
     api: TestClient, conn: psycopg.Connection, stack: SimulatedStack
 ) -> None:

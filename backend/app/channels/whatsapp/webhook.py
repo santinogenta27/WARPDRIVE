@@ -68,6 +68,25 @@ def parse_webhook(payload: dict[str, Any]) -> list[InboundMessage]:
     return found
 
 
+def failed_deliveries(payload: dict[str, Any]) -> list[str]:
+    """Envíos que Meta aceptó (200) pero no pudo entregar: llegan después como estado `failed`.
+
+    Devuelve una línea por envío con el wamid y el error, sin el teléfono del destinatario.
+    """
+    found: list[str] = []
+    for entry in payload.get("entry") or []:
+        for change in entry.get("changes") or []:
+            for status in (change.get("value") or {}).get("statuses") or []:
+                if status.get("status") != "failed":
+                    continue
+                errors = ", ".join(
+                    f"{e.get('code')} {e.get('title') or e.get('message') or ''}".strip()
+                    for e in status.get("errors") or []
+                )
+                found.append(f"{status.get('id')}: {errors or 'sin detalle'}")
+    return found
+
+
 def valid_signature(body: bytes, header: str | None, app_secret: str) -> bool:
     if not app_secret or not header or not header.startswith("sha256="):
         return False
@@ -152,6 +171,8 @@ async def receive(request: Request, settings: Settings, store: Store) -> dict[st
         payload = json.loads(body)
     except ValueError as error:
         raise HTTPException(status_code=400, detail="JSON inválido") from error
+    for failure in failed_deliveries(payload):
+        logger.warning("Meta no entregó un mensaje enviado: %s", failure)
     messages = parse_webhook(payload)
     if messages:
         await run_in_threadpool(store.save, messages)
