@@ -8,7 +8,10 @@ resto del agente no cambia. Los modelos del agente se mapean a modelos Flash del
 
 import json
 import os
+import random
+import time
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -35,24 +38,121 @@ EMBEDDING_FORMATS = {
 EFFORT_TO_THINKING = {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
 TOOL_CHOICE_MODES = {"auto": "AUTO", "any": "ANY", "tool": "ANY", "none": "NONE"}
 REFUSAL_REASONS = {"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITATION"}
+RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 # Id propio para llamadas que Gemini devuelve sin id: no se le reenvía.
 LOCAL_ID_PREFIX = "gemini_local_"
 
 
-class GeminiTransport:
-    """POST autenticado a la API de Gemini."""
+class GeminiQuotaExhausted(RuntimeError):
+    """Se agotó la cuota del nivel gratuito. `daily`: la diaria, que se renueva a medianoche
+    del Pacífico; si no, la por minuto siguió agotada después de todos los reintentos."""
 
-    def __init__(self, api_key: str | None = None, http_client: httpx.Client | None = None) -> None:
+    def __init__(self, message: str, *, daily: bool) -> None:
+        super().__init__(message)
+        self.daily = daily
+
+
+class GeminiTransport:
+    """POST autenticado a la API de Gemini, pensado para los límites bajos del nivel gratuito.
+
+    * Pausa mínima entre llamadas (`GEMINI_MIN_INTERVAL`, 6 s por defecto: unas 10 por minuto).
+    * Ante 429, 408 o 5xx reintenta con la espera que pide la API (RetryInfo) o con espera
+      exponencial con jitter, hasta `max_retries` veces.
+    * Si la cuota agotada es la diaria no reintenta: lanza GeminiQuotaExhausted(daily=True).
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        http_client: httpx.Client | None = None,
+        *,
+        min_interval: float | None = None,
+        max_retries: int = 6,
+        max_wait: float = 60.0,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
         self._http = http_client or httpx.Client(timeout=60.0)
+        if min_interval is None:
+            min_interval = float(os.environ.get("GEMINI_MIN_INTERVAL", "6"))
+        self._min_interval = min_interval
+        self._max_retries = max_retries
+        self._max_wait = max_wait
+        self._sleep = sleep
+        self._clock = clock
+        self._last_call: float | None = None
 
     def post(self, model: str, method: str, body: dict[str, Any]) -> dict[str, Any]:
-        response = self._http.post(
-            f"{API_URL}/{model}:{method}", headers={"x-goog-api-key": self._api_key}, json=body
-        )
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
-        return data
+        url = f"{API_URL}/{model}:{method}"
+        for attempt in range(self._max_retries + 1):
+            last = attempt == self._max_retries
+            self._pause()
+            try:
+                response = self._http.post(
+                    url, headers={"x-goog-api-key": self._api_key}, json=body
+                )
+            except httpx.TransportError:  # timeout o corte de red
+                if last:
+                    raise
+                self._sleep(self._backoff(attempt))
+                continue
+            if response.status_code < 400:
+                data: dict[str, Any] = response.json()
+                return data
+            if response.status_code not in RETRYABLE_STATUS:
+                response.raise_for_status()
+            error = _error(response)
+            if response.status_code == 429 and _is_daily(error):
+                raise GeminiQuotaExhausted(
+                    f"Cuota diaria de {model} agotada: {error.get('message', '')}", daily=True
+                )
+            if last:
+                if response.status_code == 429:
+                    raise GeminiQuotaExhausted(
+                        f"{model} siguió sin cuota tras {self._max_retries} reintentos", daily=False
+                    )
+                response.raise_for_status()
+            self._sleep(min(self._max_wait, _retry_delay(error) or self._backoff(attempt)))
+        raise AssertionError("inalcanzable")
+
+    def _pause(self) -> None:
+        if self._last_call is not None:
+            wait = self._last_call + self._min_interval - self._clock()
+            if wait > 0:
+                self._sleep(wait)
+        self._last_call = self._clock()
+
+    def _backoff(self, attempt: int) -> float:
+        return min(self._max_wait, 2.0 * 2**attempt) * random.uniform(1.0, 1.25)
+
+
+def _error(response: httpx.Response) -> dict[str, Any]:
+    try:
+        error = response.json().get("error")
+    except ValueError:
+        return {}
+    return error if isinstance(error, dict) else {}
+
+
+def _is_daily(error: dict[str, Any]) -> bool:
+    if error.get("code") == "quota_exceeded":  # formato de error de la API de Interactions
+        return True
+    for detail in error.get("details") or []:
+        for violation in detail.get("violations") or []:
+            if "PerDay" in str(violation.get("quotaId", "")):
+                return True
+    return False
+
+
+def _retry_delay(error: dict[str, Any]) -> float | None:
+    for detail in error.get("details") or []:
+        if str(detail.get("@type", "")).endswith("RetryInfo"):
+            try:
+                return float(str(detail.get("retryDelay", "")).rstrip("s"))
+            except ValueError:
+                return None
+    return None
 
 
 def gemini_model(model: str) -> str:

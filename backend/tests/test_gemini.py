@@ -15,7 +15,12 @@ import pytest
 from app.llm.client import AnthropicProvider, LLMClient
 from app.llm.embedder import VoyageEmbedder
 from app.llm.factory import embedder_from_env, provider_from_env
-from app.llm.gemini import GeminiEmbedder, GeminiProvider, GeminiTransport
+from app.llm.gemini import (
+    GeminiEmbedder,
+    GeminiProvider,
+    GeminiQuotaExhausted,
+    GeminiTransport,
+)
 from app.llm.types import TokenUsage, UsageKind
 
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -53,7 +58,9 @@ def _gemini(
     replies: list[dict[str, Any]], calls: list[tuple[str, dict[str, Any]]]
 ) -> GeminiTransport:
     return GeminiTransport(
-        api_key="test", http_client=httpx.Client(transport=_transport(replies, calls))
+        api_key="test",
+        http_client=httpx.Client(transport=_transport(replies, calls)),
+        min_interval=0,
     )
 
 
@@ -269,6 +276,104 @@ def test_elige_proveedor_y_embedder_por_las_claves_del_entorno(
 
     monkeypatch.setenv("VOYAGE_API_KEY", "v")
     assert isinstance(embedder_from_env(MemoryRecorder()), VoyageEmbedder)
+
+
+def _quota_error(quota_id: str, retry_delay: str | None = None) -> httpx.Response:
+    details: list[dict[str, Any]] = [
+        {
+            "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+            "violations": [{"quotaId": quota_id}],
+        }
+    ]
+    if retry_delay:
+        details.append(
+            {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry_delay}
+        )
+    body = {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "details": details}}
+    return httpx.Response(429, json=body)
+
+
+def _scripted(
+    replies: list[httpx.Response], sleeps: list[float], **kwargs: Any
+) -> tuple[GeminiProvider, list[int]]:
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return replies[len(calls) - 1]
+
+    transport = GeminiTransport(
+        api_key="test",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        min_interval=0,
+        sleep=sleeps.append,
+        **kwargs,
+    )
+    return GeminiProvider(transport), calls
+
+
+HOLA = [{"role": "user", "content": "hola"}]
+PER_MINUTE = "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+PER_DAY = "GenerateRequestsPerDayPerProjectPerModel-FreeTier"
+
+
+def test_reintenta_ante_429_y_5xx_con_la_espera_que_pide_la_api() -> None:
+    sleeps: list[float] = []
+    provider, calls = _scripted(
+        [
+            _quota_error(PER_MINUTE, "17s"),
+            httpx.Response(503, json={"error": {"code": 503, "status": "UNAVAILABLE"}}),
+            httpx.Response(200, json=TEXT_REPLY),
+        ],
+        sleeps,
+    )
+    response = provider.create(model="claude-sonnet-5-5", messages=HOLA, max_tokens=10)
+    assert response.text == "Tu pedido está en camino."
+    assert len(calls) == 3
+    assert sleeps[0] == 17.0  # la espera que indica RetryInfo
+    assert 4.0 <= sleeps[1] <= 5.0  # espera exponencial (segundo intento) con jitter
+
+
+def test_cuota_diaria_agotada_no_reintenta() -> None:
+    sleeps: list[float] = []
+    provider, calls = _scripted([_quota_error(PER_DAY, "40000s")], sleeps)
+    with pytest.raises(GeminiQuotaExhausted) as error:
+        provider.create(model="claude-sonnet-5-5", messages=HOLA, max_tokens=10)
+    assert error.value.daily
+    assert len(calls) == 1 and sleeps == []
+
+
+def test_429_persistente_agota_los_reintentos() -> None:
+    sleeps: list[float] = []
+    provider, calls = _scripted([_quota_error(PER_MINUTE)] * 3, sleeps, max_retries=2)
+    with pytest.raises(GeminiQuotaExhausted) as error:
+        provider.create(model="claude-sonnet-5-5", messages=HOLA, max_tokens=10)
+    assert not error.value.daily
+    assert len(calls) == 3 and len(sleeps) == 2
+
+
+def test_pausa_minima_entre_llamadas() -> None:
+    now = [100.0]
+    sleeps: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    transport = GeminiTransport(
+        api_key="test",
+        http_client=httpx.Client(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json=TEXT_REPLY))
+        ),
+        min_interval=6,
+        sleep=sleep,
+        clock=lambda: now[0],
+    )
+    provider = GeminiProvider(transport)
+    provider.create(model="claude-sonnet-5-5", messages=HOLA, max_tokens=10)
+    now[0] += 2.5  # el agente tarda 2,5 s en armar el siguiente pedido
+    provider.create(model="claude-sonnet-5-5", messages=HOLA, max_tokens=10)
+    assert sleeps == [3.5]
 
 
 def test_haiku_usa_flash_lite_y_un_bloqueo_es_rechazo() -> None:
