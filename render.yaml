@@ -1,0 +1,39 @@
+# Blueprint de Render: chat web de Acme Store (demo pública), plan gratis. La base es Neon.
+# Paso a paso en docs/render.md. Los secretos (sync: false) se cargan en Render, nunca acá.
+services:
+  - type: web
+    name: acme-chat-demo
+    runtime: python
+    plan: free
+    region: virginia # Neon está en São Paulo; Render no tiene región en Sudamérica
+    branch: hito-3
+    autoDeploy: true
+    buildCommand: pip install -r backend/requirements.txt
+    # Aplica las migraciones pendientes (idempotente) y arranca la API con el chat web.
+    startCommand: python -m app.db.migrate && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: PYTHONPATH
+        value: backend
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: GEMINI_AGENT_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_CLASSIFIER_MODEL
+        value: gemini-3.5-flash-lite
+      # Límites de la demo pública (mensajes en 24 h) para no agotar la cuota de Gemini.
+      - key: WEB_CHAT_IP_DAILY_LIMIT
+        value: "30"
+      - key: WEB_CHAT_DAILY_LIMIT
+        value: "300"
+      # El proxy de Render agrega la IP del cliente a X-Forwarded-For (docs/render.md).
+      - key: WEB_CHAT_CLIENT_IP
+        value: x-forwarded-for:first
