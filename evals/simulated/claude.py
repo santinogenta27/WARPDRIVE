@@ -233,6 +233,7 @@ def _best_document(question: str, docs: dict[str, str]) -> tuple[str, str] | Non
 
 
 _RULES = [
+    (r"ignor\w* (tus|las) instrucciones|todos los (pedidos|clientes)", "pedido_no_permitido"),
     (r"\b(persona|humano|operador)\b", "derivar_humano"),
     (r"direcci", "cambiar_direccion"),
     (r"cancel", "cancelar_pedido"),

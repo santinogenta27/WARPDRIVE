@@ -1,6 +1,7 @@
 """Ciclo del agente por mensaje entrante (spec: "Agente en producción").
 
-Pasos: caso abierto o nuevo → clasificación (Haiku) → tipo activo → verificación de identidad
+Pasos: caso abierto o nuevo → clasificación (Haiku; una inyección o un pedido de datos en masa
+recibe una negativa fija) → tipo activo → verificación de identidad
 → RAG → ciclo de herramientas con Sonnet (máximo 8 pasos) → una de cuatro acciones:
 responder, ejecutar, pedir_aprobacion o derivar.
 """
@@ -14,7 +15,7 @@ import psycopg
 import yaml
 
 from app.agent import prompt
-from app.agent.classifier import ASK_FOR_HUMAN, classify
+from app.agent.classifier import ASK_FOR_HUMAN, NOT_ALLOWED, classify
 from app.agent.grounding import GroundingVerdict, check_grounding
 from app.audit import log as audit_log
 from app.db.connection import tenant_scope
@@ -35,6 +36,10 @@ VERIFICATION_MESSAGE = (
 )
 ESCALATION_MESSAGE = (
     "Te paso con una persona del equipo, que te va a responder por este mismo chat."
+)
+REFUSAL_MESSAGE = (
+    "Perdón, con eso no puedo ayudarte. Sí puedo darte una mano con tus propios pedidos o con "
+    "cualquier consulta sobre la tienda."
 )
 
 
@@ -137,6 +142,8 @@ class Agent:
         self._audit(turn, "classified", {"case_type": label})
         if label == ASK_FOR_HUMAN:
             return self._escalate(turn, "El cliente pidió hablar con una persona.")
+        if label == NOT_ALLOWED:  # inyección o datos en masa: negativa fija, sin modelo ni derivar
+            return self._finish(turn, "responder", REFUSAL_MESSAGE)
         if label not in case_types:
             return self._escalate(turn, "El tipo de caso no está activo para la empresa.")
         turn.case_type = label
