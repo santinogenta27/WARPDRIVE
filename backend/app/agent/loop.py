@@ -18,6 +18,7 @@ from app.agent import prompt
 from app.agent.classifier import ASK_FOR_HUMAN, NOT_ALLOWED, classify
 from app.agent.grounding import GroundingVerdict, check_grounding
 from app.audit import log as audit_log
+from app.channels.whatsapp.format import to_whatsapp
 from app.db.connection import tenant_scope
 from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
@@ -341,6 +342,7 @@ class Agent:
         summary: dict[str, Any] | None = None,
         approval_id: uuid.UUID | None = None,
     ) -> AgentResult:
+        message = to_whatsapp(message)  # se guarda y se envía tal como lo ve el cliente
         self._save_message(turn.tenant_id, turn.case_id, "agent", message)
         self._audit(
             turn,

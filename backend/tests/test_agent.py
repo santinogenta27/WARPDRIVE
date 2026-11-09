@@ -9,9 +9,11 @@ import json
 
 import psycopg
 import pytest
+import simulated.claude
 from simulated.stack import SimulatedStack, build_simulated_stack
 
 from app.agent.loop import AgentResult
+from app.db.connection import tenant_scope
 from app.demo.acme import ACME_DIR
 
 CASES = json.loads((ACME_DIR / "scripted_cases.json").read_text(encoding="utf-8"))
@@ -86,6 +88,21 @@ def test_inyeccion_o_pedido_masivo_se_rechaza_sin_derivar(stack: SimulatedStack)
         assert [c["tool_names"] for c in stack.claude_requests[before:]] == [{"clasificar"}]
     schema = stack.claude_requests[0]["body"]["tools"][0]["input_schema"]
     assert "pedido_no_permitido" in schema["properties"]["tipo"]["enum"]
+
+
+def test_la_negrita_de_markdown_sale_como_negrita_de_whatsapp(
+    stack: SimulatedStack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # El modelo simulado contesta con negrita de markdown, como hace Gemini.
+    monkeypatch.setitem(simulated.claude._STATUS, "shipped", "**despachado**")
+    result = stack.send("lucia", "¿Dónde está mi pedido 1001?")
+    assert "*despachado*" in result.message and "**" not in result.message
+    with tenant_scope(stack.conn, stack.seed.tenant_id):
+        saved = stack.conn.execute(
+            "select text from case_messages where case_id = %s and role = 'agent'",
+            (result.case_id,),
+        ).fetchone()
+    assert saved is not None and saved[0] == result.message
 
 
 def test_el_historial_del_caso_queda_guardado(stack: SimulatedStack) -> None:
