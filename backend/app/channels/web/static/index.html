@@ -195,6 +195,7 @@
     font-size: 16px; /* evita el zoom automático en iOS */
     line-height: 1.35;
     outline: none;
+    overflow-y: hidden; /* aparece solo al llegar a la altura máxima (autosize) */
   }
   textarea:focus { border-color: var(--brand); background: var(--surface); }
   textarea:disabled { opacity: 0.6; }
@@ -505,7 +506,9 @@
 
   function autosize() {
     input.style.height = "auto";
-    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+    var needed = input.scrollHeight + 2;  // + el borde (box-sizing: border-box)
+    input.style.height = Math.min(needed, 120) + "px";
+    input.style.overflowY = needed > 120 ? "auto" : "hidden";
   }
 
   form.addEventListener("submit", function (e) { e.preventDefault(); submit(input.value); });
