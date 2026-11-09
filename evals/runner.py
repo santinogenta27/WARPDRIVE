@@ -4,6 +4,10 @@ Uso:
   python evals/runner.py                    # real con ANTHROPIC_API_KEY, gemini con
                                             # GEMINI_API_KEY, simulado sin ninguna
   python evals/runner.py --update-baseline  # fija la línea base del modo (commit deliberado)
+  python evals/runner.py --restart          # descarta el avance guardado y empieza de cero
+
+Si se agota la cuota de Gemini, los casos ya calificados quedan en evals/.cache/progress-<modo>.json
+y la próxima corrida sigue desde el primero que falta (sale con código 2 mientras tanto).
 
 Calificación por caso (spec v1.1, "Cómo se califican los evals"):
   * Acción elegida: comparación exacta.
@@ -42,6 +46,7 @@ from app.config import load_dotenv  # noqa: E402
 from app.db.connection import connect, tenant_scope  # noqa: E402
 from app.db.migrate import migrate  # noqa: E402
 from app.llm.factory import llm_backend  # noqa: E402
+from app.llm.gemini import GeminiQuotaExhausted  # noqa: E402
 
 CASES_PATH = HERE / "fixtures" / "acme" / "scripted_cases.json"
 BASELINES = {
@@ -171,16 +176,34 @@ def judge(stack: SimulatedStack, case: dict[str, Any], result: AgentResult) -> f
     return 0.0
 
 
-def run_evals(stack: SimulatedStack) -> Report:
+def _load_progress(progress: Path | None) -> dict[str, CaseResult]:
+    if progress is None or not progress.exists():
+        return {}
+    saved = json.loads(progress.read_text(encoding="utf-8"))
+    return {item["id"]: CaseResult(**item) for item in saved}
+
+
+def run_evals(stack: SimulatedStack, progress: Path | None = None) -> Report:
+    """Con `progress`, guarda cada caso calificado y saltea los ya hechos en una corrida previa
+    (para retomar cuando se agota la cuota diaria del nivel gratuito)."""
     cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
     high_risk = _high_risk_tools(stack)
+    done = _load_progress(progress)
     results: list[CaseResult] = []
     for case in cases:
+        if case["id"] in done:
+            results.append(done[case["id"]])
+            continue
         agent_result = stack.send(case["contacto"], case["mensaje"])
         graded = grade(case, agent_result, high_risk)
         graded.judge = judge(stack, case, agent_result)
         results.append(graded)
         stack.close_open_cases()
+        if progress is not None:
+            done[graded.id] = graded
+            progress.parent.mkdir(parents=True, exist_ok=True)
+            payload = [asdict(r) for r in done.values()]
+            progress.write_text(json.dumps(payload, ensure_ascii=False, indent=2), "utf-8")
     critical = [f"{r.id}: {c}" for r in results for c in r.critical]
     return Report(
         mode=stack.mode,
@@ -217,6 +240,28 @@ def _close(conn: psycopg.Connection) -> None:
     conn.close()
 
 
+def _print_quota_stop(error: GeminiQuotaExhausted, progress: Path | None) -> None:
+    cases = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    done = _load_progress(progress)
+    pending = [c["id"] for c in cases if c["id"] not in done]
+    resolved = sum(r.resolved for r in done.values())
+    kind = "diaria" if error.daily else "por minuto (tras todos los reintentos)"
+    print(f"Cuota {kind} de Gemini agotada: {error}")
+    print(
+        f"Avance guardado: {len(done)} de {len(cases)} casos hechos ({resolved} resueltos). "
+        f"Faltan {len(pending)}: {', '.join(pending)}."
+    )
+    for result in done.values():
+        flag = "ok " if result.resolved else "MAL"
+        failed = [name for name, ok in result.checks.items() if not ok] + result.critical
+        print(
+            f"  [{flag}] {result.id} {result.action}"
+            + (f"  ({', '.join(failed)})" if failed else "")
+        )
+    when = "a medianoche hora del Pacífico" if error.daily else "en unos minutos"
+    print(f"La cuota se renueva {when}. Volvé a correr make evals para seguir desde ahí.")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evals de Acme")
     parser.add_argument("--real", action="store_true", help="usar modelos y embeddings reales")
@@ -224,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baseline", type=Path, help="archivo de línea base")
     parser.add_argument("--report", type=Path, default=HERE / "last_report.json")
     parser.add_argument("--update-baseline", action="store_true")
+    parser.add_argument("--restart", action="store_true", help="descarta el avance guardado")
     args = parser.parse_args(argv)
 
     load_dotenv()
@@ -231,6 +277,10 @@ def main(argv: list[str] | None = None) -> int:
     real = args.real or backend is not None
     mode = ("gemini" if backend == "gemini" else "real") if real else "simulated"
     baseline_path: Path = args.baseline or BASELINES[mode]
+    # El modo simulado (CI) siempre corre completo; los reales pueden retomar.
+    progress = None if mode == "simulated" else CACHE_DIR / f"progress-{mode}.json"
+    if progress is not None and args.restart:
+        progress.unlink(missing_ok=True)
 
     conn = _connect()
     try:
@@ -242,9 +292,14 @@ def main(argv: list[str] | None = None) -> int:
             from simulated.stack import build_simulated_stack
 
             stack = build_simulated_stack(conn, mode=args.simulated_mode)
-        report = run_evals(stack)
+        report = run_evals(stack, progress)
+    except GeminiQuotaExhausted as error:
+        _print_quota_stop(error, progress)
+        return 2
     finally:
         _close(conn)
+    if progress is not None:
+        progress.unlink(missing_ok=True)
 
     baseline = (
         json.loads(baseline_path.read_text(encoding="utf-8")) if baseline_path.exists() else None

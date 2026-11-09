@@ -8,6 +8,9 @@ import pytest
 import runner
 from simulated.stack import build_simulated_stack
 
+from app.agent.loop import AgentResult
+from app.llm.gemini import GeminiQuotaExhausted
+
 PERFECT = {"resolution_rate": 1.0, "judge_mean": 1.0}
 
 
@@ -47,6 +50,35 @@ def test_un_cambio_que_baja_el_puntaje_bloquea_el_merge(conn: psycopg.Connection
     verdict = runner.compare(report, PERFECT)
     assert verdict.blocked
     assert report.resolution_rate < 1.0
+
+
+def test_si_se_agota_la_cuota_guarda_el_avance_y_retoma(
+    conn: psycopg.Connection, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stack = build_simulated_stack(conn)
+    original = stack.send
+    sent: list[str] = []
+
+    def send_until_quota(contact: str, text: str) -> AgentResult:
+        if len(sent) == 3:
+            raise GeminiQuotaExhausted("sin cuota", daily=True)
+        sent.append(text)
+        return original(contact, text)
+
+    progress = tmp_path / "progress.json"
+    monkeypatch.setattr(stack, "send", send_until_quota)
+    with pytest.raises(GeminiQuotaExhausted):
+        runner.run_evals(stack, progress)
+    assert len(json.loads(progress.read_text(encoding="utf-8"))) == 3
+
+    def send_counting(contact: str, text: str) -> AgentResult:
+        sent.append(text)
+        return original(contact, text)
+
+    monkeypatch.setattr(stack, "send", send_counting)
+    report = runner.run_evals(stack, progress)
+    assert len(sent) == 10  # 3 en la primera corrida y los 7 que faltaban en la segunda
+    assert len(report.cases) == 10 and report.resolution_rate == 1.0
 
 
 def test_la_cli_sale_con_error_si_hay_regresion(
