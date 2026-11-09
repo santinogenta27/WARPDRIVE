@@ -4,7 +4,6 @@ Corre dentro de la transacción del worker (app/jobs/worker.py): si el envío fa
 todo y el job se reintenta.
 """
 
-import json
 import logging
 import os
 import uuid
@@ -15,20 +14,22 @@ import psycopg
 
 from app.agent.loop import Agent
 from app.audit import log as audit_log
+from app.channels.base import (
+    IGNORED_TYPES,
+    UNSUPPORTED_MESSAGE,
+    InboundMessage,
+    forget_sender,
+    touch_contact,
+)
 from app.channels.whatsapp.client import WhatsAppClient, WhatsAppError
 from app.channels.whatsapp.outbound import flush_pending
 from app.channels.whatsapp.routing import channel_for_number
-from app.channels.whatsapp.webhook import JOB_KIND, InboundMessage
-from app.contacts import hash_phone
-from app.crypto import encrypt
-from app.db.connection import tenant_scope
+from app.channels.whatsapp.webhook import JOB_KIND
 from app.jobs.queue import Job
 
 __all__ = ["JOB_KIND", "WhatsAppDeps", "handle_message_job", "production_deps"]
 
 logger = logging.getLogger(__name__)
-IGNORED_TYPES = {"sticker", "reaction", "unsupported", "system"}
-UNSUPPORTED_MESSAGE = "Por ahora solo puedo leer mensajes de texto. ¿Me lo escribís?"
 # Rechazos de Meta que no se arreglan reintentando: número fuera de la lista permitida del
 # número de prueba (131030) y mensaje imposible de entregar (131026).
 PERMANENT_SEND_ERRORS = {131030, 131026}
@@ -48,13 +49,13 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
         logger.warning(
             "Mensaje para un número sin empresa (%s): se descarta", message.phone_number_id
         )
-        _forget_sender(conn, job)
+        forget_sender(conn, job)
         return
     tenant_id = channel.tenant_id
     token = channel.token or deps.token
-    contact_id = _touch_contact(conn, tenant_id, message)
+    contact_id = touch_contact(conn, tenant_id, message)
     if message.type in IGNORED_TYPES:
-        _forget_sender(conn, job)
+        forget_sender(conn, job)
         return
     # Si había mensajes esperando que se abra la ventana (el cliente respondió la plantilla),
     # se envían y este mensaje no pasa por el agente.
@@ -67,7 +68,7 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
         client=deps.client,
         token=token,
     ):
-        _forget_sender(conn, job)
+        forget_sender(conn, job)
         return
     case_id: uuid.UUID | None = None
     if message.type == "text" and message.text.strip():
@@ -92,7 +93,7 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
                 "whatsapp_send_failed",
                 {"code": error.code, "in_reply_to": message.wamid},
             )
-        _forget_sender(conn, job)
+        forget_sender(conn, job)
         return
     if case_id is not None:
         audit_log.record(
@@ -102,33 +103,7 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
             "whatsapp_sent",
             {"wamid": wamid, "in_reply_to": message.wamid},
         )
-    _forget_sender(conn, job)
-
-
-def _touch_contact(
-    conn: psycopg.Connection, tenant_id: uuid.UUID, message: InboundMessage
-) -> uuid.UUID:
-    """Crea el contacto si no existe, registra la hora del último mensaje del cliente (abre la
-    ventana de 24 h) y guarda cifrada la dirección para escribirle después."""
-    address = encrypt(json.dumps({"wa_id": message.sender, "name": message.name}))
-    with tenant_scope(conn, tenant_id):
-        row = conn.execute(
-            "insert into contacts (tenant_id, phone_hash, last_customer_message_at, wa_address_enc)"
-            " values (%s, %s, to_timestamp(%s), %s)"
-            " on conflict (tenant_id, phone_hash) do update set last_customer_message_at ="
-            " greatest(contacts.last_customer_message_at, excluded.last_customer_message_at),"
-            " wa_address_enc = excluded.wa_address_enc"
-            " returning id",
-            (tenant_id, hash_phone(message.sender), message.timestamp, address),
-        ).fetchone()
-    assert row is not None
-    contact_id: uuid.UUID = row[0]
-    return contact_id
-
-
-def _forget_sender(conn: psycopg.Connection, job: Job) -> None:
-    """El teléfono y el nombre en claro solo hacen falta para responder: después se borran."""
-    conn.execute("update jobs set payload = payload - 'sender' - 'name' where id = %s", (job.id,))
+    forget_sender(conn, job)
 
 
 def production_deps() -> WhatsAppDeps:

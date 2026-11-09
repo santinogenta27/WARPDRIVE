@@ -19,24 +19,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import PlainTextResponse
 
+from app.channels.base import InboundMessage
 from app.config import load_dotenv
 from app.db.connection import connect
 from app.jobs.queue import enqueue
 
+__all__ = ["JOB_KIND", "ConnectionStore", "InboundMessage", "MessageStore", "parse_webhook"]
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 JOB_KIND = "whatsapp_message"
-
-
-@dataclass(frozen=True)
-class InboundMessage:
-    phone_number_id: str  # número de la empresa que recibió el mensaje
-    wamid: str
-    sender: str  # wa_id del cliente; se borra del job una vez procesado
-    timestamp: int
-    type: str
-    text: str
-    name: str = ""  # nombre de perfil de WhatsApp (para el saludo de las plantillas)
 
 
 def parse_webhook(payload: dict[str, Any]) -> list[InboundMessage]:
@@ -114,19 +106,30 @@ class MessageStore(Protocol):
 
 
 class ConnectionStore:
-    """Encola los mensajes en la conexión dada; con `commit`, confirma antes de responder."""
+    """Encola los mensajes en la conexión dada; con `commit`, confirma antes de responder.
 
-    def __init__(self, conn: psycopg.Connection, *, commit: bool) -> None:
+    `kind` y `key_prefix` permiten usarlo con otros canales (Twilio)."""
+
+    def __init__(
+        self,
+        conn: psycopg.Connection,
+        *,
+        commit: bool,
+        kind: str = JOB_KIND,
+        key_prefix: str = "whatsapp",
+    ) -> None:
         self._conn = conn
         self._commit = commit
+        self._kind = kind
+        self._key_prefix = key_prefix
 
     def save(self, messages: list[InboundMessage]) -> None:
         for message in messages:
             enqueue(
                 self._conn,
-                JOB_KIND,
+                self._kind,
                 asdict(message),
-                idempotency_key=f"whatsapp:{message.wamid}",
+                idempotency_key=f"{self._key_prefix}:{message.wamid}",
             )
         if self._commit:
             self._conn.commit()

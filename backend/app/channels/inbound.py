@@ -1,0 +1,84 @@
+"""Procesa un mensaje encolado por el webhook de cualquier `Channel`: corre el agente y responde.
+
+Corre dentro de la transacción del worker (app/jobs/worker.py): si el envío falla de forma
+transitoria, se revierte todo y el job se reintenta. La Cloud API de Meta tiene su propio
+handler (app/channels/whatsapp/handler.py) por las plantillas y la ventana de 24 h.
+"""
+
+import logging
+import uuid
+from collections.abc import Callable
+
+import psycopg
+
+from app.agent.loop import Agent
+from app.audit import log as audit_log
+from app.channels.base import (
+    IGNORED_TYPES,
+    UNSUPPORTED_MESSAGE,
+    Channel,
+    InboundMessage,
+    SendError,
+    forget_sender,
+    touch_contact,
+)
+from app.channels.whatsapp.routing import channel_for_number
+from app.jobs.queue import Job
+
+logger = logging.getLogger(__name__)
+
+
+def handle_inbound_job(
+    conn: psycopg.Connection,
+    job: Job,
+    *,
+    channel: Channel,
+    agent: Callable[[psycopg.Connection], Agent],
+) -> None:
+    message = InboundMessage(**job.payload)
+    route = channel_for_number(conn, message.phone_number_id, kind=channel.kind)
+    if route is None:  # número desconocido: se registra en el log y se descarta
+        logger.warning(
+            "Mensaje de %s para un número sin empresa (%s): se descarta",
+            channel.kind,
+            message.phone_number_id,
+        )
+        forget_sender(conn, job)
+        return
+    tenant_id = route.tenant_id
+    contact_id = touch_contact(conn, tenant_id, message)
+    if message.type in IGNORED_TYPES:
+        forget_sender(conn, job)
+        return
+    case_id: uuid.UUID | None = None
+    if message.type == "text" and message.text.strip():
+        result = agent(conn).handle_message(tenant_id, contact_id, message.text)
+        reply, case_id = result.message, result.case_id
+    else:
+        reply = UNSUPPORTED_MESSAGE
+    try:
+        sent_id = channel.send(to=message.sender, body=reply)
+    except SendError as error:
+        if not error.permanent:
+            raise  # transitorio: el worker reprograma el job
+        # Reintentar no lo arregla y volvería a correr el agente: se registra y se cierra.
+        logger.error("%s no aceptó la respuesta (código %s): %s", channel.kind, error.code, error)
+        if case_id is not None:
+            audit_log.record(
+                conn,
+                tenant_id,
+                case_id,
+                "whatsapp_send_failed",
+                {"code": error.code, "in_reply_to": message.wamid, "channel": channel.kind},
+            )
+        forget_sender(conn, job)
+        return
+    if case_id is not None:
+        audit_log.record(
+            conn,
+            tenant_id,
+            case_id,
+            "whatsapp_sent",
+            {"wamid": sent_id, "in_reply_to": message.wamid, "channel": channel.kind},
+        )
+    forget_sender(conn, job)
