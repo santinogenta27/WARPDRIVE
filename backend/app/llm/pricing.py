@@ -30,6 +30,7 @@ PRICES: dict[str, Price] = {
     # Gemini, nivel gratuito: sin cargo (decisión 012). Si se pasa a pago, cargar sus tarifas.
     "gemini-3.6-flash": Price(_d("0"), _d("0"), _d("0"), _d("0")),
     "gemini-3.5-flash-lite": Price(_d("0"), _d("0"), _d("0"), _d("0")),
+    "gemini-embedding-2": Price(_d("0"), _d("0"), _d("0"), _d("0")),
 }
 
 

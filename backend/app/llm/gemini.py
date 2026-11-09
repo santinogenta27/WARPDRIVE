@@ -1,4 +1,4 @@
-"""Proveedor Gemini (nivel gratuito) detrás de LLMClient, por la API REST con httpx.
+"""Gemini (nivel gratuito) por la API REST con httpx: proveedor detrás de LLMClient y Embedder.
 
 El agente sigue hablando en el formato de mensajes de Claude (bloques `text`, `tool_use` y
 `tool_result`); este módulo lo traduce a `generateContent` de Gemini y de vuelta, así que el
@@ -13,7 +13,9 @@ from typing import Any
 
 import httpx
 
-from app.llm.types import LLMResponse, TokenUsage, ToolCall
+from app.llm.embedder import InputType
+from app.llm.pricing import cost_usd
+from app.llm.types import LLMResponse, TokenUsage, ToolCall, UsageRecorder
 
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -22,6 +24,13 @@ MODEL_MAP = {
     "claude-sonnet-5-5": "gemini-3.6-flash",  # agente
     "claude-opus-5-5": "gemini-3.6-flash",  # juez de evals
     "claude-haiku-5-5": "gemini-3.5-flash-lite",  # clasificador
+}
+EMBEDDING_MODEL = "gemini-embedding-2"
+EMBEDDING_BATCH = 100  # pedidos por llamada a batchEmbedContents
+# gemini-embedding-2 no acepta task_type: la tarea va como prefijo del texto.
+EMBEDDING_FORMATS = {
+    "document": "title: none | text: {}",
+    "query": "task: search result | query: {}",
 }
 EFFORT_TO_THINKING = {"low": "LOW", "medium": "MEDIUM", "high": "HIGH"}
 TOOL_CHOICE_MODES = {"auto": "AUTO", "any": "ANY", "tool": "ANY", "none": "NONE"}
@@ -71,6 +80,56 @@ class GeminiProvider:
         body = _request(messages, max_tokens, system, options)
         data = self._transport.post(target, "generateContent", body)
         return _response(target, data)
+
+
+class GeminiEmbedder:
+    """Embeddings con Gemini Embedding 2. Con dimensión no por defecto la API ya los normaliza."""
+
+    dimensions = 1024
+
+    def __init__(
+        self,
+        recorder: UsageRecorder,
+        transport: GeminiTransport | None = None,
+        model: str = EMBEDDING_MODEL,
+    ) -> None:
+        self._recorder = recorder
+        self._transport = transport or GeminiTransport()
+        self._model = model
+
+    def embed(
+        self,
+        texts: list[str],
+        *,
+        tenant_id: uuid.UUID,
+        input_type: InputType = "document",
+        case_id: uuid.UUID | None = None,
+    ) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        tokens = 0
+        template = EMBEDDING_FORMATS[input_type]
+        for start in range(0, len(texts), EMBEDDING_BATCH):
+            requests = [
+                {
+                    "model": f"models/{self._model}",
+                    "content": {"parts": [{"text": template.format(text)}]},
+                    "outputDimensionality": self.dimensions,
+                }
+                for text in texts[start : start + EMBEDDING_BATCH]
+            ]
+            data = self._transport.post(self._model, "batchEmbedContents", {"requests": requests})
+            vectors.extend(list(e["values"]) for e in data["embeddings"])
+            tokens += int((data.get("usageMetadata") or {}).get("promptTokenCount", 0))
+        usage = TokenUsage(input_tokens=tokens, output_tokens=0)
+        self._recorder.record(
+            tenant_id=tenant_id,
+            case_id=case_id,
+            kind="embedding",
+            model=self._model,
+            usage=usage,
+            cost_usd=cost_usd(self._model, usage),
+        )
+        return vectors
 
 
 # -- pedido ----------------------------------------------------------------------------------

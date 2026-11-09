@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 
 from app.llm.client import LLMClient
-from app.llm.gemini import GeminiProvider, GeminiTransport
+from app.llm.gemini import GeminiEmbedder, GeminiProvider, GeminiTransport
 from app.llm.types import TokenUsage, UsageKind
 
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -212,6 +212,40 @@ def test_devuelve_resultados_y_firma_de_pensamiento_en_el_turno_siguiente() -> N
     assert second.text == "Tu pedido está en camino."
     assert second.stop_reason == "end_turn"
     assert second.tool_calls == []
+
+
+def test_embedder_gemini_marca_documentos_y_consultas_y_registra_uso() -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def reply(n: int, tokens: int) -> dict[str, Any]:
+        return {
+            "embeddings": [{"values": [0.1] * 1024} for _ in range(n)],
+            "usageMetadata": {"promptTokenCount": tokens},
+        }
+
+    recorder = MemoryRecorder()
+    embedder = GeminiEmbedder(recorder, _gemini([reply(100, 700), reply(1, 9), reply(1, 4)], calls))
+    assert embedder.dimensions == 1024  # igual que la columna vector(1024)
+
+    docs = embedder.embed([f"texto {i}" for i in range(101)], tenant_id=TENANT)
+    query = embedder.embed(["¿cuánto tarda el envío?"], tenant_id=TENANT, input_type="query")
+
+    assert len(docs) == 101 and len(query[0]) == 1024
+    url, body = calls[0]
+    assert url.endswith("/models/gemini-embedding-2:batchEmbedContents")
+    assert len(body["requests"]) == 100  # máximo por lote; el resto va en otro pedido
+    assert body["requests"][0] == {
+        "model": "models/gemini-embedding-2",
+        "content": {"parts": [{"text": "title: none | text: texto 0"}]},
+        "outputDimensionality": 1024,
+    }
+    assert calls[2][1]["requests"][0]["content"] == {
+        "parts": [{"text": "task: search result | query: ¿cuánto tarda el envío?"}]
+    }
+    assert [(r["kind"], r["model"], r["usage"].input_tokens, r["cost"]) for r in recorder.rows] == [
+        ("embedding", "gemini-embedding-2", 709, Decimal(0)),
+        ("embedding", "gemini-embedding-2", 4, Decimal(0)),
+    ]
 
 
 def test_haiku_usa_flash_lite_y_un_bloqueo_es_rechazo() -> None:
