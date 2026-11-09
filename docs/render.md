@@ -16,12 +16,15 @@ Deja el chat de Acme Store en un link fijo del tipo `https://acme-chat-demo.onre
    - Elegí el repositorio `WARPDRIVE`.
    - En **Branch**, elegí `hito-3`. `render.yaml` todavía no está en `main`.
    - En **Blueprint Name**, poné `acme-chat-demo`.
-4. **Cargá los secretos.** Render muestra el servicio `acme-chat-demo` (Web Service, plan **Free**) y pide tres valores. Copialos de tu `.env`: lo que está después del `=`, sin comillas ni espacios.
+4. **Cargá los secretos.** Render muestra el servicio `acme-chat-demo` (Web Service, plan **Free**) y pide cuatro valores. Copialos de tu `.env`: lo que está después del `=`, sin comillas ni espacios.
    - `DATABASE_URL`
-   - `GEMINI_API_KEY`
+   - `GROQ_API_KEY`: el modelo del chat (`openai/gpt-oss-20b`).
+   - `GEMINI_API_KEY`: los embeddings y el respaldo si Groq se queda sin cuota.
    - `ENCRYPTION_KEY`: tiene que ser la misma que en tu PC, porque con ella se leen los datos cifrados de la base.
 
-   El resto (modelo de Gemini, límites, versión de Python) ya viene de `render.yaml`.
+   El resto (`LLM_PROVIDER=groq`, los modelos, los límites y la versión de Python) ya viene de `render.yaml`.
+
+   **Si ya habías creado el servicio** antes de pasar a Groq, Render toma solo las variables nuevas con valor. `GROQ_API_KEY` es secreta y no se pide sola: agregala en el servicio → **Environment** → **Add Environment Variable** → **Save Changes**.
 5. **Desplegá.** Tocá **Deploy Blueprint** (o **Apply**). Render instala las dependencias y arranca el servicio. Tarda unos minutos. En **Logs** vas a ver:
    - `Migraciones aplicadas: ninguna (al día)`
    - `Uvicorn running on http://0.0.0.0:10000`
@@ -37,7 +40,7 @@ Deja el chat de Acme Store en un link fijo del tipo `https://acme-chat-demo.onre
   - `WEB_CHAT_IP_DAILY_LIMIT`: mensajes por IP en 24 h. Por defecto, 30.
   - `WEB_CHAT_DAILY_LIMIT`: mensajes en total en 24 h. Por defecto, 300. Cuida la cuota diaria gratuita de Gemini.
   - `WEB_CHAT_CLIENT_IP`: de dónde sale la IP del visitante. Por defecto, `x-forwarded-for:first`. Ver "IP del visitante".
-  - Si Gemini se queda sin cuota, el chat responde "Tuvimos un problema para responderte" y no descuenta el mensaje. Cambiá `GEMINI_AGENT_MODEL` a otro modelo gratuito de `pricing.py`.
+  - Si Groq se queda sin cuota diaria, responde Gemini. Si también Gemini se queda sin cuota, el chat responde "Tuvimos un problema para responderte" y no descuenta el mensaje.
 
 ## IP del visitante
 

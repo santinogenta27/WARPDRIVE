@@ -84,6 +84,23 @@ Decisiones 014 a 018. Cómo probarlo desde el celular: `docs/whatsapp.md` (Whats
 
 **Canal `twilio_whatsapp`** (decisión 017): la prueba de WhatsApp de Twilio, detrás de la interfaz `Channel` de la spec, con el mismo agente, guardián y auditoría. Test: `test_twilio.py`. Un mensaje firmado por Twilio recibe respuesta; una firma inválida se rechaza; un rechazo de Twilio no se reintenta.
 
+## Etapa 1 — Groq (rama `hito-3`, 9 de noviembre de 2026)
+
+Groq quedó como proveedor detrás de `LLMClient` (decisión 020). El proveedor se elige con `LLM_PROVIDER` y el otro gratuito queda de respaldo. Los embeddings siguen con Gemini. Tests: `test_groq.py` y `test_deploy.py`.
+
+**Evals de Acme (10 casos guionados) por modelo:**
+
+| Agente | Resolución | Juez |
+|---|---|---|
+| **Groq `openai/gpt-oss-20b`** (elegido) | **100%** | **0,89** |
+| Gemini `gemini-3.5-flash-lite` | 90% | 0,80 |
+| Groq `qwen/qwen3.8-27b` | 80% | 0,76 |
+| Groq `openai/gpt-oss-120b` | 70% | 0,63 |
+
+El chat web (local y Render) usa `gpt-oss-20b`. Línea base: `evals/baseline.groq.json`.
+
+**En Render hay que agregar `GROQ_API_KEY`** (secreta, en Environment). `LLM_PROVIDER=groq` y los modelos ya vienen en `render.yaml`.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
