@@ -284,7 +284,7 @@
   <ul>
     <li>Preguntá por horarios, cuotas, envíos, cambios o devoluciones.</li>
     <li>Para ver un pedido, escribí <em>«¿Dónde está mi pedido 1001?»</em> y verificá tu identidad con <code>lucia@example.com</code>. En esta demo no se envían emails: el código aparece en la consola del servidor.</li>
-    <li>Cada conversación tiene hasta 20 mensajes.</li>
+    <li>Cada conversación tiene hasta 20 mensajes, y hay un límite de uso diario por conexión.</li>
   </ul>
   <div class="actions">
     <button class="btn" id="reset" type="button">Empezar de nuevo</button>
@@ -485,8 +485,19 @@
   function onEvent(name, data) {
     if (name === "typing") showTyping();
     else if (name === "message") { hideTyping(); add("agent", data.text); }
-    else if (name === "done") { state.remaining = data.remaining; save(); updateRemaining(); }
-    else if (name === "limit") { hideTyping(); state.locked = true; save(); add("notice", data.message); updateRemaining(); }
+    else if (name === "done") {
+      var today = typeof data.remaining_today === "number" ? data.remaining_today : data.remaining;
+      state.remaining = Math.min(data.remaining, today);
+      save();
+      updateRemaining();
+    }
+    else if (name === "limit") {
+      hideTyping();
+      // El de la sesión cierra esta conversación; los diarios (IP o total) vencen solos.
+      if (data.scope === "session") { state.locked = true; save(); }
+      add("notice", data.message);
+      updateRemaining();
+    }
     else if (name === "error") { hideTyping(); add("notice", data.message); }
   }
 

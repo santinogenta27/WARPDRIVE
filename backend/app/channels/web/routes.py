@@ -5,18 +5,23 @@ recibe un mensaje y responde con un stream `text/event-stream`:
 
 - `typing`: el agente está escribiendo.
 - `message`: una respuesta (`{"text": ...}`).
-- `done`: fin, con los mensajes que le quedan a la sesión (`{"remaining": n}`).
-- `limit`: la sesión llegó al límite de mensajes; el agente no corre.
+- `done`: fin, con los mensajes que quedan (`{"remaining": n, "remaining_today": m}`): de la
+  sesión y de la IP en el día.
+- `limit`: se llegó a un límite (`scope`: `session`, `ip` o `daily`); el agente no corre.
 - `error`: no se pudo responder; no se descuenta el mensaje.
 
-El agente corre dentro del pedido, en una transacción: si falla, se revierte todo.
+Límites (la demo es pública y el modelo gratuito tiene cuota diaria): 20 mensajes por sesión,
+un máximo por IP por día y un máximo total por día. El agente corre dentro del pedido, en una
+transacción: si falla, se revierte todo y no se descuenta nada.
 """
 
+import hashlib
 import json
 import logging
+import os
 import secrets
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
@@ -40,14 +45,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MESSAGE_LIMIT = 20  # por sesión (spec: demo pública)
-LIMIT_MESSAGE = (
-    f"Llegaste al límite de {MESSAGE_LIMIT} mensajes de esta demo. ¡Gracias por probarla!"
-)
+LIMIT_MESSAGES = {
+    "session": f"Llegaste al límite de {MESSAGE_LIMIT} mensajes de esta conversación. "
+    "¡Gracias por probar la demo!",
+    "ip": "Llegaste al límite de uso diario de la demo desde tu conexión. "
+    "Volvé a probar mañana. ¡Gracias!",
+    "daily": "La demo llegó a su límite de uso por hoy. Volvé a probar mañana. ¡Gracias!",
+}
 ERROR_MESSAGE = "Tuvimos un problema para responderte. Probá de nuevo en un rato."
 
 
 class LimitReached(Exception):
-    pass
+    def __init__(self, scope: str) -> None:
+        super().__init__(scope)
+        self.scope = scope
 
 
 class UnknownSession(Exception):
@@ -59,6 +70,29 @@ class WebDeps:
     connection: Callable[[], AbstractContextManager[psycopg.Connection]]
     agent: Callable[[psycopg.Connection], Agent]
     address: str = DEMO_ADDRESS  # canal web en la tabla channels (tenant Acme en la demo)
+    ip_daily_limit: int = 30  # mensajes por IP en 24 h
+    daily_limit: int = 300  # mensajes en total en 24 h (cuida la cuota diaria del modelo)
+    client_ip: str = "direct"  # de dónde sale la IP del cliente (ver client_ip)
+
+
+def client_ip(mode: str, headers: Mapping[str, str], peer: str | None) -> str:
+    """IP del cliente según `mode`: `direct` (el par TCP; uvicorn ya aplica X-Forwarded-For de
+    un proxy local como cloudflared), `<encabezado>` o `<encabezado>:first|last` (para listas
+    como X-Forwarded-For). Sin el encabezado, el par TCP."""
+    fallback = peer or "desconocida"
+    if mode == "direct":
+        return fallback
+    name, _, position = mode.partition(":")
+    values = [v.strip() for v in (headers.get(name) or "").split(",") if v.strip()]
+    if not values:
+        return fallback
+    return values[-1] if position == "last" else values[0]
+
+
+def _ip_hash(ip: str) -> str:
+    """Hash con sal (ENCRYPTION_KEY): alcanza para contar, sin guardar la IP."""
+    salt = os.environ.get("ENCRYPTION_KEY", "")
+    return hashlib.sha256(f"{salt}:{ip}".encode()).hexdigest()
 
 
 @contextmanager
@@ -80,7 +114,13 @@ def _production_deps() -> WebDeps:
 
     load_dotenv()
     acme = acme_sandbox_client()  # la API de Acme simulada vive mientras corre la API
-    return WebDeps(connection=_transaction, agent=lambda conn: build_demo_agent(conn, acme))
+    return WebDeps(
+        connection=_transaction,
+        agent=lambda conn: build_demo_agent(conn, acme),
+        ip_daily_limit=int(os.environ.get("WEB_CHAT_IP_DAILY_LIMIT") or 30),
+        daily_limit=int(os.environ.get("WEB_CHAT_DAILY_LIMIT") or 300),
+        client_ip=os.environ.get("WEB_CHAT_CLIENT_IP") or "direct",
+    )
 
 
 def web_deps() -> WebDeps:
@@ -97,17 +137,43 @@ def _tenant(conn: psycopg.Connection, address: str) -> uuid.UUID:
     return channel.tenant_id
 
 
-def _used(conn: psycopg.Connection, tenant_id: uuid.UUID, token: str, *, lock: bool) -> int:
+@dataclass(frozen=True)
+class _Usage:
+    session: int  # mensajes de la sesión
+    ip: int  # de la IP en las últimas 24 h
+    total: int  # de todo el chat del tenant en las últimas 24 h
+
+
+def _usage(
+    conn: psycopg.Connection, tenant_id: uuid.UUID, token: str, ip_hash: str, *, lock: bool
+) -> _Usage:
     with tenant_scope(conn, tenant_id):
+        if lock:  # dos pedidos simultáneos de la misma IP no pasan el límite
+            conn.execute("select pg_advisory_xact_lock(hashtext(%s))", (ip_hash,))
         row = conn.execute(
             "select messages from web_sessions where token_hash = %s"
             + (" for update" if lock else ""),
             (token_hash(token),),
         ).fetchone()
-    if row is None:
-        raise UnknownSession
-    used: int = row[0]
-    return used
+        if row is None:
+            raise UnknownSession
+        counts = conn.execute(
+            "select count(*) filter (where ip_hash = %s), count(*) from web_usage"
+            " where created_at > now() - interval '1 day'",
+            (ip_hash,),
+        ).fetchone()
+    assert counts is not None
+    return _Usage(session=row[0], ip=counts[0], total=counts[1])
+
+
+def _exceeded(deps: WebDeps, usage: _Usage) -> str | None:
+    if usage.session >= MESSAGE_LIMIT:
+        return "session"
+    if usage.total >= deps.daily_limit:
+        return "daily"
+    if usage.ip >= deps.ip_daily_limit:
+        return "ip"
+    return None
 
 
 PAGE = Path(__file__).resolve().parent / "static" / "index.html"
@@ -133,20 +199,33 @@ def create_session(deps: Deps) -> dict[str, Any]:
     return {"session": token, "limit": MESSAGE_LIMIT, "remaining": MESSAGE_LIMIT}
 
 
-def _remaining(deps: WebDeps, token: str) -> int:
-    with deps.connection() as conn:
-        return MESSAGE_LIMIT - _used(conn, _tenant(conn, deps.address), token, lock=False)
-
-
-def _process(deps: WebDeps, channel: WebChannel, messages: list[InboundMessage], token: str) -> int:
-    """Corre el agente y descuenta el mensaje, en una sola transacción. Devuelve los restantes."""
+def _precheck(deps: WebDeps, token: str, ip_hash: str) -> str | None:
+    """Límite alcanzado antes de abrir el stream (sin correr el agente), o None."""
     with deps.connection() as conn:
         tenant_id = _tenant(conn, deps.address)
-        used = _used(conn, tenant_id, token, lock=True)  # dos pestañas no pasan el límite
-        if used >= MESSAGE_LIMIT:
-            raise LimitReached
+        return _exceeded(deps, _usage(conn, tenant_id, token, ip_hash, lock=False))
+
+
+def _process(
+    deps: WebDeps,
+    channel: WebChannel,
+    messages: list[InboundMessage],
+    token: str,
+    ip_hash: str,
+) -> dict[str, int]:
+    """Corre el agente y descuenta el mensaje, en una sola transacción y con los límites
+    bloqueados. Devuelve los mensajes que quedan."""
+    with deps.connection() as conn:
+        tenant_id = _tenant(conn, deps.address)
+        usage = _usage(conn, tenant_id, token, ip_hash, lock=True)
+        scope = _exceeded(deps, usage)
+        if scope is not None:
+            raise LimitReached(scope)
         if not messages:
-            return MESSAGE_LIMIT - used
+            return {
+                "remaining": MESSAGE_LIMIT - usage.session,
+                "remaining_today": deps.ip_daily_limit - usage.ip,
+            }
         for message in messages:
             handle_inbound(conn, message, channel=channel, agent=deps.agent)
         with tenant_scope(conn, tenant_id):
@@ -154,21 +233,36 @@ def _process(deps: WebDeps, channel: WebChannel, messages: list[InboundMessage],
                 "update web_sessions set messages = messages + 1 where token_hash = %s",
                 (token_hash(token),),
             )
-        return MESSAGE_LIMIT - used - 1
+            conn.execute(
+                "insert into web_usage (tenant_id, ip_hash) values (%s, %s)",
+                (tenant_id, ip_hash),
+            )
+        return {
+            "remaining": MESSAGE_LIMIT - usage.session - 1,
+            "remaining_today": max(deps.ip_daily_limit - usage.ip - 1, 0),
+        }
 
 
 def _event(name: str, data: dict[str, Any]) -> str:
     return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+def _limit_event(scope: str) -> str:
+    return _event("limit", {"scope": scope, "message": LIMIT_MESSAGES[scope]})
+
+
 async def _stream(
-    deps: WebDeps, channel: WebChannel, messages: list[InboundMessage], token: str
+    deps: WebDeps,
+    channel: WebChannel,
+    messages: list[InboundMessage],
+    token: str,
+    ip_hash: str,
 ) -> AsyncIterator[str]:
     yield _event("typing", {})
     try:
-        remaining = await run_in_threadpool(_process, deps, channel, messages, token)
-    except LimitReached:
-        yield _event("limit", {"message": LIMIT_MESSAGE})
+        remaining = await run_in_threadpool(_process, deps, channel, messages, token, ip_hash)
+    except LimitReached as limit:
+        yield _limit_event(limit.scope)
         return
     except Exception:
         logger.exception("El chat web no pudo responder")
@@ -176,26 +270,28 @@ async def _stream(
         return
     for text in channel.outbox:
         yield _event("message", {"text": text})
-    yield _event("done", {"remaining": remaining})
+    yield _event("done", remaining)
 
 
-async def _only(name: str, data: dict[str, Any]) -> AsyncIterator[str]:
-    yield _event(name, data)
+async def _only(chunk: str) -> AsyncIterator[str]:
+    yield chunk
 
 
 @router.post("/chat/messages")
 async def post_message(request: Request, deps: Deps) -> StreamingResponse:
     body = await request.body()
     channel = WebChannel(deps.address)
+    peer = request.client.host if request.client else None
+    ip_hash = _ip_hash(client_ip(deps.client_ip, request.headers, peer))
     try:
         messages = channel.receive(str(request.url), body, request.headers)
         token = session_token(body)
-        remaining = await run_in_threadpool(_remaining, deps, token)
+        scope = await run_in_threadpool(_precheck, deps, token, ip_hash)
     except (InvalidSignature, UnknownSession) as error:
         raise HTTPException(status_code=401, detail="Sesión inválida") from error
     headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-    if remaining <= 0:  # sin correr el agente
-        stream = _only("limit", {"message": LIMIT_MESSAGE})
+    if scope is not None:  # sin correr el agente
+        stream = _only(_limit_event(scope))
     else:
-        stream = _stream(deps, channel, messages, token)
+        stream = _stream(deps, channel, messages, token, ip_hash)
     return StreamingResponse(stream, media_type="text/event-stream", headers=headers)

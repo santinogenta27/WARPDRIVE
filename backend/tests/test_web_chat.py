@@ -23,7 +23,7 @@ from simulated.stack import SimulatedStack, build_simulated_stack
 
 from app.channels.base import Channel
 from app.channels.web.channel import WebChannel
-from app.channels.web.routes import MESSAGE_LIMIT, WebDeps, web_deps
+from app.channels.web.routes import MESSAGE_LIMIT, WebDeps, client_ip, web_deps
 from app.channels.whatsapp.client import WhatsAppClient
 from app.channels.whatsapp.handler import WhatsAppDeps, handle_message_job
 from app.channels.whatsapp.routing import register_whatsapp_channel
@@ -75,9 +75,13 @@ def new_session(api: TestClient) -> str:
     return session
 
 
-def chat(api: TestClient, session: str, text: str) -> list[tuple[str, dict[str, Any]]]:
-    """Manda un mensaje y devuelve los eventos SSE (evento, datos) en orden."""
-    response = api.post("/chat/messages", json={"session": session, "text": text})
+def chat(
+    api: TestClient, session: str, text: str, *, ip: str | None = None
+) -> list[tuple[str, dict[str, Any]]]:
+    """Manda un mensaje y devuelve los eventos SSE (evento, datos) en orden. `ip`: la del
+    cliente, como la agrega el proxy de Render a X-Forwarded-For."""
+    headers = {"X-Forwarded-For": f"{ip}, 10.0.0.7"} if ip else {}
+    response = api.post("/chat/messages", json={"session": session, "text": text}, headers=headers)
     assert response.status_code == 200, response.text
     assert response.headers["content-type"].startswith("text/event-stream")
     events = []
@@ -164,7 +168,7 @@ def test_las_respuestas_llegan_por_server_sent_events(api: TestClient) -> None:
     names = [name for name, _ in events]
     assert names == ["typing", "message", "done"]
     assert "domingos" in events[1][1]["text"]
-    assert events[2][1] == {"remaining": MESSAGE_LIMIT - 1}
+    assert events[2][1]["remaining"] == MESSAGE_LIMIT - 1
 
 
 def test_cada_sesion_tiene_un_limite_de_20_mensajes(
@@ -175,7 +179,7 @@ def test_cada_sesion_tiene_un_limite_de_20_mensajes(
     with tenant_scope(conn, stack.seed.tenant_id):
         conn.execute("update web_sessions set messages = %s", (MESSAGE_LIMIT - 1,))
     last = chat(api, session, "¿Tienen cuotas sin interés?")
-    assert last[-1] == ("done", {"remaining": 0})
+    assert last[-1][0] == "done" and last[-1][1]["remaining"] == 0
     with tenant_scope(conn, stack.seed.tenant_id):
         before = conn.execute("select count(*) from case_messages").fetchone()
     blocked = chat(api, session, "¿Y los sábados?")
@@ -200,6 +204,81 @@ def test_cada_sesion_es_un_contacto_distinto_sin_datos_en_claro(
     assert len({r[0] for r in rows}) == 2
     stored = json.dumps([r[0] for r in rows + tokens])
     assert first not in stored and second not in stored  # el token de sesión no se guarda
+
+
+@pytest.fixture
+def limited(conn: psycopg.Connection, stack: SimulatedStack, address: str) -> Iterator[TestClient]:
+    """Chat con límites chicos: 2 mensajes por IP y 3 en total por día (IP del proxy)."""
+    app.dependency_overrides[web_deps] = lambda: WebDeps(
+        connection=lambda: nullcontext(conn),
+        agent=lambda c: stack.agent,
+        address=address,
+        ip_daily_limit=2,
+        daily_limit=3,
+        client_ip="x-forwarded-for:first",
+    )
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def _case_messages(conn: psycopg.Connection, stack: SimulatedStack) -> int:
+    with tenant_scope(conn, stack.seed.tenant_id):
+        row = conn.execute("select count(*) from case_messages").fetchone()
+    assert row is not None
+    count: int = row[0]
+    return count
+
+
+def test_cada_ip_tiene_un_limite_diario_aunque_abra_sesiones_nuevas(
+    limited: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    first = chat(limited, new_session(limited), "¿Abren los domingos?", ip="203.0.113.5")
+    assert first[-1][1]["remaining_today"] == 1
+    again = chat(limited, new_session(limited), "¿Abren los domingos?", ip="203.0.113.5")
+    assert again[-1][1]["remaining_today"] == 0
+
+    before = _case_messages(conn, stack)
+    blocked = chat(limited, new_session(limited), "¿Abren los sábados?", ip="203.0.113.5")
+    assert [(name, data["scope"]) for name, data in blocked] == [("limit", "ip")]
+    assert _case_messages(conn, stack) == before  # el agente (y Gemini) no corrió
+
+    other = chat(limited, new_session(limited), "¿Abren los domingos?", ip="198.51.100.9")
+    assert other[-1][0] == "done"
+
+
+def test_hay_un_limite_diario_total_para_cuidar_la_cuota_del_modelo(
+    limited: TestClient,
+) -> None:
+    for ip in ("203.0.113.1", "203.0.113.2", "203.0.113.3"):
+        assert chat(limited, new_session(limited), "¿Abren los domingos?", ip=ip)[-1][0] == "done"
+    blocked = chat(limited, new_session(limited), "¿Abren los domingos?", ip="203.0.113.4")
+    assert [(name, data["scope"]) for name, data in blocked] == [("limit", "daily")]
+
+
+def test_la_ip_no_se_guarda_en_claro(
+    limited: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    chat(limited, new_session(limited), "¿Abren los domingos?", ip="203.0.113.77")
+    with tenant_scope(conn, stack.seed.tenant_id):
+        rows = conn.execute("select ip_hash from web_usage").fetchall()
+    assert len(rows) == 1 and "203.0.113.77" not in rows[0][0]
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected"),
+    [
+        ("direct", "10.1.1.1"),
+        ("x-forwarded-for:first", "203.0.113.5"),
+        ("x-forwarded-for:last", "10.0.0.7"),
+        ("cf-connecting-ip", "198.51.100.2"),
+    ],
+)
+def test_la_ip_del_cliente_sale_del_encabezado_configurado(mode: str, expected: str) -> None:
+    headers = {"x-forwarded-for": "203.0.113.5, 10.0.0.7", "cf-connecting-ip": "198.51.100.2"}
+    assert client_ip(mode, headers, peer="10.1.1.1") == expected
+    assert client_ip(mode, {}, peer="10.1.1.1") == "10.1.1.1"  # sin encabezado: el par TCP
 
 
 def test_una_sesion_inexistente_se_rechaza(api: TestClient) -> None:
