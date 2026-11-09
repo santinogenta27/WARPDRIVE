@@ -67,9 +67,18 @@ Para retomar: `make evals` después de la medianoche del Pacífico. Para empezar
 | 12d. Plantillas y ventana de 24 h | Hecha | `test_whatsapp_window.py`: una respuesta humana a las 25 h sale como plantilla, y el texto se envía cuando el cliente responde |
 | 12e. Tabla `channels` y ruteo por `phone_number_id` | Hecha | `test_channels.py`: dos tenants con números distintos no se mezclan; el token del canal se guarda cifrado |
 
-Decisiones 014 a 016. Cómo probarlo desde el celular: `docs/whatsapp.md`.
+Decisiones 014 a 018. Cómo probarlo desde el celular: `docs/whatsapp.md` (WhatsApp) y `docs/chat-web.md` (chat web).
 
 **Cuenta de Meta bloqueada (9 de noviembre de 2026):** los envíos fallan con 131031. Según `health_status`, Meta pide un método de pago válido, completar el perfil de la empresa (nombre legal, país y sitio web) y la verificación de la empresa. El camino Meta → túnel → API → agente funciona hasta el envío: Meta lo acepta y después no lo entrega.
+
+**WhatsApp en pausa:** Meta sigue bloqueado y el número de prueba de Twilio solo permite plantillas, sin texto libre. Los dos canales quedan como están para más adelante.
+
+| Tarea | Estado | Test de aceptación |
+|---|---|---|
+| 12b. Chat web con la interfaz `Channel` | Hecha | `test_web_chat.py`: un caso guionado (01, dónde está mi pedido) se resuelve igual por web y por WhatsApp; respuestas por SSE; límite de 20 mensajes por sesión. `test_web_page.py`: la página de Acme Store con el aviso de demo |
+| 13. Verificación de identidad (parcial: código al email) | Hecha la parte del código | `test_identity_verification.py`: sin verificar no hay datos de cuenta; el código vence a los 10 minutos, admite 3 intentos y no revela si el email existe |
+
+**Verificación por email en la demo: el código aparece en la consola del servidor.** Todavía no hay `Mailer` real (proveedor de email), así que `ConsoleMailer` escribe el código en la terminal de `make api` y no envía ningún email. Para probar: `lucia@example.com`, `martin@example.com` o `sofia@example.com`. Cómo probar el chat: `docs/chat-web.md`. Decisión 018.
 
 **Canal `twilio_whatsapp`** (decisión 017): la prueba de WhatsApp de Twilio, detrás de la interfaz `Channel` de la spec, con el mismo agente, guardián y auditoría. Test: `test_twilio.py`. Un mensaje firmado por Twilio recibe respuesta; una firma inválida se rechaza; un rechazo de Twilio no se reintenta.
 

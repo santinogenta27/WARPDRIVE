@@ -54,7 +54,7 @@ En la terminal del worker vas a ver cada mensaje procesado.
 - **La API responde 401:** `WHATSAPP_APP_SECRET` no coincide con el secreto de la app (Configuración de la app → Básica → Clave secreta de la app).
 - **El worker muestra error 131030:** tu celular no está en la lista del paso 3.5. Para números de Argentina, el sistema reintenta solo sin el 9.
 - **El worker se queda reintentando Gemini:** el modelo está saturado (503) o sin cuota. Cambiá `GEMINI_AGENT_MODEL` en `.env` a otro modelo gratuito de `pricing.py` y reiniciá `make worker`.
-- **Consultas de pedidos:** tu número no es cliente de Acme, así que el agente te pide verificar tu email. Ese flujo de código por mail todavía no está implementado. Las consultas generales (horarios, cuotas, envíos, cambios) funcionan.
+- **Consultas de pedidos:** tu número no es cliente de Acme, así que el agente te pide el email de la compra (por ejemplo `lucia@example.com`) y un código. No hay proveedor de email: el código aparece en la terminal del proceso que corre el agente, que para WhatsApp es `make worker` (ver `docs/chat-web.md`).
 
 ## Alternativa: la prueba de WhatsApp de Twilio
 
