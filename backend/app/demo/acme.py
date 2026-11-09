@@ -1,11 +1,13 @@
 """Carga de la empresa de demo Acme desde evals/fixtures/acme/ (datos ficticios)."""
 
 import json
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg
+from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
 
 from app.config import REPO_ROOT
@@ -72,6 +74,34 @@ def seed_acme(conn: psycopg.Connection, embedder: Embedder) -> AcmeSeed:
     index_acme_documents(conn, tenant_id, embedder)
     phones = {c["label"]: c["phone"] for c in company["contacts"]}
     return AcmeSeed(tenant_id=tenant_id, contacts=contacts, phones=phones)
+
+
+def find_demo_tenant(conn: psycopg.Connection) -> uuid.UUID | None:
+    """Tenant Acme permanente de la demo (marcado con settings.demo = 'acme')."""
+    row = conn.execute("select id from tenants where settings ->> 'demo' = 'acme'").fetchone()
+    return row[0] if row else None
+
+
+def ensure_demo_tenant(conn: psycopg.Connection, embedder: Embedder) -> uuid.UUID:
+    """Crea una sola vez el tenant Acme permanente para probar el agente por WhatsApp."""
+    tenant_id = find_demo_tenant(conn)
+    if tenant_id is None:
+        tenant_id = seed_acme(conn, embedder).tenant_id
+        conn.execute(
+            "update tenants set settings = settings || %s where id = %s",
+            (Jsonb({"demo": "acme"}), tenant_id),
+        )
+    return tenant_id
+
+
+def acme_sandbox_client() -> TestClient:
+    """API de Acme simulada en proceso, como en los evals (los datos viven en memoria)."""
+    mocks = str(REPO_ROOT / "mocks" / "acme-api")
+    if mocks not in sys.path:
+        sys.path.insert(0, mocks)
+    from acme_api import create_app
+
+    return TestClient(create_app())
 
 
 def _title(text: str, fallback: str) -> str:
