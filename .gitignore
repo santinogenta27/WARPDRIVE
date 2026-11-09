@@ -28,3 +28,5 @@ Thumbs.db
 
 # Configuración local de Claude Code (la de proyecto sí se sube)
 .claude/settings.local.json
+evals/last_quality_report.json
+evals/last_onboarding.md
