@@ -26,6 +26,13 @@ from app.llm.types import TokenUsage, UsageKind
 TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
+@pytest.fixture(autouse=True)
+def _default_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Los tests usan los modelos por defecto aunque el .env local elija otros."""
+    for key in ("GEMINI_AGENT_MODEL", "GEMINI_CLASSIFIER_MODEL"):
+        monkeypatch.delenv(key, raising=False)
+
+
 class MemoryRecorder:
     def __init__(self) -> None:
         self.rows: list[dict[str, Any]] = []
@@ -374,6 +381,24 @@ def test_pausa_minima_entre_llamadas() -> None:
     now[0] += 2.5  # el agente tarda 2,5 s en armar el siguiente pedido
     provider.create(model="claude-sonnet-5-5", messages=HOLA, max_tokens=10)
     assert sleeps == [3.5]
+
+
+def test_los_modelos_del_agente_y_del_clasificador_se_eligen_por_entorno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GEMINI_AGENT_MODEL", "gemini-3.8-flash")
+    monkeypatch.setenv("GEMINI_CLASSIFIER_MODEL", "gemini-3.6-flash")
+    calls: list[tuple[str, dict[str, Any]]] = []
+    provider = GeminiProvider(_gemini([TEXT_REPLY, TEXT_REPLY], calls))
+    agent = provider.create(model="claude-sonnet-5-5", messages=HOLA, max_tokens=10)
+    provider.create(model="claude-haiku-5-5", messages=HOLA, max_tokens=10)
+    assert calls[0][0].endswith("/models/gemini-3.8-flash:generateContent")
+    assert calls[1][0].endswith("/models/gemini-3.6-flash:generateContent")
+    assert agent.model == "gemini-3.8-flash"  # así queda en `usage`
+
+    monkeypatch.setenv("GEMINI_AGENT_MODEL", "gemini-modelo-inventado")
+    with pytest.raises(ValueError, match="sin precio"):
+        GeminiProvider(_gemini([], calls))
 
 
 def test_haiku_usa_flash_lite_y_un_bloqueo_es_rechazo() -> None:

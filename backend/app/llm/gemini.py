@@ -17,17 +17,15 @@ from typing import Any
 import httpx
 
 from app.llm.embedder import InputType
-from app.llm.pricing import cost_usd
+from app.llm.pricing import PRICES, cost_usd
 from app.llm.types import LLMResponse, TokenUsage, ToolCall, UsageRecorder
 
 API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
-# Modelo pedido por el agente -> modelo gratuito de Gemini que lo reemplaza.
-MODEL_MAP = {
-    "claude-sonnet-5-5": "gemini-3.6-flash",  # agente
-    "claude-opus-5-5": "gemini-3.6-flash",  # juez de evals
-    "claude-haiku-5-5": "gemini-3.5-flash-lite",  # clasificador
-}
+# Modelos gratuitos por defecto; se cambian con GEMINI_AGENT_MODEL y GEMINI_CLASSIFIER_MODEL
+# (cada modelo tiene su propia cuota diaria en el nivel gratuito).
+DEFAULT_AGENT_MODEL = "gemini-3.6-flash"
+DEFAULT_CLASSIFIER_MODEL = "gemini-3.5-flash-lite"
 EMBEDDING_MODEL = "gemini-embedding-2"
 EMBEDDING_BATCH = 100  # pedidos por llamada a batchEmbedContents
 # gemini-embedding-2 no acepta task_type: la tarea va como prefijo del texto.
@@ -155,17 +153,33 @@ def _retry_delay(error: dict[str, Any]) -> float | None:
     return None
 
 
-def gemini_model(model: str) -> str:
-    if model in MODEL_MAP:
-        return MODEL_MAP[model]
-    if model.startswith("gemini-"):
-        return model
-    raise ValueError(f"Modelo sin equivalente en Gemini: {model}")
+def models_from_env() -> dict[str, str]:
+    """Modelo pedido por el agente -> modelo de Gemini que lo reemplaza."""
+    agent = os.environ.get("GEMINI_AGENT_MODEL") or DEFAULT_AGENT_MODEL
+    classifier = os.environ.get("GEMINI_CLASSIFIER_MODEL") or DEFAULT_CLASSIFIER_MODEL
+    return {
+        "claude-sonnet-5-5": agent,  # agente
+        "claude-opus-5-5": agent,  # juez de evals con Claude (con Gemini, el runner fija otro)
+        "claude-haiku-5-5": classifier,  # clasificador
+    }
 
 
 class GeminiProvider:
-    def __init__(self, transport: GeminiTransport | None = None) -> None:
+    def __init__(
+        self, transport: GeminiTransport | None = None, models: dict[str, str] | None = None
+    ) -> None:
         self._transport = transport or GeminiTransport()
+        self._models = models if models is not None else models_from_env()
+        unpriced = sorted({m for m in self._models.values() if m not in PRICES})
+        if unpriced:  # sin precio no se registra el costo: mejor fallar al arrancar
+            raise ValueError(f"Modelo de Gemini sin precio en pricing.py: {', '.join(unpriced)}")
+
+    def _target(self, model: str) -> str:
+        if model in self._models:
+            return self._models[model]
+        if model.startswith("gemini-"):
+            return model
+        raise ValueError(f"Modelo sin equivalente en Gemini: {model}")
 
     def create(
         self,
@@ -176,7 +190,7 @@ class GeminiProvider:
         system: str | None = None,
         **options: Any,
     ) -> LLMResponse:
-        target = gemini_model(model)
+        target = self._target(model)
         body = _request(messages, max_tokens, system, options)
         data = self._transport.post(target, "generateContent", body)
         return _response(target, data)
