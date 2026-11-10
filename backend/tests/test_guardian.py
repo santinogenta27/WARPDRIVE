@@ -11,9 +11,10 @@ import psycopg
 import pytest
 from simulated.stack import SimulatedStack, build_simulated_stack
 
+from app.agent.loop import DUPLICATE_APPROVAL_MESSAGE
 from app.db.connection import tenant_scope
 from app.policy.approvals import ApprovalError, decide
-from app.policy.guardian import ContactContext, Guardian
+from app.policy.guardian import ALREADY_PENDING_REASON, ContactContext, Guardian
 from app.tools.runtime import ToolRuntime, UpstreamResult
 
 
@@ -90,8 +91,8 @@ def test_ninguna_accion_de_riesgo_alto_pasa_sin_aprobacion(
         decision = _execute(
             stack, spy, "martin", "iniciar_reembolso", {"order_id": "1005", "amount": amount}
         )
-        assert decision.status == "approval_required"
-        assert decision.approval_id is not None
+        # La primera crea la aprobación; las siguientes, del mismo pedido, no crean otra.
+        assert decision.status == ("approval_required" if amount == 1 else "denied")
     assert spy.writes == []
 
 
@@ -162,3 +163,61 @@ def test_el_agente_pide_aprobacion_para_un_reembolso(stack: SimulatedStack) -> N
             (result.approval_id,),
         ).fetchone()
     assert row == ("pending", "waiting_approval")
+
+
+def _pending_count(stack: SimulatedStack) -> int:
+    with tenant_scope(stack.conn, stack.seed.tenant_id):
+        row = stack.conn.execute(
+            "select count(*) from approvals where status = 'pending'"
+        ).fetchone()
+    assert row is not None
+    return int(row[0])
+
+
+def test_no_hay_dos_reembolsos_pendientes_para_el_mismo_pedido(
+    stack: SimulatedStack, spy: SpyRuntime
+) -> None:
+    """Etapa 0 del hito 6: el mismo pedido no junta dos aprobaciones pendientes, ni desde el
+    mismo caso (otro monto) ni desde otra conversación del mismo cliente."""
+    guardian = Guardian(stack.conn, spy)
+    case_id = _case(stack, "martin")
+    contact = _contact(stack, "martin")
+
+    def refund(case: uuid.UUID, amount: int):  # type: ignore[no-untyped-def]
+        return guardian.execute(
+            tenant_id=stack.seed.tenant_id,
+            case_id=case,
+            contact=contact,
+            tool_name="iniciar_reembolso",
+            tool_input={"order_id": "1005", "amount": amount},
+            allowed=ALL_TOOLS,
+        )
+
+    first = refund(case_id, 35000)
+    same_case = refund(case_id, 20000)  # el mismo caso: sigue siendo la misma aprobación
+    assert first.status == same_case.status == "approval_required"
+    assert same_case.approval_id == first.approval_id
+
+    other_case = refund(_case(stack, "martin"), 35000)
+    assert other_case.status == "denied" and other_case.reason == ALREADY_PENDING_REASON
+    assert other_case.approval_id is None
+    assert _pending_count(stack) == 1 and spy.writes == []
+
+    # Decidida la primera, el pedido puede volver a pedirse.
+    assert first.approval_id is not None
+    decide(stack.conn, guardian, stack.seed.tenant_id, first.approval_id, approve=False)
+    again = refund(_case(stack, "martin"), 35000)
+    assert again.status == "approval_required" and again.approval_id != first.approval_id
+
+
+def test_el_agente_avisa_que_el_reembolso_ya_esta_en_revision(stack: SimulatedStack) -> None:
+    first = stack.send("martin", "Quiero el reembolso del pedido 1005")
+    assert first.action == "pedir_aprobacion"
+    # El mismo cliente, desde otra conversación (otra sesión del chat web), ya verificado.
+    stack.add_contact("otra_sesion")
+    stack.send("otra_sesion", "Quiero el reembolso del pedido 1005")
+    stack.send("otra_sesion", "martin@example.com")
+    repeated = stack.send("otra_sesion", stack.last_code())
+    assert repeated.action == "responder" and repeated.approval_id is None
+    assert DUPLICATE_APPROVAL_MESSAGE in repeated.message
+    assert _pending_count(stack) == 1

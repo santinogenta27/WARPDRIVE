@@ -26,7 +26,16 @@ from app.tools.runtime import ToolRuntime, UpstreamResult, idempotency_key
 DecisionStatus = Literal["executed", "denied", "approval_required", "failed"]
 NOT_FOUND_FOR_CONTACT = "No hay un recurso con ese identificador entre los del contacto."
 UNVERIFIED_REASON = "El contacto no está verificado."  # el agente pide la verificación
+ALREADY_PENDING_REASON = "Ya hay una solicitud pendiente de aprobación para el mismo recurso."
 _HIDDEN_FIELDS = {"customer_phone"}  # el modelo no necesita el teléfono en claro
+
+
+def _resource_key(manifest: dict[str, Any], tool_input: dict[str, Any]) -> str | None:
+    """Recurso sobre el que actúa la herramienta: los campos de la clave de idempotencia del
+    manifiesto, sin el caso (`"case_id + order_id"` -> `"order_id=1005"`)."""
+    names = [part.strip() for part in str(manifest.get("idempotency_key") or "").split("+")]
+    fields = [n for n in names if n and n != "case_id" and n in tool_input]
+    return "&".join(f"{n}={tool_input[n]}" for n in fields) if fields else None
 
 
 @dataclass(frozen=True)
@@ -215,7 +224,17 @@ class Guardian:
         )
         if not needs_approval:
             return None
-        approval_id = self._request_approval(tenant_id, case_id, manifest["name"], tool_input)
+        approval_id = self._request_approval(tenant_id, case_id, manifest, tool_input)
+        if approval_id is None:
+            return GuardDecision(
+                "denied",
+                {
+                    "status": "already_pending",
+                    "mensaje": "Ya hay una solicitud igual en revisión. No se creó otra.",
+                },
+                reason=ALREADY_PENDING_REASON,
+                resources=resources,
+            )
         return GuardDecision(
             "approval_required",
             {
@@ -229,20 +248,43 @@ class Guardian:
         )
 
     def _request_approval(
-        self, tenant_id: uuid.UUID, case_id: uuid.UUID, tool_name: str, params: dict[str, Any]
-    ) -> uuid.UUID:
-        """Crea la aprobación pendiente (o reusa la idéntica ya pendiente) y pausa el caso."""
+        self,
+        tenant_id: uuid.UUID,
+        case_id: uuid.UUID,
+        manifest: dict[str, Any],
+        params: dict[str, Any],
+    ) -> uuid.UUID | None:
+        """Crea la aprobación pendiente y pausa el caso. Una sola pendiente por recurso (el
+        pedido): si ya hay una en este caso, se reusa; si está en otro caso, devuelve None y no
+        crea nada. Sin clave de recurso, se reusa la idéntica del mismo caso."""
+        tool_name = manifest["name"]
+        key = _resource_key(manifest, params)
         with tenant_scope(self._conn, tenant_id):
-            row = self._conn.execute(
-                "select a.id from approvals a join tools t on t.id = a.tool_id"
-                " where a.case_id = %s and t.name = %s and a.params = %s and a.status = 'pending'",
-                (case_id, tool_name, Jsonb(params)),
-            ).fetchone()
+            if key is not None:
+                # Dos conversaciones a la vez por el mismo pedido: de a una (y el índice único
+                # parcial de la migración 0014 lo garantiza en la base).
+                self._conn.execute(
+                    "select pg_advisory_xact_lock(hashtext(%s))",
+                    (f"{tenant_id}:{tool_name}:{key}",),
+                )
+                row = self._conn.execute(
+                    "select a.id, a.case_id from approvals a join tools t on t.id = a.tool_id"
+                    " where t.name = %s and a.resource_key = %s and a.status = 'pending'",
+                    (tool_name, key),
+                ).fetchone()
+                if row is not None and row[1] != case_id:
+                    return None
+            else:
+                row = self._conn.execute(
+                    "select a.id from approvals a join tools t on t.id = a.tool_id where"
+                    " a.case_id = %s and t.name = %s and a.params = %s and a.status = 'pending'",
+                    (case_id, tool_name, Jsonb(params)),
+                ).fetchone()
             if row is None:
                 row = self._conn.execute(
-                    "insert into approvals (tenant_id, case_id, tool_id, params)"
-                    " select %s, %s, id, %s from tools where name = %s returning id",
-                    (tenant_id, case_id, Jsonb(params), tool_name),
+                    "insert into approvals (tenant_id, case_id, tool_id, params, resource_key)"
+                    " select %s, %s, id, %s, %s from tools where name = %s returning id",
+                    (tenant_id, case_id, Jsonb(params), key, tool_name),
                 ).fetchone()
             self._conn.execute(
                 "update cases set status = 'waiting_approval', updated_at = now() where id = %s",

@@ -29,7 +29,13 @@ from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
 from app.mailer import ConsoleMailer, Email, Mailer
-from app.policy.guardian import UNVERIFIED_REASON, ContactContext, GuardDecision, Guardian
+from app.policy.guardian import (
+    ALREADY_PENDING_REASON,
+    UNVERIFIED_REASON,
+    ContactContext,
+    GuardDecision,
+    Guardian,
+)
 from app.rag.search import SearchResult, hybrid_search
 
 AGENT_MODEL = "claude-sonnet-5-5"
@@ -44,6 +50,11 @@ VERIFICATION_MESSAGE = (
 APPROVAL_PENDING_MESSAGE = (
     "Tu pedido quedó registrado y en revisión: una persona del equipo lo tiene que aprobar. "
     "Te avisamos por este mismo chat apenas esté."
+)
+# El mismo pedido ya tiene una solicitud pendiente desde otra conversación.
+DUPLICATE_APPROVAL_MESSAGE = (
+    "Ya tenemos una solicitud en revisión para ese pedido, así que no hace falta pedirla de "
+    "nuevo. Una persona del equipo la está revisando y te avisamos apenas esté."
 )
 ESCALATION_MESSAGE = (
     "Te paso con una persona del equipo, que te va a responder por este mismo chat."
@@ -527,6 +538,20 @@ class Agent:
                         return self._finish(
                             turn, "responder", VERIFICATION_MESSAGE, verification=True
                         )
+                    if decision.reason == ALREADY_PENDING_REASON:
+                        # El mismo pedido ya espera una aprobación en otra conversación: no se
+                        # crea otra y se avisa con un mensaje fijo.
+                        self._audit(
+                            turn,
+                            "tool_call",
+                            {
+                                "tool": call.name,
+                                "input": call.input,
+                                "status": decision.status,
+                                "reason": decision.reason,
+                            },
+                        )
+                        return self._finish(turn, "responder", DUPLICATE_APPROVAL_MESSAGE)
                     self._audit(
                         turn,
                         "tool_call",
