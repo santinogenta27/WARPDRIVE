@@ -7,7 +7,7 @@ from typing import Any
 from app.rag.search import SearchResult
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
-SYSTEM_PROMPT_VERSION = "system_v1"
+SYSTEM_PROMPT_VERSION = "system_v2"  # v2: cuándo derivar y cuándo explicar (docs/calidad.md)
 
 TONES = {
     "rioplatense": 'Hablá en español rioplatense con voseo ("¿Me pasás el número de pedido?").',

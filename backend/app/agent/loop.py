@@ -453,6 +453,7 @@ class Agent:
             documents,
             evidence,
             tool_backed=bool(turn.decisions),
+            tool_names={t.name for t in turn.tool_calls},
         )
 
     def _final_action(self, turn: _Turn, name: str, data: dict[str, Any]) -> AgentResult:

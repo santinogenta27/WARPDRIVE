@@ -99,3 +99,48 @@ def test_reglas_del_control() -> None:
         "¿Me pasás el número de pedido?", [], False, docs, ["hola"], False
     )
     assert not_factual.ok
+
+
+def test_una_hora_en_punto_no_es_un_numero_inventado() -> None:
+    """ "20:00" o "20 hs" dicen lo mismo que "20 horas" del documento (docs/calidad.md)."""
+    docs = {"horarios": "De lunes a sábado de 10 a 20 horas."}
+    for message in ("Los sábados cerramos a las 20:00.", "Abrimos de 10:00 a 20:00 hs."):
+        assert check_grounding(message, ["horarios"], True, docs, ["a q hora"], False).ok
+    late = check_grounding("Cerramos a las 21:00.", ["horarios"], True, docs, ["hora"], False)
+    assert not late.ok  # una hora que no está en el documento sigue siendo inventada
+    minutes = check_grounding("Abrimos 10:30.", ["horarios"], True, docs, ["hora"], False)
+    assert not minutes.ok
+
+
+def test_citar_la_herramienta_que_se_ejecuto_no_es_una_fuente_inventada() -> None:
+    docs = {"envios": "Despachamos en 48 horas hábiles."}
+    verdict = check_grounding(
+        "Tu pedido ya fue despachado.",
+        ["consultar_pedido", "envios"],
+        True,
+        docs,
+        ['{"status": "shipped"}'],
+        True,
+        tool_names={"consultar_pedido"},
+    )
+    assert verdict.ok
+    invented = check_grounding(
+        "Tu pedido ya fue despachado.",
+        ["politica_secreta"],
+        True,
+        docs,
+        [],
+        True,
+        tool_names={"consultar_pedido"},
+    )
+    assert not invented.ok
+
+
+def test_el_prompt_dice_cuando_derivar_y_cuando_explicar() -> None:
+    from app.agent import prompt
+
+    text = prompt.system_prompt("Acme Store", "rioplatense", "nombre: x")
+    assert prompt.SYSTEM_PROMPT_VERSION == "system_v2"
+    assert "Derivá solo si" in text
+    assert "no derives por eso" in text  # un "no se puede" se explica, no se deriva
+    assert "Nunca inventes" in text
