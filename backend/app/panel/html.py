@@ -2,6 +2,7 @@
 (decisión 022). Todo texto que viene de la base o del cliente pasa por `esc`."""
 
 import html
+from datetime import datetime, timedelta, timezone
 
 CSS = """
 :root{--bg:#f3f4f7;--surface:#fff;--ink:#14171c;--muted:#667085;--line:#e4e7ec;
@@ -65,6 +66,16 @@ NAV = [("casos", "Casos"), ("aprobaciones", "Aprobaciones"), ("reporte", "Report
 
 def esc(value: object) -> str:
     return html.escape("" if value is None else str(value))
+
+
+# Hora de Buenos Aires: Argentina no tiene horario de verano. Con un desplazamiento fijo no hace
+# falta la base de zonas horarias (en Windows `zoneinfo` necesita el paquete tzdata).
+ARGENTINA = timezone(timedelta(hours=-3))
+
+
+def local_time(value: datetime | str, fmt: str = "%d/%m %H:%M") -> str:
+    moment = datetime.fromisoformat(value) if isinstance(value, str) else value
+    return moment.astimezone(ARGENTINA).strftime(fmt)
 
 
 def page(title: str, body: str, *, active: str = "", logged_in: bool = True) -> str:

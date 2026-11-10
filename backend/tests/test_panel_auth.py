@@ -1,10 +1,18 @@
 """Login del panel (decisión 022): firma de la sesión, vencimiento y configuración desde .env."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from app.panel import auth
+from app.panel.html import local_time
+
+
+def test_las_horas_del_panel_se_muestran_en_hora_argentina() -> None:
+    """La base guarda en UTC; el equipo de Acme lee la hora de Buenos Aires (UTC-3)."""
+    assert local_time(datetime(2026, 11, 9, 21, 49, tzinfo=UTC)) == "09/11 18:49"
+    assert local_time("2026-11-10T02:05:30+00:00", "%d/%m %H:%M:%S") == "09/11 23:05:30"
 
 
 def test_el_login_lee_la_configuracion_del_env_aunque_no_este_en_el_entorno(

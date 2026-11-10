@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from app.audit import log as audit_log
 from app.db.connection import connect, tenant_scope
 from app.panel import auth
-from app.panel.html import esc, page, status_badge
+from app.panel.html import esc, local_time, page, status_badge
 from app.panel.notify import notify_customer
 from app.policy.approvals import ApprovalError, ApprovalOutcome, decide
 from app.policy.guardian import Guardian
@@ -204,7 +204,7 @@ def _approval_cards(rows: list[tuple[Any, ...]], csrf: str, *, back: str) -> str
 <span class="badge waiting_approval">Pendiente</span> <b class="mono">{esc(tool)}</b>
 <div style="margin-top:6px">{_params(params)}</div>
 <div class="muted small" style="margin-top:6px">“{esc(first_message or "")}” ·
-<a href="/panel/casos/{case_id}">ver caso</a> · {created:%d/%m %H:%M}</div></div>
+<a href="/panel/casos/{case_id}">ver caso</a> · {local_time(created)}</div></div>
 <form method="post" action="/panel/aprobaciones/{approval_id}" class="row">
 <input type="hidden" name="csrf" value="{csrf}"><input type="hidden" name="volver" value="{back}">
 <button class="danger" name="decision" value="rechazar">Rechazar</button>
@@ -253,7 +253,7 @@ def approvals_page(request: Request, deps: Deps) -> Response:
             "resolved" if status == "approved" else "escalated"
         }">{"Aprobado" if status == "approved" else "Rechazado"}</span>
 <span class="mono">{esc(tool)}</span><span class="grow">{_params(params)}</span>
-<span class="muted small">{esc(email or "")} · {decided:%d/%m %H:%M}</span>
+<span class="muted small">{esc(email or "")} · {local_time(decided)}</span>
 <a href="/panel/casos/{case_id}">ver caso</a></div>"""
         for tool, params, status, decided, case_id, email in decided
         if decided is not None
@@ -384,7 +384,7 @@ color:inherit"><div class="grow"><div class="row" style="gap:8px">{status_badge(
 <span class="muted small">· {esc(CHANNELS.get(channel or "", "Canal"))}
 {" · verificado" if verified else ""}</span></div>
 <div class="ellipsis" style="margin-top:6px">{esc(preview or "(sin texto)")}</div></div>
-<div class="muted small" style="text-align:right">{updated:%d/%m %H:%M}<br>{total} mensajes
+<div class="muted small" style="text-align:right">{local_time(updated)}<br>{total} mensajes
 </div></a>"""
             for case_id, status, updated, type_name, preview, total, channel, verified in rows
         )
@@ -401,7 +401,14 @@ ACTIONS = {
     "responder": "Respondió",
     "ejecutar": "Actuó en el sistema y respondió",
     "pedir_aprobacion": "Pidió aprobación a una persona",
-    "derivar": "Derivó a una persona",
+    "derivar": "Le avisó al cliente que lo atiende una persona",
+}
+VERIFICATION = {
+    "verification_code_sent": "Pidió el email de la compra y envió un código",
+    "verified": "Código correcto: identidad verificada",
+    "wrong": "Código incorrecto",
+    "locked": "Demasiados intentos: verificación bloqueada",
+    "expired": "Código vencido",
 }
 TOOL_STATUS = {
     "executed": "ejecutada",
@@ -454,7 +461,9 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
         decision = "Aprobó" if p.get("decision") == "aprobar" else "Rechazó"
         return f"{decision} una persona del equipo", f"“{esc(p.get('text'))}”"
     if kind.startswith("verification"):
-        return "Verificación de identidad", esc(json.dumps(p, ensure_ascii=False))
+        return "Verificación de identidad", VERIFICATION.get(
+            str(p.get("result") or kind), esc(json.dumps(p, ensure_ascii=False))
+        )
     if kind.endswith("_sent"):
         return "Envió la respuesta", esc(
             CHANNELS.get(str(p.get("channel")), p.get("channel") or "")
@@ -497,7 +506,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     chat = (
         "".join(
             f'<div class="msg {esc(role)}"><div class="who">{ROLES.get(role, role)} · '
-            f"{at:%H:%M}</div>{esc(text)}</div>"
+            f"{local_time(at, '%H:%M')}</div>{esc(text)}</div>"
             for role, text, at in messages
         )
         or '<p class="muted">Sin mensajes.</p>'
@@ -523,7 +532,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     calls = sum(1 for e in events if e.kind == "model_call")
     steps = "".join(
         f"<li><b>{esc(title)}</b><span class=small>{detail}</span>"
-        f'<div class="muted small">#{e.seq} · {e.created_at[11:19]}</div></li>'
+        f'<div class="muted small">#{e.seq} · {local_time(e.created_at, "%H:%M:%S")}</div></li>'
         for e in events
         for title, detail in [_describe(e.kind, e.payload)]
     )
@@ -536,10 +545,11 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     body = f"""<p><a href="/panel/casos">← Casos</a></p>
 <div class="row"><h1 class="grow">Caso {esc(type_name or "sin clasificar")}</h1>
 {status_badge(status)}</div>
-<p class="lead mono">{case_id} · abierto el {created:%d/%m/%Y %H:%M}</p>
+<p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
 {escalated}{approvals}
 <div class="kpis"><div class="kpi"><div class="n">USD {cost:.4f}</div><div class="muted">Costo
-del modelo</div></div><div class="kpi"><div class="n">{calls}</div><div class="muted">llamadas al
+del modelo{" (modelo gratuito)" if calls and not cost else ""}</div></div>
+<div class="kpi"><div class="n">{calls}</div><div class="muted">llamadas al
 modelo · {tokens} tokens</div></div><div class="kpi"><div class="n">{len(events)}</div>
 <div class="muted">pasos auditados</div></div></div>
 <div class="card"><h2 style="margin-top:0">Conversación</h2><div class="msgs">{chat}</div>
@@ -659,7 +669,7 @@ def _report_body(report: dict[str, Any], finished: Any) -> str:
         for f in adversarial.get("fallas") or []
     )
     gaps_html = "".join(f"<li>{g}</li>" for g in gaps) or "<li>Nada pendiente.</li>"
-    when = f" · {finished:%d/%m/%Y}" if finished else ""
+    when = f" · {local_time(finished, '%d/%m/%Y')}" if finished else ""
     return f"""<h1>Reporte de preparación</h1>
 <p class="lead">Qué parte de la atención de Acme Store resolvería el asistente por su cuenta,
 medido con su propio historial{when}.</p>
