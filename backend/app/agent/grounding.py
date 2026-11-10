@@ -13,6 +13,16 @@ import re
 from dataclasses import dataclass
 
 _NUMBER = re.compile(r"\d+")
+# Montos con separador de miles ("$35.000", "1.500.000"): son el número entero (35000), como lo
+# devuelve una herramienta. Sin esto, "35.000" se leía como "35" y "000" y no tenía respaldo.
+_THOUSANDS = re.compile(r"\b\d{1,3}(?:\.\d{3})+\b(?!,\d)")
+
+
+def _numbers(text: str) -> list[str]:
+    joined = _THOUSANDS.sub(lambda m: m.group(0).replace(".", ""), text)
+    return _NUMBER.findall(joined)
+
+
 # "20:00" dice la hora 20, como "20 horas" en un documento: los minutos en punto no son un dato.
 _ON_THE_HOUR = re.compile(r"\b(\d{1,2}):00\b")
 
@@ -44,8 +54,9 @@ def check_grounding(
         return GroundingVerdict(False, f"cita fuentes que no estaban en los documentos: {invalid}")
     if factual and not sources and not tool_backed:
         return GroundingVerdict(False, "afirmación factual sin fuente ni herramienta")
-    known = set(_NUMBER.findall(" ".join([*documents.values(), *evidence])))
-    numbers = _NUMBER.findall(_ON_THE_HOUR.sub(r"\1", message))
+    sources_text = " ".join([*documents.values(), *evidence])
+    known = set(_NUMBER.findall(sources_text)) | set(_numbers(sources_text))
+    numbers = _numbers(_ON_THE_HOUR.sub(r"\1", message))
     unsupported = sorted({n for n in numbers if n not in known})
     if unsupported:
         return GroundingVerdict(False, f"datos sin respaldo en las fuentes: {unsupported}")

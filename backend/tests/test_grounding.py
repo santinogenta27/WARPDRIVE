@@ -147,6 +147,20 @@ def test_citar_la_herramienta_que_se_ejecuto_no_es_una_fuente_inventada() -> Non
     assert not invented.ok
 
 
+def test_los_montos_con_separador_de_miles_coinciden_con_la_herramienta() -> None:
+    """Groq escribió "ARS 35.000" y la herramienta dice 35000: el control lo rechazaba ("35")
+    y el reembolso terminaba derivado."""
+    evidence = ['{"total": 35000, "id": "1005"}']
+    ok = check_grounding(
+        "Iniciamos el reembolso de ARS 35.000 del pedido 1005.", [], True, {}, evidence, True
+    )
+    assert ok.ok, ok.reason
+    big = check_grounding("Son $1.500.000.", [], True, {}, ['{"total": 1500000}'], True)
+    assert big.ok, big.reason
+    invented = check_grounding("Te devolvemos $99.999.", [], True, {}, evidence, True)
+    assert not invented.ok
+
+
 def test_el_prompt_dice_cuando_derivar_y_cuando_explicar() -> None:
     from app.agent import prompt
 
