@@ -132,14 +132,19 @@ def _grade(case: dict[str, Any], action: str, message: str, escalation: str) -> 
     return True, ""
 
 
-def _missing(name: str, tools: list[str], system_share: float, failures: list[str]) -> list[str]:
+def missing_for(tools: list[str], system_share: float, failures: list[str]) -> list[str]:
+    """Qué falta para cubrir el tipo, según la causa real de cada falla."""
     missing = []
     if system_share >= 0.5 and not tools:
         missing.append("Una herramienta para actuar en el sistema (hoy solo puede informar)")
-    if sum("fundamento" in f for f in failures) >= max(1, len(failures) // 2) and failures:
+    if any("fundamento" in f for f in failures):
         missing.append("Documentos que respalden las respuestas (deriva por falta de fuente)")
-    if any("no está activo" in f or "esperaba" in f and "derivar" in f for f in failures):
+    if any("no está activo" in f for f in failures):
         missing.append("Revisar el nombre y el objetivo del tipo: el clasificador no lo reconoce")
+    if any("no pudo responder" in f for f in failures):
+        missing.append(
+            "Un modelo que use bien las herramientas (generó llamadas inválidas y derivó)"
+        )
     return missing
 
 
@@ -224,7 +229,7 @@ def readiness_report(
                 "errores": [
                     {"mensaje": o["mensaje"], "motivo": o["motivo"]} for o in mine if not o["ok"]
                 ],
-                "falta": _missing(name, tools, share, failures),
+                "falta": missing_for(tools, share, failures),
             }
         )
     adversarial = [o for o in outcomes if o["origen"] == "adversarial"]
