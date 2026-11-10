@@ -1,0 +1,927 @@
+[
+ {
+  "id": "acme-071",
+  "requester": {
+   "name": "Gonzalo Herrera",
+   "email": "gonzalo.herrera35@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "me mude, se puede mandar el 1731 a otra direccion?",
+    "created_at": "2026-08-18T14:52"
+   },
+   {
+    "author_type": "agent",
+    "body": "Hecho: el 1731 ahora va a San Martín 555, Córdoba. Todavía no se había despachado.",
+    "created_at": "2026-08-18T14:54"
+   },
+   {
+    "author_type": "end_user",
+    "body": "mil gracias",
+    "created_at": "2026-08-18T14:56"
+   }
+  ]
+ },
+ {
+  "id": "acme-072",
+  "requester": {
+   "name": "Julieta Suárez",
+   "email": "julieta.suarez43@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "a que hora abren?",
+    "created_at": "2026-08-19T19:04"
+   },
+   {
+    "author_type": "agent",
+    "body": "En Rosario estamos en Córdoba 1500, de lunes a sábado de 10 a 20.",
+    "created_at": "2026-08-19T19:06"
+   },
+   {
+    "author_type": "end_user",
+    "body": "gracias",
+    "created_at": "2026-08-19T19:08"
+   }
+  ]
+ },
+ {
+  "id": "acme-073",
+  "requester": {
+   "name": "Camila Suárez",
+   "email": "camila.suarez15@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "me mude, se puede mandar el 1585 a otra direccion?",
+    "created_at": "2026-08-19T09:36"
+   },
+   {
+    "author_type": "agent",
+    "body": "Listo Camila Suárez, actualicé la dirección del pedido 1585 a Belgrano 200, Mendoza.",
+    "created_at": "2026-08-19T09:38"
+   },
+   {
+    "author_type": "end_user",
+    "body": "buenisimo",
+    "created_at": "2026-08-19T09:40"
+   }
+  ]
+ },
+ {
+  "id": "acme-074",
+  "requester": {
+   "name": "Santiago Álvarez",
+   "email": "santiago.alvarez97@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "me pasan el seguimiento del pedido 1547?",
+    "created_at": "2026-08-19T11:37"
+   },
+   {
+    "author_type": "agent",
+    "body": "Ya lo revisé: el 1547 está en camino, la entrega estimada es el 17/11.",
+    "created_at": "2026-08-19T11:39"
+   },
+   {
+    "author_type": "end_user",
+    "body": "llega a la direccion de siempre?",
+    "created_at": "2026-08-19T11:41"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-19T11:43"
+   },
+   {
+    "author_type": "end_user",
+    "body": "perfecto",
+    "created_at": "2026-08-19T11:45"
+   }
+  ]
+ },
+ {
+  "id": "acme-075",
+  "requester": {
+   "name": "Mateo Sosa",
+   "email": "mateo.sosa12@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "quiero que me devuelvan la plata del pedido 1292, vino fallado",
+    "created_at": "2026-08-19T14:58"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Mateo Sosa, mi cel es +54 9 11 5655-6160",
+    "created_at": "2026-08-19T15:00"
+   },
+   {
+    "author_type": "agent",
+    "body": "Te inicié el reembolso del pedido 1292; una persona del equipo lo aprueba en 48 h.",
+    "created_at": "2026-08-19T15:02"
+   },
+   {
+    "author_type": "end_user",
+    "body": "les mando foto?",
+    "created_at": "2026-08-19T15:04"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-19T15:06"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok espero",
+    "created_at": "2026-08-19T15:08"
+   }
+  ]
+ },
+ {
+  "id": "acme-076",
+  "requester": {
+   "name": "Bruno Ruiz",
+   "email": "bruno.ruiz64@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "puedo pagar con mercado pago?",
+    "created_at": "2026-08-20T10:21"
+   },
+   {
+    "author_type": "agent",
+    "body": "Tenemos 3 y 6 cuotas sin interés con tarjetas bancarias, y 10% off pagando por transferencia.",
+    "created_at": "2026-08-20T10:23"
+   },
+   {
+    "author_type": "end_user",
+    "body": "con visa tambien?",
+    "created_at": "2026-08-20T10:25"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-20T10:27"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok",
+    "created_at": "2026-08-20T10:29"
+   }
+  ]
+ },
+ {
+  "id": "acme-077",
+  "requester": {
+   "name": "Mateo Acosta",
+   "email": "mateo.acosta57@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "no me llego la factura del pedido 1622",
+    "created_at": "2026-08-20T09:55"
+   },
+   {
+    "author_type": "agent",
+    "body": "La factura llega por email dentro de las 48 horas hábiles. Te la reenvío a mateo.acosta57@example.com.",
+    "created_at": "2026-08-20T09:57"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok",
+    "created_at": "2026-08-20T09:59"
+   }
+  ]
+ },
+ {
+  "id": "acme-078",
+  "requester": {
+   "name": "Tomás Ramírez",
+   "email": "tomas.ramirez49@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "me llego roto el 1846, quiero el reembolso",
+    "created_at": "2026-08-20T09:20"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Tomás Ramírez, mi cel es +54 9 11 5961-2221",
+    "created_at": "2026-08-20T09:22"
+   },
+   {
+    "author_type": "agent",
+    "body": "Ya cargué la devolución del 1846. El dinero vuelve en 5 a 10 días hábiles.",
+    "created_at": "2026-08-20T09:24"
+   },
+   {
+    "author_type": "end_user",
+    "body": "mi DNI es 32.567.536 por si lo necesitan",
+    "created_at": "2026-08-20T09:26"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-20T09:28"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok espero",
+    "created_at": "2026-08-20T09:30"
+   }
+  ]
+ },
+ {
+  "id": "acme-079",
+  "requester": {
+   "name": "Florencia Acosta",
+   "email": "florencia.acosta99@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "abren los domingos?",
+    "created_at": "2026-08-20T18:07"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Florencia Acosta, mi cel es +54 9 11 5754-8001",
+    "created_at": "2026-08-20T18:09"
+   },
+   {
+    "author_type": "agent",
+    "body": "Las sucursales abren de lunes a sábado de 10 a 20. Domingos y feriados, cerrado.",
+    "created_at": "2026-08-20T18:11"
+   },
+   {
+    "author_type": "end_user",
+    "body": "gracias",
+    "created_at": "2026-08-20T18:13"
+   }
+  ]
+ },
+ {
+  "id": "acme-080",
+  "requester": {
+   "name": "Juan Díaz",
+   "email": "juan.diaz78@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "necesito factura A, mi CUIT es 20-28063290-7",
+    "created_at": "2026-08-21T15:53"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Juan Díaz, mi cel es +54 9 11 5734-3742",
+    "created_at": "2026-08-21T15:55"
+   },
+   {
+    "author_type": "agent",
+    "body": "Para factura A hay que cargar el CUIT al comprar; si ya se emitió, lo revisa administración.",
+    "created_at": "2026-08-21T15:57"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok",
+    "created_at": "2026-08-21T15:59"
+   }
+  ]
+ },
+ {
+  "id": "acme-081",
+  "requester": {
+   "name": "Micaela López",
+   "email": "micaela.lopez49@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "necesito factura A, mi CUIT es 20-29729156-2",
+    "created_at": "2026-08-21T12:05"
+   },
+   {
+    "author_type": "agent",
+    "body": "Para factura A hay que cargar el CUIT al comprar; si ya se emitió, lo revisa administración.",
+    "created_at": "2026-08-21T12:07"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok",
+    "created_at": "2026-08-21T12:09"
+   }
+  ]
+ },
+ {
+  "id": "acme-082",
+  "requester": {
+   "name": "Facundo Flores",
+   "email": "facundo.flores61@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "quiero cancelar el pedido 1957",
+    "created_at": "2026-08-21T11:25"
+   },
+   {
+    "author_type": "agent",
+    "body": "Listo, el 1957 quedó cancelado y te devolvemos el dinero por el mismo medio.",
+    "created_at": "2026-08-21T11:27"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok gracias",
+    "created_at": "2026-08-21T11:29"
+   }
+  ]
+ },
+ {
+  "id": "acme-083",
+  "requester": {
+   "name": "Juan Fernández",
+   "email": "juan.fernandez21@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "como cancelo una compra? es el pedido 1233",
+    "created_at": "2026-08-21T13:37"
+   },
+   {
+    "author_type": "agent",
+    "body": "Listo, el 1233 quedó cancelado y te devolvemos el dinero por el mismo medio.",
+    "created_at": "2026-08-21T13:39"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok gracias",
+    "created_at": "2026-08-21T13:41"
+   }
+  ]
+ },
+ {
+  "id": "acme-084",
+  "requester": {
+   "name": "Micaela Medina",
+   "email": "micaela.medina77@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "quiero que el pedido 1350 vaya a San Martín 555, Córdoba",
+    "created_at": "2026-08-22T12:02"
+   },
+   {
+    "author_type": "agent",
+    "body": "Hecho: el 1350 ahora va a San Martín 555, Córdoba. Todavía no se había despachado.",
+    "created_at": "2026-08-22T12:04"
+   },
+   {
+    "author_type": "end_user",
+    "body": "la nueva es San Martín 555, Córdoba",
+    "created_at": "2026-08-22T12:06"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-22T12:08"
+   },
+   {
+    "author_type": "end_user",
+    "body": "buenisimo",
+    "created_at": "2026-08-22T12:10"
+   }
+  ]
+ },
+ {
+  "id": "acme-085",
+  "requester": {
+   "name": "Rocío Pérez",
+   "email": "rocio.perez39@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "a que hora abren?",
+    "created_at": "2026-08-22T13:25"
+   },
+   {
+    "author_type": "agent",
+    "body": "En Rosario estamos en Córdoba 1500, de lunes a sábado de 10 a 20.",
+    "created_at": "2026-08-22T13:27"
+   },
+   {
+    "author_type": "end_user",
+    "body": "gracias",
+    "created_at": "2026-08-22T13:29"
+   }
+  ]
+ },
+ {
+  "id": "acme-086",
+  "requester": {
+   "name": "Camila Acosta",
+   "email": "camila.acosta66@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "quiero que el pedido 1325 vaya a Av. Corrientes 1234, CABA",
+    "created_at": "2026-08-22T12:19"
+   },
+   {
+    "author_type": "agent",
+    "body": "Listo Camila Acosta, actualicé la dirección del pedido 1325 a Av. Corrientes 1234, CABA.",
+    "created_at": "2026-08-22T12:21"
+   },
+   {
+    "author_type": "end_user",
+    "body": "la nueva es Av. Corrientes 1234, CABA",
+    "created_at": "2026-08-22T12:23"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-22T12:25"
+   },
+   {
+    "author_type": "end_user",
+    "body": "mil gracias",
+    "created_at": "2026-08-22T12:27"
+   }
+  ]
+ },
+ {
+  "id": "acme-087",
+  "requester": {
+   "name": "Santiago Romero",
+   "email": "santiago.romero19@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "la remera me quedo chica, la puedo cambiar por un L?",
+    "created_at": "2026-08-22T13:53"
+   },
+   {
+    "author_type": "agent",
+    "body": "Claro, el primer cambio es gratis. Podés ir a una sucursal o lo retiramos por tu casa.",
+    "created_at": "2026-08-22T13:55"
+   },
+   {
+    "author_type": "end_user",
+    "body": "tiene que tener la etiqueta?",
+    "created_at": "2026-08-22T13:57"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-22T13:59"
+   },
+   {
+    "author_type": "end_user",
+    "body": "joya",
+    "created_at": "2026-08-22T14:01"
+   }
+  ]
+ },
+ {
+  "id": "acme-088",
+  "requester": {
+   "name": "Rocío Flores",
+   "email": "rocio.flores13@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "quiero que el pedido 1856 vaya a Av. Corrientes 1234, CABA",
+    "created_at": "2026-08-23T11:36"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Rocío Flores, mi cel es +54 9 11 5428-9335",
+    "created_at": "2026-08-23T11:38"
+   },
+   {
+    "author_type": "agent",
+    "body": "Listo Rocío Flores, actualicé la dirección del pedido 1856 a Av. Corrientes 1234, CABA.",
+    "created_at": "2026-08-23T11:40"
+   },
+   {
+    "author_type": "end_user",
+    "body": "buenisimo",
+    "created_at": "2026-08-23T11:42"
+   }
+  ]
+ },
+ {
+  "id": "acme-089",
+  "requester": {
+   "name": "Camila Flores",
+   "email": "camila.flores13@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "buenas! cuando me llega el pedido 1934",
+    "created_at": "2026-08-23T17:48"
+   },
+   {
+    "author_type": "agent",
+    "body": "Ya lo revisé: el 1934 está en camino, la entrega estimada es el 12/11.",
+    "created_at": "2026-08-23T17:50"
+   },
+   {
+    "author_type": "end_user",
+    "body": "me pasan el numero de seguimiento?",
+    "created_at": "2026-08-23T17:52"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-23T17:54"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok gracias!!",
+    "created_at": "2026-08-23T17:56"
+   }
+  ]
+ },
+ {
+  "id": "acme-090",
+  "requester": {
+   "name": "Facundo Álvarez",
+   "email": "facundo.alvarez53@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "la remera me quedo chica, la puedo cambiar por un L?",
+    "created_at": "2026-08-23T17:15"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, Facundo Álvarez: tenés 30 días para cambiarlo, sin uso y con etiqueta, en cualquier sucursal.",
+    "created_at": "2026-08-23T17:17"
+   },
+   {
+    "author_type": "end_user",
+    "body": "tiene que tener la etiqueta?",
+    "created_at": "2026-08-23T17:19"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-23T17:21"
+   },
+   {
+    "author_type": "end_user",
+    "body": "joya",
+    "created_at": "2026-08-23T17:23"
+   }
+  ]
+ },
+ {
+  "id": "acme-091",
+  "requester": {
+   "name": "Rocío Suárez",
+   "email": "rocio.suarez93@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "hace una semana compre y no me llego nada, pedido 1644",
+    "created_at": "2026-08-23T17:15"
+   },
+   {
+    "author_type": "agent",
+    "body": "Hola Rocío Suárez! El pedido 1644 fue despachado y llega el 13/11.",
+    "created_at": "2026-08-23T17:17"
+   },
+   {
+    "author_type": "end_user",
+    "body": "llega a la direccion de siempre?",
+    "created_at": "2026-08-23T17:19"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-23T17:21"
+   },
+   {
+    "author_type": "end_user",
+    "body": "genial gracias",
+    "created_at": "2026-08-23T17:23"
+   }
+  ]
+ },
+ {
+  "id": "acme-092",
+  "requester": {
+   "name": "Agustina Benítez",
+   "email": "agustina.benitez19@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "a que hora abren?",
+    "created_at": "2026-08-24T11:21"
+   },
+   {
+    "author_type": "agent",
+    "body": "Las sucursales abren de lunes a sábado de 10 a 20. Domingos y feriados, cerrado.",
+    "created_at": "2026-08-24T11:23"
+   },
+   {
+    "author_type": "end_user",
+    "body": "y los feriados?",
+    "created_at": "2026-08-24T11:25"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-24T11:27"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok genial",
+    "created_at": "2026-08-24T11:29"
+   }
+  ]
+ },
+ {
+  "id": "acme-093",
+  "requester": {
+   "name": "Tomás Flores",
+   "email": "tomas.flores63@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "quiero que me devuelvan la plata del pedido 1696, vino fallado",
+    "created_at": "2026-08-24T11:34"
+   },
+   {
+    "author_type": "agent",
+    "body": "Te inicié el reembolso del pedido 1696; una persona del equipo lo aprueba en 48 h.",
+    "created_at": "2026-08-24T11:36"
+   },
+   {
+    "author_type": "end_user",
+    "body": "les mando foto?",
+    "created_at": "2026-08-24T11:38"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-24T11:40"
+   },
+   {
+    "author_type": "end_user",
+    "body": "gracias",
+    "created_at": "2026-08-24T11:42"
+   }
+  ]
+ },
+ {
+  "id": "acme-094",
+  "requester": {
+   "name": "Mateo Benítez",
+   "email": "mateo.benitez33@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "pedi la devolucion del 1104 hace dias y nada",
+    "created_at": "2026-08-24T11:31"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Mateo Benítez, mi cel es +54 9 11 5345-7230",
+    "created_at": "2026-08-24T11:33"
+   },
+   {
+    "author_type": "agent",
+    "body": "Ya cargué la devolución del 1104. El dinero vuelve en 5 a 10 días hábiles.",
+    "created_at": "2026-08-24T11:35"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok espero",
+    "created_at": "2026-08-24T11:37"
+   }
+  ]
+ },
+ {
+  "id": "acme-095",
+  "requester": {
+   "name": "Facundo Acosta",
+   "email": "facundo.acosta60@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "hola, donde esta mi pedido 1790?",
+    "created_at": "2026-08-24T16:55"
+   },
+   {
+    "author_type": "agent",
+    "body": "Ya lo revisé: el 1790 está en camino, la entrega estimada es el 13/11.",
+    "created_at": "2026-08-24T16:57"
+   },
+   {
+    "author_type": "end_user",
+    "body": "llega a la direccion de siempre?",
+    "created_at": "2026-08-24T16:59"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-24T17:01"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok gracias!!",
+    "created_at": "2026-08-24T17:03"
+   }
+  ]
+ },
+ {
+  "id": "acme-096",
+  "requester": {
+   "name": "Julieta Martínez",
+   "email": "julieta.martinez72@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "tienen cuotas sin interes?",
+    "created_at": "2026-08-25T18:34"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Julieta Martínez, mi cel es +54 9 11 5650-4249",
+    "created_at": "2026-08-25T18:36"
+   },
+   {
+    "author_type": "agent",
+    "body": "Tenemos 3 y 6 cuotas sin interés con tarjetas bancarias, y 10% off pagando por transferencia.",
+    "created_at": "2026-08-25T18:38"
+   },
+   {
+    "author_type": "end_user",
+    "body": "con visa tambien?",
+    "created_at": "2026-08-25T18:40"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-25T18:42"
+   },
+   {
+    "author_type": "end_user",
+    "body": "ok",
+    "created_at": "2026-08-25T18:44"
+   }
+  ]
+ },
+ {
+  "id": "acme-097",
+  "requester": {
+   "name": "Facundo Herrera",
+   "email": "facundo.herrera3@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "como cancelo una compra? es el pedido 1374",
+    "created_at": "2026-08-25T19:13"
+   },
+   {
+    "author_type": "agent",
+    "body": "Listo, el 1374 quedó cancelado y te devolvemos el dinero por el mismo medio.",
+    "created_at": "2026-08-25T19:15"
+   },
+   {
+    "author_type": "end_user",
+    "body": "dale",
+    "created_at": "2026-08-25T19:17"
+   }
+  ]
+ },
+ {
+  "id": "acme-098",
+  "requester": {
+   "name": "Facundo Díaz",
+   "email": "facundo.diaz68@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "se puede cambiar de talle un jean?",
+    "created_at": "2026-08-25T11:41"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Facundo Díaz, mi cel es +54 9 11 5221-1094",
+    "created_at": "2026-08-25T11:43"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, Facundo Díaz: tenés 30 días para cambiarlo, sin uso y con etiqueta, en cualquier sucursal.",
+    "created_at": "2026-08-25T11:45"
+   },
+   {
+    "author_type": "end_user",
+    "body": "joya",
+    "created_at": "2026-08-25T11:47"
+   }
+  ]
+ },
+ {
+  "id": "acme-099",
+  "requester": {
+   "name": "Rocío Fernández",
+   "email": "rocio.fernandez93@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "hola, donde esta mi pedido 1392?",
+    "created_at": "2026-08-25T09:18"
+   },
+   {
+    "author_type": "end_user",
+    "body": "soy Rocío Fernández, mi cel es +54 9 11 5196-6239",
+    "created_at": "2026-08-25T09:20"
+   },
+   {
+    "author_type": "agent",
+    "body": "Ya lo revisé: el 1392 está en camino, la entrega estimada es el 22/11.",
+    "created_at": "2026-08-25T09:22"
+   },
+   {
+    "author_type": "end_user",
+    "body": "llega a la direccion de siempre?",
+    "created_at": "2026-08-25T09:24"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-25T09:26"
+   },
+   {
+    "author_type": "end_user",
+    "body": "genial gracias",
+    "created_at": "2026-08-25T09:28"
+   }
+  ]
+ },
+ {
+  "id": "acme-100",
+  "requester": {
+   "name": "Sofía Díaz",
+   "email": "sofia.diaz19@example.com"
+  },
+  "comments": [
+   {
+    "author_type": "end_user",
+    "body": "me mude, se puede mandar el 1966 a otra direccion?",
+    "created_at": "2026-08-26T12:26"
+   },
+   {
+    "author_type": "agent",
+    "body": "Hecho: el 1966 ahora va a Belgrano 200, Mendoza. Todavía no se había despachado.",
+    "created_at": "2026-08-26T12:28"
+   },
+   {
+    "author_type": "end_user",
+    "body": "la nueva es Belgrano 200, Mendoza",
+    "created_at": "2026-08-26T12:30"
+   },
+   {
+    "author_type": "agent",
+    "body": "Sí, te confirmo. Cualquier cosa escribime por acá.",
+    "created_at": "2026-08-26T12:32"
+   },
+   {
+    "author_type": "end_user",
+    "body": "mil gracias",
+    "created_at": "2026-08-26T12:34"
+   }
+  ]
+ }
+]
