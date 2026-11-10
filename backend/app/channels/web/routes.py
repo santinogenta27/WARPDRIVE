@@ -118,10 +118,10 @@ def _transaction() -> Iterator[psycopg.Connection]:
 
 @lru_cache(maxsize=1)
 def _production_deps() -> WebDeps:
-    from app.demo.acme import acme_sandbox_client, build_demo_agent
+    from app.demo.acme import build_demo_agent, shared_acme
 
     load_dotenv()
-    acme = acme_sandbox_client()  # la API de Acme simulada vive mientras corre la API
+    acme = shared_acme()  # la API de Acme simulada vive mientras corre la API (y la usa el panel)
     return WebDeps(
         connection=_transaction,
         agent=lambda conn: build_demo_agent(conn, acme),

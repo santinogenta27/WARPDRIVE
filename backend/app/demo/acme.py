@@ -4,6 +4,7 @@ import json
 import sys
 import uuid
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -117,6 +118,13 @@ def acme_sandbox_client() -> TestClient:
     from acme_api import create_app
 
     return TestClient(create_app())
+
+
+@lru_cache(maxsize=1)
+def shared_acme() -> TestClient:
+    """La API simulada de la demo que comparten el chat y el panel: un reembolso aprobado desde
+    el panel se ve después en el pedido que consulta el agente."""
+    return acme_sandbox_client()
 
 
 def build_demo_agent(conn: psycopg.Connection, acme: TestClient) -> "Agent":
