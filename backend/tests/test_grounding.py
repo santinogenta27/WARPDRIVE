@@ -124,14 +124,25 @@ def test_citar_la_herramienta_que_se_ejecuto_no_es_una_fuente_inventada() -> Non
         tool_names={"consultar_pedido"},
     )
     assert verdict.ok
-    invented = check_grounding(
-        "Tu pedido ya fue despachado.",
-        ["politica_secreta"],
+    # Con una herramienta detrás, una "fuente" que no es documento (el número de pedido, el
+    # nombre de la herramienta) no invalida la respuesta: los números se siguen controlando.
+    by_order = check_grounding(
+        "Tu pedido 1004 quedó en revisión.",
+        ["1004"],
         True,
         docs,
-        [],
+        ['{"id": "1004"}'],
         True,
-        tool_names={"consultar_pedido"},
+        tool_names={"cancelar_pedido"},
+    )
+    assert by_order.ok
+    invented_number = check_grounding(
+        "Te devolvemos $9.999.", ["1004"], True, docs, ['{"id": "1004"}'], True
+    )
+    assert not invented_number.ok
+    # Sin herramienta, una fuente que no está en los documentos sigue sin valer.
+    invented = check_grounding(
+        "Según la política, sí.", ["politica_secreta"], True, docs, [], False
     )
     assert not invented.ok
 

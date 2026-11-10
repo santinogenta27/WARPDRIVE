@@ -33,8 +33,12 @@ def check_grounding(
     tool_names: set[str] | frozenset[str] = frozenset(),
 ) -> GroundingVerdict:
     """`tool_names`: herramientas ejecutadas en el turno. Si el modelo cita una como fuente, no
-    es una fuente inventada: el dato sale de su resultado, que ya está en `evidence`."""
+    es una fuente inventada: el dato sale de su resultado, que ya está en `evidence`. Con una
+    herramienta detrás, cualquier "fuente" que no sea un documento (un número de pedido) se
+    ignora; los números de la respuesta se siguen controlando contra la evidencia."""
     sources = [s for s in sources if s not in tool_names]
+    if tool_backed:
+        sources = [s for s in sources if s in documents]
     invalid = [s for s in sources if s not in documents]
     if invalid:
         return GroundingVerdict(False, f"cita fuentes que no estaban en los documentos: {invalid}")
