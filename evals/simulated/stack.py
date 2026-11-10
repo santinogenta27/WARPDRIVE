@@ -24,10 +24,10 @@ from app.contacts import hash_address
 from app.db.connection import tenant_scope
 from app.demo.acme import AcmeSeed, seed_acme
 from app.llm.client import AnthropicProvider, LLMClient, LLMProvider, PostgresUsageRecorder
-from app.llm.errors import QuotaExhausted
-from app.llm.fallback import FallbackProvider
 from app.llm.embedder import VoyageEmbedder
+from app.llm.errors import QuotaExhausted
 from app.llm.factory import embedder_from_env, llm_backend, provider_from_env
+from app.llm.fallback import FallbackProvider
 from app.mailer import Email
 from app.policy.guardian import Guardian
 from app.tools.runtime import ToolRuntime
