@@ -21,6 +21,8 @@ from app.llm.pricing import PRICES
 from app.llm.types import LLMResponse, TokenUsage
 
 ENV_KEYS = (
+    "GROQ_MAX_WAIT",
+    "GROQ_MIN_TOKENS",
     "LLM_FALLBACK",
     "ANTHROPIC_API_KEY",
     "GEMINI_API_KEY",
@@ -264,6 +266,21 @@ def test_respeta_los_tokens_por_minuto_de_cada_modelo(monkeypatch: pytest.Monkey
     assert fake.sleeps == [7.5]
 
 
+def test_la_espera_maxima_se_configura_para_corridas_largas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """En una medición larga conviene esperar a que Groq libere cuota en lugar de cortar."""
+    monkeypatch.setenv("GROQ_MAX_WAIT", "600")
+    fake = FakeGroq(
+        httpx.Response(429, headers={"retry-after": "311"}, json={"error": {"message": "TPD"}}),
+        httpx.Response(200, json=completion({"content": "ok"})),
+    )
+    response = GroqProvider(transport=fake.transport()).create(
+        model="claude-sonnet-5-5", messages=[], max_tokens=10
+    )
+    assert response.text == "ok" and fake.sleeps == [311.0]
+
+
 def test_reintenta_una_salida_que_groq_no_pudo_interpretar() -> None:
     """gpt-oss a veces escribe el razonamiento en lugar de llamar a la herramienta (400
     output_parse_failed): se pide de nuevo."""
@@ -286,9 +303,12 @@ def test_reintenta_una_salida_que_groq_no_pudo_interpretar() -> None:
     assert response.text == "ok" and len(fake.requests) == 3
 
 
-def test_si_el_modelo_sigue_generando_mal_es_un_rechazo_y_el_agente_deriva() -> None:
+def test_si_el_modelo_sigue_generando_mal_es_un_rechazo_y_el_agente_deriva(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """Tras 3 salidas inválidas seguidas no se insiste: se devuelve un rechazo (stop_reason
-    refusal), que el agente convierte en derivación sin inventar nada."""
+    refusal), que el agente convierte en derivación sin inventar nada. El log dice qué generó
+    el modelo, para diagnosticarlo (docs/calidad.md)."""
     failed = {
         "error": {
             "message": "Tool call validation failed",
@@ -297,11 +317,14 @@ def test_si_el_modelo_sigue_generando_mal_es_un_rechazo_y_el_agente_deriva() -> 
         }
     }
     fake = FakeGroq(*(httpx.Response(400, json=failed) for _ in range(3)))
-    response = GroqProvider(transport=fake.transport()).create(
-        model="claude-sonnet-5-5", messages=[], max_tokens=10, tools=TOOLS
-    )
+    with caplog.at_level("WARNING", logger="app.llm.groq"):
+        response = GroqProvider(transport=fake.transport()).create(
+            model="claude-sonnet-5-5", messages=[], max_tokens=10, tools=TOOLS
+        )
     assert response.stop_reason == "refusal" and response.tool_calls == []
     assert len(fake.requests) == 3
+    logged = " ".join(r.getMessage() for r in caplog.records)
+    assert "tool_use_failed" in logged and '{"name": "json"}' in logged
 
 
 def test_reintenta_una_llamada_a_herramienta_mal_generada() -> None:

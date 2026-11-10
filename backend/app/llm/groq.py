@@ -84,7 +84,7 @@ class GroqTransport:
         *,
         min_tokens: int | None = None,
         max_retries: int = 6,
-        max_wait: float = 90.0,
+        max_wait: float | None = None,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -94,6 +94,8 @@ class GroqTransport:
             min_tokens = int(os.environ.get("GROQ_MIN_TOKENS", "4000"))
         self._min_tokens = min_tokens
         self._max_retries = max_retries
+        if max_wait is None:  # en una medición larga conviene esperar más que en el chat
+            max_wait = float(os.environ.get("GROQ_MAX_WAIT", "90"))
         self._max_wait = max_wait
         self._sleep = sleep
         self._clock = clock
@@ -122,7 +124,8 @@ class GroqTransport:
                 bad_generations += 1
                 if bad_generations >= MAX_BAD_GENERATIONS:
                     raise GroqGenerationFailed(
-                        f"{model} generó {bad_generations} salidas inválidas seguidas"
+                        f"{model} generó {bad_generations} salidas inválidas seguidas; la última"
+                        f" ({_generation_detail(response)})"
                     )
                 continue  # el modelo generó mal la llamada: se pide de nuevo
             if response.status_code not in RETRYABLE_STATUS:
@@ -163,6 +166,18 @@ class GroqTransport:
 
 
 GENERATION_ERRORS = {"tool_use_failed", "output_parse_failed"}
+
+
+def _generation_detail(response: httpx.Response) -> str:
+    """Código y salida que el modelo generó mal, para el log."""
+    try:
+        error = response.json().get("error") or {}
+    except ValueError:
+        return response.text[:400]
+    generated = error.get("failed_generation") or ""
+    if not isinstance(generated, str):
+        generated = json.dumps(generated, ensure_ascii=False)
+    return f"{error.get('code')}: {error.get('message', '')} | generó: {generated[:400]}"
 
 
 def _tool_use_failed(response: httpx.Response) -> bool:
