@@ -243,7 +243,7 @@ _RULES = [
     (r"\b(persona|humano|operador)\b", "derivar_humano"),
     (
         r"^\W*(hola+|buenas+|buen d[ií]a+|gracias|chau|como andas|jaja\w*)\W*$|sos un bot"
-        r"|q(ue)? pod[eé]s hacer|partido|peli\b|clima",
+        r"|q(ue)? pod[eé]s hacer|partido|peli\b|clima|nunca responden|la tarea",
         "conversacion_general",
     ),
     (r"cu[aá]nto tarda|env[ií]o gratis|gu[ií]a de talles", "consulta_general"),
