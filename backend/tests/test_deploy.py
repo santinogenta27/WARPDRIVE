@@ -10,7 +10,14 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 ROOT = Path(__file__).resolve().parents[2]
-SECRETS = {"DATABASE_URL", "GEMINI_API_KEY", "GROQ_API_KEY", "ENCRYPTION_KEY"}
+SECRETS = {
+    "DATABASE_URL",
+    "GEMINI_API_KEY",
+    "GROQ_API_KEY",
+    "ENCRYPTION_KEY",
+    "PANEL_EMAIL",  # login del panel de la demo (decisión 022)
+    "PANEL_PASSWORD",
+}
 
 
 def _service() -> dict[str, Any]:
@@ -47,6 +54,12 @@ def test_el_chat_usa_el_modelo_de_groq_que_mejor_resolvio_los_evals() -> None:
     assert env["LLM_PROVIDER"] == "groq"
     assert env["GROQ_AGENT_MODEL"] == env["GROQ_CLASSIFIER_MODEL"] == "openai/gpt-oss-20b"
     assert "GEMINI_API_KEY" in env  # embeddings
+
+
+def test_el_servicio_despliega_la_rama_con_el_panel() -> None:
+    """El panel vive en la misma API: el servicio gratis sirve el chat y el panel."""
+    assert _service()["branch"] == "hito-5"
+    assert TestClient(app).get("/panel/login").status_code == 200
 
 
 def test_la_demo_publica_tiene_limites_y_toma_la_ip_del_proxy() -> None:

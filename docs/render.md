@@ -31,11 +31,28 @@ Deja el chat de Acme Store en un link fijo del tipo `https://acme-chat-demo.onre
    - el estado **Live**.
 6. **Copiá el link.** Arriba, en la página del servicio, aparece la URL: `https://acme-chat-demo.onrender.com`, o con un sufijo si ese nombre ya estaba tomado. Ese es el link fijo de la demo.
 
+## Pasar al panel (Hito 5)
+
+El mismo servicio sirve el chat (`/`) y el panel de la empresa (`/panel`). No hace falta otro servicio ni otro plan. Si el servicio ya existe, hay que hacer dos cambios:
+
+1. **Cambiar la rama.** En el servicio → **Settings** → **Build & Deploy** → **Branch**, elegí `hito-5` → **Save Changes**. Si lo creaste como Blueprint, el `render.yaml` de `hito-5` ya dice `branch: hito-5`; en **Blueprints** → `acme-chat-demo` → **Settings**, cambiá también la rama del Blueprint a `hito-5`.
+2. **Agregar dos variables secretas.** En el servicio → **Environment** → **Add Environment Variable**:
+   - `PANEL_EMAIL`: el email con el que vas a entrar al panel. Por ejemplo, `demo@acme.example`.
+   - `PANEL_PASSWORD`: una clave larga, que no uses en otro lado.
+
+   Después, **Save Changes**. Render redespliega solo.
+
+La sesión del panel se firma con `ENCRYPTION_KEY`, que ya está cargada. Si querés una clave aparte, agregá `PANEL_SECRET`. Sin `PANEL_EMAIL` y `PANEL_PASSWORD`, el panel no deja entrar a nadie.
+
+El reporte de preparación se lee de la base, porque la corrida del Hito 4 quedó guardada en Neon. No hay que correr nada en Render.
+
+La API simulada de Acme vive en memoria. Cuando el servicio se duerme o se redespliega, los pedidos vuelven a su estado inicial; los casos, mensajes, aprobaciones y auditoría quedan en la base.
+
 ## Después
 
 - **Código de verificación:** el chat sigue sin enviar emails. El código aparece en **Logs** del servicio. Buscá `Mailer de consola`.
 - **El plan gratis se duerme** después de 15 minutos sin visitas. La primera visita después de eso tarda alrededor de un minuto en responder; las siguientes, lo normal.
-- **Cada push a `hito-3` despliega solo** (`autoDeploy`).
+- **Cada push a la rama del servicio despliega solo** (`autoDeploy`). Hoy la rama es `hito-5`.
 - **Cambiar los límites:** servicio → **Environment** → editá la variable → **Save Changes**. Se redespliega solo.
   - `WEB_CHAT_IP_DAILY_LIMIT`: mensajes por IP en 24 h. Por defecto, 30.
   - `WEB_CHAT_DAILY_LIMIT`: mensajes en total en 24 h. Por defecto, 300. Cuida la cuota diaria gratuita de Gemini.

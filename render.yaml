@@ -6,7 +6,7 @@ services:
     runtime: python
     plan: free
     region: virginia # Neon está en São Paulo; Render no tiene región en Sudamérica
-    branch: hito-3
+    branch: hito-5 # chat web + panel de la empresa en el mismo servicio (decisión 022)
     autoDeploy: true
     buildCommand: pip install -r backend/requirements.txt
     # Aplica las migraciones pendientes (idempotente) y arranca la API con el chat web.
@@ -26,6 +26,11 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: ENCRYPTION_KEY
+        sync: false
+      # Login del panel (/panel): un usuario de demo. La sesión se firma con ENCRYPTION_KEY.
+      - key: PANEL_EMAIL
+        sync: false
+      - key: PANEL_PASSWORD
         sync: false
       # El agente corre con Groq: gpt-oss-20b resolvió 10/10 casos de Acme (decisión 020).
       # Gemini hace los embeddings y queda de respaldo si Groq se queda sin cuota.
