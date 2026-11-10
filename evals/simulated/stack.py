@@ -127,10 +127,16 @@ def build_real_stack(conn: psycopg.Connection, cache_dir: Path) -> SimulatedStac
 
     from simulated.cache import CachingProvider
 
+    from app.llm.embedding_cache import CachingEmbedder
+    from app.llm.factory import embedding_backend
+
     os.environ["LLM_FALLBACK"] = "off"
     backend = llm_backend()
     recorder = PostgresUsageRecorder(conn)
-    embedder = embedder_from_env(recorder)
+    # Los mismos documentos y consultas en cada corrida: sin caché se agota la cuota diaria.
+    embedder = CachingEmbedder(
+        embedder_from_env(recorder), cache_dir / "embeddings", profile=str(embedding_backend())
+    )
     provider = CachingProvider(
         provider_from_env(), cache_dir / str(backend), profile=model_profile(backend)
     )
