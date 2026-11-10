@@ -53,6 +53,7 @@ class TurnTrace:
     rag_sources: list[str]
     tools: list[tuple[str, str]]  # (herramienta, estado)
     verification_requested: bool
+    tokens: int = 0  # de entrada y salida, sumados de los model_call del turno
 
 
 @dataclass
@@ -67,6 +68,7 @@ class ConversationResult:
     messages: list[str]
     classified: list[str | None]
     escalation_reasons: list[str]
+    tokens: int = 0
 
 
 @dataclass
@@ -79,6 +81,7 @@ class QualityReport:
     by_cause: dict[str, int]
     critical: list[str]
     results: list[ConversationResult] = field(default_factory=list)
+    tokens: int = 0
 
 
 # -- calificación ----------------------------------------------------------------------------
@@ -137,6 +140,7 @@ def grade_conversation(conversation: dict[str, Any], traces: list[TurnTrace]) ->
         messages=[t.message for t in traces],
         classified=[t.classified for t in traces],
         escalation_reasons=[t.escalation_reason for t in traces if t.escalation_reason],
+        tokens=sum(t.tokens for t in traces),
     )
 
 
@@ -195,6 +199,13 @@ def trace_turn(stack: SimulatedStack, result: AgentResult) -> TurnTrace:
             if e.kind == "tool_call"
         ],
         verification_requested=result.verification_requested,
+        tokens=sum(
+            int(e.payload.get("input_tokens", 0))
+            + int(e.payload.get("output_tokens", 0))
+            + int(e.payload.get("cache_read_input_tokens", 0))
+            for e in turn
+            if e.kind == "model_call"
+        ),
     )
 
 
@@ -238,6 +249,7 @@ def summarize(mode: str, results: list[ConversationResult]) -> QualityReport:
         by_cause=dict(Counter(r.cause for r in results if r.cause)),
         critical=[f"{r.id}: {c}" for r in results for c in r.critical],
         results=results,
+        tokens=sum(r.tokens for r in results),
     )
 
 
@@ -267,7 +279,7 @@ def run_quality(
 def _print(report: QualityReport) -> None:
     print(
         f"calidad ({report.mode}): {report.resolved}/{report.total} resueltas "
-        f"({report.resolution_rate:.0%})"
+        f"({report.resolution_rate:.0%}), {report.tokens} tokens"
     )
     for category, entry in sorted(report.by_category.items()):
         print(f"  {category:24} {entry['resueltas']}/{entry['total']}")

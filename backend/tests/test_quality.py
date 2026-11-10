@@ -181,3 +181,6 @@ def test_corre_conversaciones_de_varios_turnos_con_el_agente(conn: psycopg.Conne
     assert by_id["q19_abren_domingo"].action == "responder"
     assert report.total == 2 and 0 <= report.resolution_rate <= 1
     assert set(report.by_category) == {"consulta_general", "pide_humano"}
+    # Tokens por conversación (de la auditoría): para planificar con los límites gratuitos.
+    assert all(r.tokens > 0 for r in report.results)
+    assert report.tokens == sum(r.tokens for r in report.results)
