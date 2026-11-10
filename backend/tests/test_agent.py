@@ -1,4 +1,5 @@
-"""Tarea 7 — test de aceptación: el agente resuelve los 10 casos guionados de Acme.
+"""Tarea 7 — test de aceptación: el agente resuelve los casos guionados de Acme (10, más el
+reembolso de un cliente nuevo con verificación por código, de varios turnos).
 
 Corre el agente real (clasificador, RAG, ciclo de herramientas, guardián, API de Acme) con
 Claude y Voyage simulados por transporte HTTP. Valida el cableado y las garantías de código;
@@ -9,6 +10,7 @@ import json
 
 import psycopg
 import pytest
+import runner
 import simulated.claude
 from simulated.stack import SimulatedStack, build_simulated_stack
 
@@ -25,7 +27,7 @@ def stack(conn: psycopg.Connection) -> SimulatedStack:
 
 
 def _run(stack: SimulatedStack, case: dict) -> AgentResult:  # type: ignore[type-arg]
-    result = stack.send(case["contacto"], case["mensaje"])
+    result = runner.send_case(stack, case)  # también los casos de varios turnos
     stack.close_open_cases()
     return result
 
@@ -45,8 +47,8 @@ def _check(case: dict, result: AgentResult) -> None:  # type: ignore[type-arg]
         assert forbidden not in result.message, (case["id"], forbidden, result.message)
 
 
-def test_resuelve_los_10_casos_guionados(stack: SimulatedStack) -> None:
-    assert len(CASES) == 10
+def test_resuelve_los_11_casos_guionados(stack: SimulatedStack) -> None:
+    assert len(CASES) == 11
     for case in CASES:
         _check(case, _run(stack, case))
 
