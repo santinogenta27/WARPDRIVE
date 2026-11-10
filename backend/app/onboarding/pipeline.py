@@ -182,11 +182,14 @@ def run_pipeline(
 
 
 def main(argv: list[str] | None = None) -> int:
+    import os
+
     from app.config import REPO_ROOT, load_dotenv
     from app.db.connection import connect
     from app.db.migrate import migrate
+    from app.llm.cache import CachingProvider
     from app.llm.client import LLMClient, PostgresUsageRecorder
-    from app.llm.factory import embedder_from_env, provider_from_env
+    from app.llm.factory import embedder_from_env, llm_backend, provider_from_env
     from app.onboarding.model import LLMOnboardingModel
     from app.policy.guardian import Guardian
 
@@ -197,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--documents", type=Path, default=acme / "documents")
     parser.add_argument("--openapi", type=Path, default=REPO_ROOT / "mocks/acme-api/openapi.json")
     parser.add_argument("--report", type=Path, default=REPO_ROOT / "evals" / "last_onboarding.md")
+    parser.add_argument("--evals-per-type", type=int, default=3)
     args = parser.parse_args(argv)
 
     load_dotenv()
@@ -212,7 +216,15 @@ def main(argv: list[str] | None = None) -> int:
     assert row is not None
     tenant_id: uuid.UUID = row[0]
     recorder = PostgresUsageRecorder(conn)
-    llm = LLMClient(provider=provider_from_env(), recorder=recorder)
+    # Caché por entrada exacta: si la cuota del modelo gratuito corta una etapa, al retomarla
+    # las llamadas ya hechas no se vuelven a pagar.
+    provider = CachingProvider(
+        provider_from_env(),
+        REPO_ROOT / "evals" / ".cache" / "onboarding",
+        profile=f"{llm_backend()}:{os.environ.get('GROQ_AGENT_MODEL', '')}:"
+        f"{os.environ.get('GROQ_CLASSIFIER_MODEL', '')}",
+    )
+    llm = LLMClient(provider=provider, recorder=recorder)
     embedder = embedder_from_env(recorder)
     from app.agent.loop import Agent
 
@@ -230,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         agent_factory=agent_factory,
         openapi=json.loads(args.openapi.read_text(encoding="utf-8")),
         business={"Acme Store"},
+        evals_per_type=args.evals_per_type,
     )
     try:
         run_id, report = run_pipeline(
