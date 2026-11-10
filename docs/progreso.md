@@ -133,6 +133,7 @@ Tareas 14 a 19 hechas, con sus tests: `test_onboarding_*.py`. Guía en `docs/onb
   - Al 50%: los dos tipos de facturación. El reporte marca que falta una herramienta, porque la API no tiene operaciones de facturación.
   - Al 0%: reembolsos y cambio de dirección. En parte el agente explica en lugar de pedir aprobación. En parte los evals generados esperan "ejecutar" cuando el cliente todavía no dio la nueva dirección, o cuando el pedido simulado del sandbox ya figura despachado.
   - Hay que revisar a mano los evals generados antes de tomar ese porcentaje como definitivo.
+  - **Revisado en hito-5 (decisión 023):** con los evals corregidos, el resultado es **84%** (ver Hito 5).
 - Una primera corrida del reporte con `gpt-oss-120b` dio 54%: ese modelo a veces llama a una herramienta inexistente (`json`) y deriva.
 - Modelos: resúmenes y clasificador con `gpt-oss-120b`; evals, herramientas y agente del reporte con `gpt-oss-20b`. Las respuestas y los embeddings quedan en caché, así que retomar no vuelve a gastar cuota.
 
@@ -145,6 +146,33 @@ Tareas 14 a 19 hechas, con sus tests: `test_onboarding_*.py`. Guía en `docs/onb
 | 3. Hito 4 | `hito-4` | Tareas 14 a 19: de los archivos de Acme al reporte de preparación sin intervención. Corrida real con Groq: 7 de 8 tipos recuperados, 56% de resolución estimada | `test_onboarding_*.py` (incluido el test de hito) |
 
 **En Render:** agregar `GROQ_API_KEY` como variable secreta.
+
+## Hito 5 — Demo para vender (rama `hito-5`, sale de `hito-4`)
+
+Guion de la demo en `docs/demo.md`. Decisiones 022 (panel) y 023 (evals).
+
+- **Evals del Hito 4 corregidos** (decisión 023):
+  - Reembolsos: se esperaba `ejecutar` y lo correcto es pedir aprobación.
+  - Cambio de dirección: se esperaba actuar sin la dirección nueva.
+  - Sandbox: los pedidos pagados figuraban despachados.
+  - Producto fallado: no se aceptaba pedir la foto antes del reembolso.
+  - Lo que sí es error del agente o faltante real quedó en el reporte.
+  - Resolución estimada: **56% → 60% → 84%**, en ese orden:
+    - original;
+    - con los evals regenerados;
+    - con la regla fija para reembolsos.
+  - Adversariales: 3 de 4. Hay 2 evals por tipo, así que el número tiene margen amplio.
+- **Panel de la empresa en `/panel`**, servido por la misma API (decisión 022):
+  - Login de demo con `PANEL_EMAIL` y `PANEL_PASSWORD`: sesión firmada y token anti-CSRF.
+  - **Aprobaciones:** aprobar ejecuta por el guardián, y el cliente recibe el aviso en el chat.
+  - **Casos:** los derivados primero; se responde como persona del equipo.
+  - **Detalle:** la auditoría paso a paso con fuentes, herramientas, costo e integridad de la cadena.
+  - **Reporte de preparación:** tipos, volumen, porcentaje y qué falta.
+- **Chat web:** muestra los mensajes del equipo. Consulta `GET /chat/updates` cada 6 segundos.
+- **Render:** hay que hacer dos cambios en el servicio existente (detalle en `docs/render.md`, "Pasar al panel"):
+  - rama `hito-5`;
+  - variables `PANEL_EMAIL` y `PANEL_PASSWORD`.
+- Tests: `test_panel.py`, `test_panel_auth.py`, `test_web_chat.py` (mensajes del equipo), `test_deploy.py`, `test_onboarding_evals.py` y `test_onboarding_report.py`.
 
 ## Qué significa "simulado"
 
@@ -171,8 +199,8 @@ Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **tran
 ## Pendientes conocidos (fuera de las tareas hechas)
 
 - Ver que el CI de GitHub Actions quede verde: el repositorio es privado y no lo pude consultar desde acá.
-- Rutas HTTP del agente y del panel (`/approvals/{id}/decision`, `/cases`, …): necesitan la autenticación del panel (hito 5). La lógica ya existe (`decide()`, `reconstruct_case()`).
-- Avisar al cliente por WhatsApp cuando se decide una aprobación (hito 3).
+- Panel completo de la spec (Next.js, magic link, roles, varias empresas). Hoy hay un panel mínimo de demo en `/panel` (decisión 022).
+- Avisar por WhatsApp cuando se decide una aprobación o responde el equipo. En el chat web ya llega; WhatsApp está en pausa.
 - Anclar fuera de la base el último hash de auditoría de cada caso (decisión 010).
 - `fallbacks` del lado del servidor ante rechazos del modelo: hoy se deriva (decisión 007).
 - Proceso `worker` desplegable con sus handlers (llega con los hitos 3 y 4).
