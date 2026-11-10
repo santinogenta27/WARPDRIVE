@@ -107,7 +107,32 @@ def ensure_demo_tenant(conn: psycopg.Connection, embedder: Embedder) -> uuid.UUI
         "update tenants set settings = settings || %s where id = %s",
         (Jsonb({**_settings(_company()), "demo": "acme"}), tenant_id),
     )
+    sync_demo_config(conn, tenant_id)
     return tenant_id
+
+
+def sync_demo_config(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
+    """Instrucciones de los tipos de caso y manifiestos de las herramientas desde los fixtures,
+    para que un cambio llegue a una base que ya tenía la demo cargada."""
+    with tenant_scope(conn, tenant_id):
+        for path in sorted((ACME_DIR / "case_types").glob("*.yaml")):
+            conn.execute(
+                "update case_types set instructions = %s where name = %s",
+                (path.read_text(encoding="utf-8"), path.stem),
+            )
+        for path in sorted((ACME_DIR / "tools").glob("*.json")):
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            conn.execute(
+                "update tools set manifest = %s, input_schema = %s, risk = %s, max_amount = %s"
+                " where name = %s",
+                (
+                    Jsonb(manifest),
+                    Jsonb(manifest["input_schema"]),
+                    manifest["risk"],
+                    manifest["max_amount"],
+                    manifest["name"],
+                ),
+            )
 
 
 def acme_sandbox_client() -> TestClient:
