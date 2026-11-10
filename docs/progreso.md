@@ -174,6 +174,30 @@ Guion de la demo en `docs/demo.md`. Decisiones 022 (panel) y 023 (evals).
   - variables `PANEL_EMAIL` y `PANEL_PASSWORD`.
 - Tests: `test_panel.py`, `test_panel_auth.py`, `test_web_chat.py` (mensajes del equipo), `test_deploy.py`, `test_onboarding_evals.py` y `test_onboarding_report.py`.
 
+### Arreglos después de probar en Render (decisión 024)
+
+1. **Reembolso → verificación por código → aprobación:**
+   - Prompt `system_v3`.
+   - Tres defensas en código: reemplaza el pedido de datos en texto, toma el email que manda el cliente e impide volver a verificar a un cliente verificado.
+   - Historial sin el intercambio de verificación.
+   - Reembolso por el total, sin preguntar el motivo; ya sincronizado en Neon.
+   - Tests: caso 11 de los evals (varios turnos), `test_flujo_reembolso.py` y `test_groq_real.py`.
+2. **Sin duplicados:** ids en `/chat/updates`, una consulta a la vez, token por envío en el panel y aprobación repetida sin efecto.
+3. **Regla de cierre:**
+   - Resuelto cuando el cliente confirma o pasan 24 h sin respuesta.
+   - "Resuelto por el asistente" o "con una persona".
+4. **Nombres legibles** de los tipos de caso.
+5. **La charla figura como "Conversación general".**
+6. **Resúmenes sin códigos ni datos personales**, y códigos enmascarados en el detalle.
+7. **"Reiniciar demo":** archiva los casos (migración 0013) y conserva la auditoría.
+8. **Voseo siempre:** lo pide el prompt y `to_voseo` corrige el tuteo antes de enviar.
+
+**Medición con Groq real** (`RUN_GROQ_TESTS=1`, flujo completo del caso 11):
+
+- Antes de la red de seguridad: 1 de 3. Después de verificar, Groq volvía a hablar de "te envío un código".
+- Con la corrección (historial limpio y red de seguridad): **sin medir todavía**. Se agotó por hoy la cuota diaria de `gpt-oss-20b`, que también usa el chat de Render. Además, la corrida con `gpt-oss-120b` se cortó por falta de memoria en la PC.
+- **Pendiente:** correr `RUN_GROQ_TESTS=1 GROQ_REPEAT=5` con cuota disponible.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

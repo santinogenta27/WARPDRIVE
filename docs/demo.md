@@ -9,6 +9,10 @@ Unos 10 minutos. Mostrás cuatro cosas: qué parte de la atención resolvería s
   - **Cliente:** el chat, `https://<tu-servicio>.onrender.com/`.
   - **Empresa:** el panel, `https://<tu-servicio>.onrender.com/panel`. Entrá con `PANEL_EMAIL` y `PANEL_PASSWORD`.
 - **Dejá abiertos los Logs de Render** en otra pestaña. Ahí aparece el código de verificación: buscá `Mailer de consola`. El chat no envía emails todavía.
+- **Panel → Casos → "Reiniciar demo"**, para arrancar con el panel limpio:
+  - archiva las conversaciones de prueba (la auditoría queda guardada);
+  - rechaza las aprobaciones pendientes;
+  - devuelve los pedidos de Acme a su estado inicial.
 - **En el chat, "Cómo probarla" → "Empezar de nuevo"**, para arrancar con una conversación limpia.
 
 ## 1. El reporte de preparación (2 min): "esto es lo que el asistente resolvería en tu empresa"
@@ -51,10 +55,10 @@ Ventana del cliente:
 ## 3. Un reembolso: decide una persona (3 min)
 
 1. Arrancá una conversación nueva: "Cómo probarla" → "Empezar de nuevo".
-2. Escribí "Quiero el reembolso del pedido 1005".
-3. Verificá con `martin@example.com` y el código de los Logs.
-4. El asistente **no devuelve la plata solo**: avisa que el pedido pasa a aprobación.
-5. Panel → **Aprobaciones**: aparece el pedido, `iniciar_reembolso` por pedido 1005 y $35.000, con el mensaje del cliente.
+2. Escribí "Quiero el reembolso del pedido 1005". El asistente pide el email de la compra para mandarte un código.
+3. Respondé `martin@example.com` y escribí el código de los Logs.
+4. El asistente **no devuelve la plata solo**: avisa que el pedido pasa a revisión de una persona.
+5. Panel → **Aprobaciones**: aparece el pedido, `iniciar_reembolso` por pedido 1005 y $35.000, con el primer mensaje del cliente. Nunca se muestran el email ni el código.
 6. Tocá **Aprobar**. Se ejecuta en el sistema de Acme a través del guardián.
 7. En la ventana del cliente, en unos segundos, aparece el mensaje del **Equipo de Acme Store**: "¡Buenas noticias! Aprobamos el reembolso del pedido 1005 por $35.000…".
 
@@ -72,7 +76,13 @@ Ventana del cliente:
 4. Escribí la respuesta, por ejemplo "Hola, soy Ana del equipo de Acme. ¿En qué te ayudo?", y tocá **Enviar**.
 5. En el chat aparece en unos segundos, firmado por el equipo.
 
-**Qué remarcar:** la persona recibe el caso con todo el contexto. El cliente no tiene que repetir nada.
+6. En el chat, escribí "¡Gracias!". El asistente cierra la conversación y el caso pasa a **"Resuelto con una persona"**.
+
+**Qué remarcar:**
+
+- La persona recibe el caso con todo el contexto. El cliente no tiene que repetir nada.
+- Un caso se resuelve cuando el cliente confirma o pasan 24 h sin respuesta.
+- "Resuelto por el asistente" es lo que se cobra; si intervino una persona, el panel lo dice.
 
 ## 5. La auditoría (1 min): "cada paso queda registrado y no se puede alterar"
 
@@ -88,7 +98,7 @@ En el detalle del caso del reembolso, bajá a **Auditoría paso a paso**:
 ## Si algo falla durante la demo
 
 - **"Tuvimos un problema para responderte".** Se agotó la cuota diaria gratuita del modelo, o Groq tardó demasiado. Esperá un minuto y reintentá. Si no responde, mostrá el reporte y la auditoría de un caso anterior: no dependen del modelo.
-- **El reembolso no pasa a aprobación.** El modelo a veces primero pregunta el motivo. Respondé "vino fallado, ya lo tengo acá" y vuelve a intentarlo.
+- **El reembolso no pasa a aprobación.** Ahora el agente inicia el reembolso por el total, sin preguntar el motivo, y la verificación es siempre por código (decisión 024). Si igual responde otra cosa, escribí "iniciá el reembolso por el total, por favor".
 - **El mensaje del equipo no aparece en el chat.** La página lo busca cada 6 segundos, solo con la pestaña visible. Hacé clic en la ventana del chat.
 - **Los pedidos volvieron a su estado inicial.** La API de Acme de la demo vive en memoria y se reinicia cuando Render duerme o redespliega el servicio. Los casos, las aprobaciones y la auditoría quedan en la base.
 
