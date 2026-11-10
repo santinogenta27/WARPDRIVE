@@ -40,6 +40,11 @@ VERIFICATION_MESSAGE = (
     "Para darte datos de tu pedido necesito verificar que sos el titular. "
     "¿Me pasás el email con el que hiciste la compra? Te mando un código para confirmarlo."
 )
+# Con la aprobación creada, si el modelo no da una respuesta válida (o quiere derivar).
+APPROVAL_PENDING_MESSAGE = (
+    "Tu pedido quedó registrado y en revisión: una persona del equipo lo tiene que aprobar. "
+    "Te avisamos por este mismo chat apenas esté."
+)
 ESCALATION_MESSAGE = (
     "Te paso con una persona del equipo, que te va a responder por este mismo chat."
 )
@@ -579,10 +584,26 @@ class Agent:
         return self._finish(turn, "responder", VERIFICATION_MESSAGE, verification=True)
 
     def _give_up(self, turn: _Turn, reason: str, chat: str | None) -> AgentResult:
-        """Sin una respuesta válida: deriva, salvo en la charla (mensaje fijo, sin derivar)."""
+        """Sin una respuesta válida: deriva, salvo en la charla (mensaje fijo, sin derivar) o si
+        el guardián ya creó una aprobación (el pedido queda en revisión, con mensaje fijo)."""
         if chat is not None:
             raise _ChatFallback
+        approval = self._approval_pending(turn, reason)
+        if approval is not None:
+            return approval
         return self._escalate(turn, reason)
+
+    def _approval_pending(self, turn: _Turn, reason: str) -> AgentResult | None:
+        """Si en este turno el guardián creó una aprobación, el resultado es el pedido de
+        aprobación, con un mensaje fijo, sin importar qué haya hecho el modelo después: la
+        decisión ya está en manos de una persona y derivar dejaría la aprobación colgando."""
+        pending = next((d for d in turn.decisions if d.status == "approval_required"), None)
+        if pending is None:
+            return None
+        self._audit(turn, "approval_message_fixed", {"reason": reason})
+        return self._finish(
+            turn, "pedir_aprobacion", APPROVAL_PENDING_MESSAGE, approval_id=pending.approval_id
+        )
 
     def _check_grounding(self, turn: _Turn, data: dict[str, Any]) -> GroundingVerdict:
         documents: dict[str, str] = {}
@@ -601,7 +622,10 @@ class Agent:
 
     def _final_action(self, turn: _Turn, name: str, data: dict[str, Any]) -> AgentResult:
         if name == "derivar":
-            return self._escalate(turn, str(data.get("motivo") or "Derivado por el agente."))
+            reason = str(data.get("motivo") or "Derivado por el agente.")
+            return self._approval_pending(turn, f"Quiso derivar: {reason}") or self._escalate(
+                turn, reason
+            )
         message = str(data.get("mensaje") or "").strip()
         sources = [str(s) for s in data.get("fuentes") or []]
         pending = next((d for d in turn.decisions if d.status == "approval_required"), None)

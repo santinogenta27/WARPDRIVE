@@ -9,7 +9,12 @@ import psycopg
 import pytest
 from simulated.stack import SimulatedStack, build_simulated_stack
 
-from app.agent.loop import VERIFICATION_MESSAGE, VERIFIED_PREFIX, AgentResult
+from app.agent.loop import (
+    APPROVAL_PENDING_MESSAGE,
+    VERIFICATION_MESSAGE,
+    VERIFIED_PREFIX,
+    AgentResult,
+)
 from app.contacts import hash_address
 from app.db.connection import tenant_scope
 
@@ -55,6 +60,31 @@ def test_reembolso_de_un_cliente_nuevo_verifica_por_codigo_y_pide_aprobacion(
     assert done.message.startswith(VERIFIED_PREFIX)
     assert done.action == "pedir_aprobacion" and done.approval_id is not None
     assert "código" not in done.message
+
+
+@pytest.mark.parametrize("fallback", [False, True], ids=["groq", "respaldo_gemini"])
+@pytest.mark.parametrize("mode", ["approval_ungrounded", "approval_derive"])
+def test_con_la_aprobacion_creada_el_turno_termina_siempre_en_pedido_de_aprobacion(
+    conn: psycopg.Connection, mode: str, fallback: bool
+) -> None:
+    """Lo que pasó en Render a las 18:33: el guardián ya había creado la aprobación, pero la
+    respuesta final no pasó el control de fundamento y el caso se derivó. Con la aprobación
+    creada, el resultado es siempre el pedido de aprobación, responda el modelo principal o el
+    de respaldo (Groq sin cuota → Gemini)."""
+    stack = build_simulated_stack(conn, mode=mode, primary_out_of_quota=fallback)
+    contact = new_contact(stack)
+    send(stack, contact, "Quiero el reembolso del pedido 1005")
+    send(stack, contact, "martin@example.com")
+    done = send(stack, contact, last_code(stack))
+    assert done.action == "pedir_aprobacion" and done.approval_id is not None
+    assert done.message == VERIFIED_PREFIX + APPROVAL_PENDING_MESSAGE
+    with tenant_scope(stack.conn, stack.seed.tenant_id):
+        row = stack.conn.execute(
+            "select status from cases where id = %s", (done.case_id,)
+        ).fetchone()
+    assert row is not None and row[0] == "waiting_approval"  # no quedó derivado
+    if fallback:
+        assert stack.exhausted_calls > 0  # el principal estaba sin cuota: respondió el respaldo
 
 
 def test_el_modelo_no_ve_el_intercambio_de_verificacion_en_el_historial(

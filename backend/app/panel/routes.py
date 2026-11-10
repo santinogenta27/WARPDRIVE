@@ -542,6 +542,8 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "case_resolved":
         who = RESOLVED_BY.get(str(p.get("resuelto_por")), "")
         return f"Caso resuelto {who}".strip(), esc(p.get("motivo"))
+    if kind == "approval_message_fixed":
+        return "Dejó el pedido en revisión con el mensaje fijo", esc(p.get("reason"))
     if kind == "verification_requested":
         return "Verificación de identidad", "Pidió el email de la compra para enviar un código"
     if kind.startswith("verification"):

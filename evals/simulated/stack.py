@@ -23,7 +23,9 @@ from app.agent.loop import Agent, AgentResult
 from app.contacts import hash_address
 from app.db.connection import tenant_scope
 from app.demo.acme import AcmeSeed, seed_acme
-from app.llm.client import AnthropicProvider, LLMClient, PostgresUsageRecorder
+from app.llm.client import AnthropicProvider, LLMClient, LLMProvider, PostgresUsageRecorder
+from app.llm.errors import QuotaExhausted
+from app.llm.fallback import FallbackProvider
 from app.llm.embedder import VoyageEmbedder
 from app.llm.factory import embedder_from_env, llm_backend, provider_from_env
 from app.mailer import Email
@@ -54,6 +56,11 @@ class SimulatedStack:
     mode: str = "simulated"
     results: list[AgentResult] = field(default_factory=list)
     mailer: RecordingMailer = field(default_factory=RecordingMailer)
+    exhausted: Any = None  # ExhaustedProvider si el principal está sin cuota
+
+    @property
+    def exhausted_calls(self) -> int:
+        return int(self.exhausted.calls) if self.exhausted is not None else 0
 
     @property
     def claude_requests(self) -> list[dict[str, Any]]:
@@ -100,7 +107,22 @@ class SimulatedStack:
         return [r[0] for r in rows]
 
 
-def build_simulated_stack(conn: psycopg.Connection, *, mode: str = "normal") -> SimulatedStack:
+@dataclass
+class ExhaustedProvider:
+    """Proveedor principal sin cuota diaria (como Groq agotado en Render)."""
+
+    calls: int = 0
+
+    def create(self, **kwargs: Any) -> Any:
+        self.calls += 1
+        raise QuotaExhausted("sin cuota (simulado)", daily=True)
+
+
+def build_simulated_stack(
+    conn: psycopg.Connection, *, mode: str = "normal", primary_out_of_quota: bool = False
+) -> SimulatedStack:
+    """`primary_out_of_quota`: el modelo simulado responde como respaldo de un principal sin
+    cuota, con el mismo FallbackProvider que usa la demo (Groq agotado → Gemini)."""
     recorder = PostgresUsageRecorder(conn)
     embedder = VoyageEmbedder(
         recorder=recorder, api_key="sim", http_client=httpx.Client(transport=voyage_transport())
@@ -109,7 +131,10 @@ def build_simulated_stack(conn: psycopg.Connection, *, mode: str = "normal") -> 
     sdk = anthropic.Anthropic(
         api_key="sim", http_client=httpx2.Client(transport=claude.transport()), max_retries=0
     )
-    llm = LLMClient(provider=AnthropicProvider(client=sdk), recorder=recorder)
+    simulated: LLMProvider = AnthropicProvider(client=sdk)
+    exhausted = ExhaustedProvider()
+    provider = FallbackProvider(exhausted, simulated) if primary_out_of_quota else simulated
+    llm = LLMClient(provider=provider, recorder=recorder)
     acme = TestClient(create_app())
     guardian = Guardian(conn, ToolRuntime(acme))
     seed = seed_acme(conn, embedder)
@@ -124,6 +149,7 @@ def build_simulated_stack(conn: psycopg.Connection, *, mode: str = "normal") -> 
         claude=claude,
         mode="simulated",
         mailer=mailer,
+        exhausted=exhausted,
     )
 
 

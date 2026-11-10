@@ -36,7 +36,8 @@ class SimulatedClaude:
     # recibió), "sneaky_number" (mete un dato sin respaldo sin declararlo factual),
     # "asks_contact" (sin verificar, pide email o teléfono en texto en vez de usar la herramienta),
     # "tuteo" (responde con "tú" en lugar de voseo), "reverify" (ya verificado, vuelve a pedir
-    # la verificación en texto hasta que se lo corrige).
+    # la verificación en texto hasta que se lo corrige), "approval_ungrounded" y
+    # "approval_derive" (con la aprobación creada, inventa un monto o deriva).
     mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
@@ -172,6 +173,14 @@ class SimulatedClaude:
                 )
             return reply(f"No pude completar la operación: {result['error']}", factual=True)
         if result.get("status") == "approval_required":
+            # Después de crear la aprobación, el modelo falla: inventa un monto (no pasa el
+            # control de fundamento) o deriva en lugar de avisar que quedó en revisión.
+            if self.mode == "approval_ungrounded":
+                return reply(f"Iniciamos el reembolso de $99.999 del pedido {order_id}.")
+            if self.mode == "approval_derive":
+                return [
+                    self._tool_use("derivar", {"motivo": "Requiere aprobación", "resumen": low})
+                ]
             return reply(
                 "Tu pedido quedó en revisión: una persona del equipo lo tiene que aprobar y te "
                 "avisamos por acá apenas esté.",
