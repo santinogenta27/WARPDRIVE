@@ -121,10 +121,11 @@ def _production_deps() -> WebDeps:
     from app.demo.acme import build_demo_agent, shared_acme
 
     load_dotenv()
-    acme = shared_acme()  # la API de Acme simulada vive mientras corre la API (y la usa el panel)
     return WebDeps(
         connection=_transaction,
-        agent=lambda conn: build_demo_agent(conn, acme),
+        # La API de Acme simulada vive en memoria y la comparte el panel ("Reiniciar demo" la
+        # vuelve a su estado inicial): se toma la vigente en cada mensaje.
+        agent=lambda conn: build_demo_agent(conn, shared_acme()),
         ip_daily_limit=int(os.environ.get("WEB_CHAT_IP_DAILY_LIMIT") or 30),
         daily_limit=int(os.environ.get("WEB_CHAT_DAILY_LIMIT") or 300),
         client_ip=os.environ.get("WEB_CHAT_CLIENT_IP") or "direct",
@@ -307,6 +308,7 @@ def updates(deps: Deps, session: str = "", after: str = "") -> dict[str, Any]:
                 "select m.id, m.text, m.created_at from case_messages m"
                 " join cases c on c.id = m.case_id join contacts k on k.id = c.contact_id"
                 " where k.phone_hash = %s and m.role = 'human' and m.created_at > %s"
+                " and c.archived_at is null"
                 " order by m.created_at limit 20",
                 (hash_address(f"{WEB_PREFIX}{token_hash(session)}"), since),
             ).fetchall()

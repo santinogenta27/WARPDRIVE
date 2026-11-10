@@ -82,7 +82,7 @@ def close_inactive(
             "select c.id from cases c join lateral (select m.role, m.created_at"
             "  from case_messages m where m.case_id = c.id"
             "  order by m.created_at desc limit 1) last on true"
-            " where c.status in ('open', 'escalated')"
+            " where c.status in ('open', 'escalated') and c.archived_at is null"
             " and (%s::uuid is null or c.contact_id = %s)"
             " and last.role in ('agent', 'human')"
             " and last.created_at < now() - make_interval(hours => %s)"

@@ -724,7 +724,7 @@ class Agent:
         with tenant_scope(self._conn, tenant_id):
             row = self._conn.execute(
                 "select id from cases where contact_id = %s and status <> 'resolved'"
-                " order by created_at desc limit 1",
+                " and archived_at is null order by created_at desc limit 1",
                 (contact_id,),
             ).fetchone()
             if row is None:

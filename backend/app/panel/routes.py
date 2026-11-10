@@ -21,13 +21,14 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.audit import log as audit_log
+from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
 from app.db.connection import connect, tenant_scope
 from app.panel import auth
 from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
 from app.panel.labels import type_label
-from app.panel.privacy import mask_codes, summary
 from app.panel.notify import notify_customer
+from app.panel.privacy import mask_codes, summary
 from app.policy.approvals import ApprovalError, ApprovalOutcome, decide
 from app.policy.guardian import Guardian
 
@@ -51,6 +52,8 @@ class PanelDeps:
     tenant_id: uuid.UUID | None  # la empresa del panel (Acme en la demo)
     guardian: Callable[[psycopg.Connection], Guardian]
     report_tenant: uuid.UUID | None = None  # de dónde sale el reporte de preparación
+    # "Reiniciar demo" también devuelve los pedidos de la API simulada a su estado inicial.
+    reset_sandbox: Callable[[], None] = lambda: None
 
 
 @contextmanager
@@ -82,6 +85,7 @@ def _production_deps() -> PanelDeps:
         # La misma API simulada que usa el agente del chat: lo aprobado se ve en el pedido.
         guardian=lambda conn: Guardian(conn, ToolRuntime(shared_acme())),
         report_tenant=row[0] if row else None,
+        reset_sandbox=shared_acme.cache_clear,
     )
 
 
@@ -230,8 +234,10 @@ def _pending(
 ) -> list[tuple[Any, ...]]:
     with tenant_scope(conn, tenant_id):
         return conn.execute(
-            f"select a.id, t.name, a.params, a.case_id, a.created_at, {customer_texts('a.case_id')}"
+            "select a.id, t.name, a.params, a.case_id, a.created_at,"
+            f" {customer_texts('a.case_id')}"
             " from approvals a join tools t on t.id = a.tool_id"
+            " join cases c on c.id = a.case_id and c.archived_at is null"
             " where a.status = 'pending' and (%s::uuid is null or a.case_id = %s)"
             " order by a.created_at",
             (case_id, case_id),
@@ -251,6 +257,7 @@ def approvals_page(request: Request, deps: Deps) -> Response:
             decided = conn.execute(
                 "select t.name, a.params, a.status, a.decided_at, a.case_id, u.email"
                 " from approvals a join tools t on t.id = a.tool_id"
+                " join cases c on c.id = a.case_id and c.archived_at is null"
                 " left join users u on u.id = a.decided_by"
                 " where a.status <> 'pending' order by a.decided_at desc nulls last limit 10"
             ).fetchall()
@@ -408,11 +415,48 @@ color:inherit"><div class="grow"><div class="row" style="gap:8px">
         )
         or '<div class="card empty">Todavía no hay conversaciones.</div>'
     )
-    body = f"""<h1>Casos</h1><p class="lead">Conversaciones con su estado: primero las derivadas
+    body = f"""<div class="row"><h1 class="grow">Casos</h1>
+<a class="btn" href="/panel/reiniciar">Reiniciar demo</a></div>
+<p class="lead">Conversaciones con su estado: primero las derivadas
 a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
 confirma o pasan 24 h sin respuesta.</p><div class="kpis">{kpis}</div>
 {items}"""
     return HTMLResponse(page("Casos", body, active="casos"))
+
+
+@router.get("/reiniciar", response_class=HTMLResponse)
+def reset_form(request: Request) -> Response:
+    session = _session(request)
+    if session is None:
+        return _to_login()
+    body = f"""<div class="card" style="max-width:560px;margin:24px auto">
+<h1>Reiniciar demo</h1>
+<p>Deja el panel limpio para empezar una demo nueva:</p>
+<ul><li>Las conversaciones de prueba se archivan: salen del panel y del chat.</li>
+<li>Las aprobaciones pendientes se rechazan, así no se ejecutan después.</li>
+<li>Los pedidos de la API de Acme vuelven a su estado inicial.</li></ul>
+<p class="muted small">La auditoría de cada caso queda guardada e íntegra: es de solo
+inserción y no se borra.</p>
+<form method="post" action="/panel/reiniciar" class="row">
+<input type="hidden" name="csrf" value="{auth.csrf_token(session[0])}">
+<a class="btn" href="/panel/casos">Cancelar</a>
+<button class="primary" type="submit">Reiniciar demo</button></form></div>"""
+    return HTMLResponse(page("Reiniciar demo", body, active="casos"))
+
+
+@router.post("/reiniciar")
+def reset_demo(request: Request, form: Form, deps: Deps) -> Response:
+    session = _session(request)
+    if session is None:
+        return _to_login()
+    if not auth.valid_csrf(session[0], form.get("csrf", "")):
+        return _forbidden()
+    if deps.tenant_id is None:
+        return _no_tenant()
+    with deps.connection() as conn:
+        archive_cases(conn, deps.tenant_id, _user_id(conn, deps.tenant_id, session[1]))
+    deps.reset_sandbox()
+    return RedirectResponse("/panel/casos", status_code=303)
 
 
 def _inbox_rows(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[tuple[Any, ...]]:
@@ -425,6 +469,7 @@ def _inbox_rows(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[tuple[An
             " coalesce(k.verified_until > now(), false), c.resolved_by"
             " from cases c join contacts k on k.id = c.contact_id"
             " left join case_types t on t.id = c.case_type_id"
+            " where c.archived_at is null"
             " order by case c.status when 'escalated' then 0 when 'waiting_approval' then 1"
             " when 'open' then 2 else 3 end, c.updated_at desc limit 100"
         ).fetchall()
@@ -525,7 +570,8 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         with tenant_scope(conn, tenant_id):
             case = conn.execute(
                 f"select c.status, c.escalation, {CASE_LABEL}, c.created_at, c.resolved_by"
-                " from cases c left join case_types t on t.id = c.case_type_id where c.id = %s",
+                " from cases c left join case_types t on t.id = c.case_type_id"
+                " where c.id = %s and c.archived_at is null",
                 (case_id,),
             ).fetchone()
             messages = conn.execute(
