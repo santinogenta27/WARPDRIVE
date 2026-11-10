@@ -101,6 +101,37 @@ El chat web (local y Render) usa `gpt-oss-20b`. Línea base: `evals/baseline.gro
 
 **En Render hay que agregar `GROQ_API_KEY`** (secreta, en Environment). `LLM_PROVIDER=groq` y los modelos ya vienen en `render.yaml`.
 
+## Etapa 2 — Calidad (rama `calidad`, sale de `hito-3`)
+
+60 conversaciones realistas en `evals/fixtures/acme/quality_conversations.json`, con su runner `evals/quality.py`. El informe está en `docs/calidad.md`.
+
+| Medición | Resultado |
+|---|---|
+| Base, Groq `gpt-oss-20b` | 26/60 (43%) |
+| Base, serie `qwen3.8-27b` (agente) + `gpt-oss-120b` (clasificador) | 34/60 (57%) |
+| Arreglo 1, charla y consulta general sin derivar, sobre 32 conversaciones medidas | 11 → 29 resueltas, sin regresiones |
+
+**Arreglos commiteados:**
+1. La charla, los saludos, "¿sos un bot?" y los temas fuera de tema se responden sin derivar, y las consultas generales se responden con los documentos.
+2. Prompt `system_v2`: cuándo derivar y cuándo explicar.
+3. El control de fundamento acepta horas en punto, herramientas citadas y fuentes que no son documentos cuando la respuesta sale de una herramienta.
+
+**Pendiente:**
+- Medir el arreglo 2 (R2, sobre un subconjunto de 13 conversaciones) y completar R1. Groq tiene un límite gratis de 200.000 tokens por día y por modelo, y se agotó.
+- Anotar los resultados en `docs/calidad.md`.
+
+## Etapa 3 — Hito 4, autoconfiguración (rama `hito-4`, sale de `calidad`)
+
+Tareas 14 a 19 hechas, con sus tests: `test_onboarding_*.py`. Guía en `docs/onboarding.md`. Decisión 021.
+
+**Corrida real con Groq**, sobre las 100 conversaciones de Acme (40 de un export de WhatsApp, 30 de tickets CSV y 30 de tickets JSON):
+- Ingesta y anonimización: 0 datos en claro.
+- Descubrimiento: 8 tipos de caso, que recuperan 7 de los 8 reales. Junta cancelar con reembolso y divide facturación en dos.
+- Evals: 2 por tipo, más 4 adversariales.
+- Herramientas: generadas desde el OpenAPI, todas sin aprobar.
+- Reporte: resolvería solo **54%** del volumen. Adversariales: 3 de 4 superados.
+- Modelos: resúmenes con `gpt-oss-120b` y evals y herramientas con `gpt-oss-20b`. El reporte corrió con `gpt-oss-120b` porque `gpt-oss-20b` agotó su cuota diaria. Ese modelo genera llamadas inválidas (la herramienta `json`) y deriva, lo que baja el porcentaje.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
