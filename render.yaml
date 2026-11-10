@@ -17,6 +17,9 @@ services:
         value: 3.12.10
       - key: PYTHONPATH
         value: backend
+      # Sin buffer: los logs (y el código de verificación de la demo) salen en el momento.
+      - key: PYTHONUNBUFFERED
+        value: "1"
       - key: APP_ENV
         value: production
       - key: DATABASE_URL

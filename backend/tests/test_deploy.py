@@ -62,6 +62,12 @@ def test_el_servicio_despliega_la_rama_con_el_panel() -> None:
     assert TestClient(app).get("/panel/login").status_code == 200
 
 
+def test_los_logs_de_python_salen_sin_buffer() -> None:
+    """Sin buffer, el código de verificación aparece en los logs de Render en el momento."""
+    env = {var["key"]: var.get("value") for var in _service()["envVars"]}
+    assert env["PYTHONUNBUFFERED"] == "1"
+
+
 def test_la_demo_publica_tiene_limites_y_toma_la_ip_del_proxy() -> None:
     env = {var["key"]: var.get("value") for var in _service()["envVars"]}
     assert int(env["WEB_CHAT_IP_DAILY_LIMIT"]) > 0
