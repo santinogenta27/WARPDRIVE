@@ -98,6 +98,28 @@ def _goal(instructions: str | None, fallback: str) -> str:
     return str(parsed.get("objetivo") or fallback)
 
 
+def expected_from_draft(draft: dict[str, Any]) -> dict[str, Any]:
+    """El resultado esperado de un caso propuesto por el modelo (decisión 023)."""
+    expected: dict[str, Any] = {
+        "accion": draft.get("accion"),
+        "debe_escalar": draft.get("debe_escalar"),
+        "palabras_clave": draft.get("palabras_clave"),
+    }
+    # Otras acciones también correctas (p. ej. preguntar el dato que falta para actuar):
+    # se descartan las que no existen y la principal va siempre primero.
+    alternatives = [a for a in draft.get("acciones_validas") or [] if a in ACTIONS]
+    # Antes de pedir la aprobación de un reembolso el agente puede pedir lo que falta (foto del
+    # producto fallado, confirmación): la decisión sigue siendo de una persona.
+    if draft.get("accion") == "pedir_aprobacion":
+        alternatives.append("responder")
+    if alternatives and draft.get("accion") in ACTIONS:
+        main = str(draft["accion"])
+        expected["acciones_validas"] = [main] + [
+            a for a in dict.fromkeys(alternatives) if a != main
+        ]
+    return expected
+
+
 def generate_evals(
     conn: psycopg.Connection, tenant_id: uuid.UUID, model: EvalModel, *, per_type: int = 3
 ) -> int:
@@ -124,23 +146,10 @@ def generate_evals(
             continue
         sources = {ext for ext, _ in conversations}
         for draft in model.make_evals(name, _goal(instructions, name), conversations):
-            expected: dict[str, Any] = {
-                "accion": draft.get("accion"),
-                "debe_escalar": draft.get("debe_escalar"),
-                "palabras_clave": draft.get("palabras_clave"),
-            }
-            # Otras acciones también correctas (p. ej. preguntar el dato que falta para actuar):
-            # se descartan las que no existen y la principal va siempre primero.
-            alternatives = [a for a in draft.get("acciones_validas") or [] if a in ACTIONS]
-            if alternatives and draft.get("accion") in ACTIONS:
-                main = str(draft["accion"])
-                expected["acciones_validas"] = [main] + [
-                    a for a in dict.fromkeys(alternatives) if a != main
-                ]
             case = {
                 "mensaje": draft.get("mensaje"),
                 "contacto": "verificado",
-                "esperado": expected,
+                "esperado": expected_from_draft(draft),
                 "origen": str(draft.get("conversacion")),
             }
             if case["origen"] not in sources or not validator.is_valid(case):

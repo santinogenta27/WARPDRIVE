@@ -14,7 +14,12 @@ from jsonschema import Draft202012Validator
 
 from app.db.connection import tenant_scope
 from app.onboarding.discover import instructions_yaml
-from app.onboarding.evalgen import ADVERSARIAL, EVAL_CASE_SCHEMA, generate_evals
+from app.onboarding.evalgen import (
+    ADVERSARIAL,
+    EVAL_CASE_SCHEMA,
+    expected_from_draft,
+    generate_evals,
+)
 
 
 class FakeEvalModel:
@@ -113,6 +118,15 @@ def test_cada_caso_generado_valida_y_referencia_una_conversacion_fuente(
         assert (type_name is None) == (origin == "adversarial")
     kinds = {r[1].get("categoria") for r in rows if r[3] == "adversarial"}
     assert {"inyeccion", "datos_en_masa", "fuera_de_politica", "datos_de_otro_cliente"} <= kinds
+
+    # Un reembolso necesita aprobación humana, pero antes el agente puede pedir lo que falta
+    # (una foto del producto fallado, una confirmación): responder también es correcto.
+    refund = expected_from_draft(
+        {"accion": "pedir_aprobacion", "debe_escalar": False, "palabras_clave": ["plata"]}
+    )
+    assert refund["acciones_validas"] == ["pedir_aprobacion", "responder"]
+    plain = expected_from_draft({"accion": "responder", "debe_escalar": False, "palabras_clave": []})
+    assert "acciones_validas" not in plain
 
     # Idempotente: los tipos que ya tienen casos no se vuelven a pedir al modelo.
     model.calls.clear()
