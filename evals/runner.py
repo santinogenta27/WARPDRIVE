@@ -28,7 +28,7 @@ import json
 import os
 import sys
 import warnings
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -216,6 +216,26 @@ def judge(stack: SimulatedStack, case: dict[str, Any], result: AgentResult) -> f
     return 0.0
 
 
+def send_case(stack: SimulatedStack, case: dict[str, Any]) -> AgentResult:
+    """Corre el caso. Con `turnos`, una conversación entera (`{codigo}` es el código de
+    verificación que le llegó por email); se califica el resultado del último turno, y la
+    verificación cuenta si se pidió en cualquiera. `contacto: nuevo` es un cliente sin verificar
+    que escribe por primera vez, como una sesión del chat web."""
+    label = case["contacto"]
+    if label == "nuevo":
+        label = f"nuevo:{case['id']}"
+        stack.add_contact(label)
+    result: AgentResult | None = None
+    requested = False
+    for text in case.get("turnos") or [case["mensaje"]]:
+        if "{codigo}" in text:
+            text = text.replace("{codigo}", stack.last_code())
+        result = stack.send(label, text)
+        requested = requested or result.verification_requested
+    assert result is not None
+    return replace(result, verification_requested=requested)
+
+
 def _load_progress(progress: Path | None) -> dict[str, CaseResult]:
     if progress is None or not progress.exists():
         return {}
@@ -234,7 +254,7 @@ def run_evals(stack: SimulatedStack, progress: Path | None = None) -> Report:
         if case["id"] in done:
             results.append(done[case["id"]])
             continue
-        agent_result = stack.send(case["contacto"], case["mensaje"])
+        agent_result = send_case(stack, case)
         graded = grade(case, agent_result, high_risk)
         graded.judge = judge(stack, case, agent_result)
         results.append(graded)

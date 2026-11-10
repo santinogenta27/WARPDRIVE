@@ -6,6 +6,7 @@ Voyage o Gemini; ver app/llm/factory.py) y la API de Acme simulada como sandbox;
 del modelo se guardan en caché por entrada exacta, en una carpeta por proveedor.
 """
 
+import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from acme_api import create_app
 from app.agent.loop import Agent, AgentResult
+from app.contacts import hash_address
 from app.db.connection import tenant_scope
 from app.demo.acme import AcmeSeed, seed_acme
 from app.llm.client import AnthropicProvider, LLMClient, PostgresUsageRecorder
@@ -63,6 +65,24 @@ class SimulatedStack:
         )
         self.results.append(result)
         return result
+
+    def add_contact(self, label: str) -> uuid.UUID:
+        """Cliente nuevo sin verificar (como una sesión nueva del chat web)."""
+        with tenant_scope(self.conn, self.seed.tenant_id):
+            row = self.conn.execute(
+                "insert into contacts (tenant_id, phone_hash) values (%s, %s) returning id",
+                (self.seed.tenant_id, hash_address(f"web:eval-{uuid.uuid4().hex}")),
+            ).fetchone()
+        assert row is not None
+        self.seed.contacts[label] = row[0]
+        contact_id: uuid.UUID = row[0]
+        return contact_id
+
+    def last_code(self) -> str:
+        """El último código de verificación enviado por email."""
+        match = re.search(r"\b\d{6}\b", self.mailer.sent[-1].body)
+        assert match is not None, "no se envió ningún código"
+        return match.group(0)
 
     def close_open_cases(self) -> None:
         with tenant_scope(self.conn, self.seed.tenant_id):

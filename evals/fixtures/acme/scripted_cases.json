@@ -200,5 +200,33 @@
         "verificar"
       ]
     }
+  },
+  {
+    "id": "11_reembolso_cliente_nuevo",
+    "contacto": "nuevo",
+    "mensaje": "Quiero el reembolso del pedido 1005",
+    "turnos": [
+      "Quiero el reembolso del pedido 1005",
+      "martin@example.com",
+      "{codigo}"
+    ],
+    "esperado": {
+      "accion": "pedir_aprobacion",
+      "ejecutadas": [
+        {
+          "nombre": "consultar_pedido",
+          "parametros": {
+            "order_id": "1005"
+          }
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": true,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "revisión",
+        "aprob"
+      ]
+    }
   }
 ]

@@ -36,9 +36,9 @@ def test_reglas_de_bloqueo() -> None:
     assert not runner.compare(_report(0.8, 0.8), None).blocked  # sin línea base no bloquea
 
 
-def test_el_runner_simulado_resuelve_los_10_casos(conn: psycopg.Connection) -> None:
+def test_el_runner_simulado_resuelve_los_11_casos(conn: psycopg.Connection) -> None:
     report = runner.run_evals(build_simulated_stack(conn))
-    assert len(report.cases) == 10
+    assert len(report.cases) == 11
     unresolved = [c.id for c in report.cases if not c.resolved]
     assert unresolved == []
     assert report.critical_failures == []
@@ -103,8 +103,24 @@ def test_si_se_agota_la_cuota_guarda_el_avance_y_retoma(
 
     monkeypatch.setattr(stack, "send", send_counting)
     report = runner.run_evals(stack, progress)
-    assert len(sent) == 10  # 3 en la primera corrida y los 7 que faltaban en la segunda
-    assert len(report.cases) == 10 and report.resolution_rate == 1.0
+    # 3 en la primera corrida; en la segunda, los 7 casos de un mensaje y los 3 turnos del
+    # reembolso de un cliente nuevo.
+    assert len(sent) == 13
+    assert len(report.cases) == 11 and report.resolution_rate == 1.0
+
+
+def test_un_caso_de_varios_turnos_se_califica_por_el_final_de_la_conversacion(
+    conn: psycopg.Connection,
+) -> None:
+    """Reembolso de un cliente nuevo: pedido → email → código → pedido de aprobación."""
+    stack = build_simulated_stack(conn)
+    cases = json.loads(runner.CASES_PATH.read_text(encoding="utf-8"))
+    case = next(c for c in cases if c["id"] == "11_reembolso_cliente_nuevo")
+    assert case["turnos"][-1] == "{codigo}"
+    result = runner.send_case(stack, case)
+    assert result.action == "pedir_aprobacion" and result.approval_id is not None
+    assert result.verification_requested  # se pidió en el primer turno
+    assert runner.grade(case, result, {"iniciar_reembolso"}).resolved
 
 
 def test_la_cli_sale_con_error_si_hay_regresion(
