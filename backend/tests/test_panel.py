@@ -176,6 +176,27 @@ def test_enviar_dos_veces_el_mismo_formulario_manda_un_solo_mensaje(
     assert all(count == 1 for _, count in counts) and counts
 
 
+def test_la_bandeja_cierra_los_casos_sin_respuesta_hace_24_horas(
+    client: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    answered = stack.send("lucia", "¿Abren los domingos?")
+    with tenant_scope(conn, stack.seed.tenant_id):
+        conn.execute(
+            "update case_messages set created_at = created_at - interval '25 hours'"
+            " where case_id = %s",
+            (answered.case_id,),
+        )
+    login(client)
+    client.get("/panel/casos")
+    with tenant_scope(conn, stack.seed.tenant_id):
+        row = conn.execute(
+            "select status, resolved_by from cases where id = %s", (answered.case_id,)
+        ).fetchone()
+    assert row == ("resolved", "agent")
+    detail = client.get(f"/panel/casos/{answered.case_id}").text
+    assert "Resuelto por el asistente" in detail
+
+
 def test_el_detalle_muestra_la_auditoria_con_fuentes_y_costo(
     client: TestClient, stack: SimulatedStack
 ) -> None:

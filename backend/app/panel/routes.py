@@ -21,9 +21,10 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.audit import log as audit_log
+from app.cases.closing import close_inactive
 from app.db.connection import connect, tenant_scope
 from app.panel import auth
-from app.panel.html import esc, local_time, page, status_badge
+from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
 from app.panel.notify import notify_customer
 from app.policy.approvals import ApprovalError, ApprovalOutcome, decide
 from app.policy.guardian import Guardian
@@ -349,20 +350,10 @@ def inbox(request: Request, deps: Deps) -> Response:
         return _to_login()
     if deps.tenant_id is None:
         return _no_tenant()
-    with deps.connection() as conn, tenant_scope(conn, deps.tenant_id):
-        rows = conn.execute(
-            "select c.id, c.status, c.updated_at, t.name,"
-            " (select m.text from case_messages m where m.case_id = c.id and m.role = 'customer'"
-            "  order by m.created_at desc limit 1),"
-            " (select count(*) from case_messages m where m.case_id = c.id),"
-            " (select e.payload ->> 'channel' from audit_events e where e.case_id = c.id"
-            "  and e.payload ? 'channel' limit 1),"
-            " coalesce(k.verified_until > now(), false)"
-            " from cases c join contacts k on k.id = c.contact_id"
-            " left join case_types t on t.id = c.case_type_id"
-            " order by case c.status when 'escalated' then 0 when 'waiting_approval' then 1"
-            " when 'open' then 2 else 3 end, c.updated_at desc limit 100"
-        ).fetchall()
+    with deps.connection() as conn:
+        # Regla de cierre: los que llevan 24 h sin respuesta del cliente quedan resueltos.
+        close_inactive(conn, deps.tenant_id)
+        rows = _inbox_rows(conn, deps.tenant_id)
     counts: dict[str, int] = {}
     for row in rows:
         counts[row[1]] = counts.get(row[1], 0) + 1
@@ -379,21 +370,50 @@ def inbox(request: Request, deps: Deps) -> Response:
     items = (
         "".join(
             f"""<a class="card row" href="/panel/casos/{case_id}" style="text-decoration:none;
-color:inherit"><div class="grow"><div class="row" style="gap:8px">{status_badge(status)}
+color:inherit"><div class="grow"><div class="row" style="gap:8px">
+{status_badge(status, resolved_by)}
 <span class="muted small">{esc(type_name or "sin clasificar")}</span>
 <span class="muted small">· {esc(CHANNELS.get(channel or "", "Canal"))}
 {" · verificado" if verified else ""}</span></div>
 <div class="ellipsis" style="margin-top:6px">{esc(preview or "(sin texto)")}</div></div>
 <div class="muted small" style="text-align:right">{local_time(updated)}<br>{total} mensajes
 </div></a>"""
-            for case_id, status, updated, type_name, preview, total, channel, verified in rows
+            for (
+                case_id,
+                status,
+                updated,
+                type_name,
+                preview,
+                total,
+                channel,
+                verified,
+                resolved_by,
+            ) in rows
         )
         or '<div class="card empty">Todavía no hay conversaciones.</div>'
     )
     body = f"""<h1>Casos</h1><p class="lead">Conversaciones con su estado: primero las derivadas
-a una persona, después las que esperan una aprobación.</p><div class="kpis">{summary}</div>
+a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
+confirma o pasan 24 h sin respuesta.</p><div class="kpis">{summary}</div>
 {items}"""
     return HTMLResponse(page("Casos", body, active="casos"))
+
+
+def _inbox_rows(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[tuple[Any, ...]]:
+    with tenant_scope(conn, tenant_id):
+        return conn.execute(
+            "select c.id, c.status, c.updated_at, t.name,"
+            " (select m.text from case_messages m where m.case_id = c.id and m.role = 'customer'"
+            "  order by m.created_at desc limit 1),"
+            " (select count(*) from case_messages m where m.case_id = c.id),"
+            " (select e.payload ->> 'channel' from audit_events e where e.case_id = c.id"
+            "  and e.payload ? 'channel' limit 1),"
+            " coalesce(k.verified_until > now(), false), c.resolved_by"
+            " from cases c join contacts k on k.id = c.contact_id"
+            " left join case_types t on t.id = c.case_type_id"
+            " order by case c.status when 'escalated' then 0 when 'waiting_approval' then 1"
+            " when 'open' then 2 else 3 end, c.updated_at desc limit 100"
+        ).fetchall()
 
 
 # -- detalle ---------------------------------------------------------------------------------
@@ -460,6 +480,11 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "approval_decided":
         decision = "Aprobó" if p.get("decision") == "aprobar" else "Rechazó"
         return f"{decision} una persona del equipo", f"“{esc(p.get('text'))}”"
+    if kind == "case_resolved":
+        who = RESOLVED_BY.get(str(p.get("resuelto_por")), "")
+        return f"Caso resuelto {who}".strip(), esc(p.get("motivo"))
+    if kind == "verification_requested":
+        return "Verificación de identidad", "Pidió el email de la compra para enviar un código"
     if kind.startswith("verification"):
         return "Verificación de identidad", VERIFICATION.get(
             str(p.get("result") or kind), esc(json.dumps(p, ensure_ascii=False))
@@ -485,7 +510,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     with deps.connection() as conn:
         with tenant_scope(conn, tenant_id):
             case = conn.execute(
-                "select c.status, c.escalation, t.name, c.created_at from cases c"
+                "select c.status, c.escalation, t.name, c.created_at, c.resolved_by from cases c"
                 " left join case_types t on t.id = c.case_type_id where c.id = %s",
                 (case_id,),
             ).fetchone()
@@ -500,7 +525,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         events = audit_log.reconstruct_case(conn, tenant_id, case_id)
         verdict = audit_log.verify_chain(conn, tenant_id, case_id)
         pending = _pending(conn, tenant_id, case_id)
-    status, escalation, type_name, created = case
+    status, escalation, type_name, created, resolved_by = case
     csrf = auth.csrf_token(session[0])
 
     chat = (
@@ -544,7 +569,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     )
     body = f"""<p><a href="/panel/casos">← Casos</a></p>
 <div class="row"><h1 class="grow">Caso {esc(type_name or "sin clasificar")}</h1>
-{status_badge(status)}</div>
+{status_badge(status, resolved_by)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
 {escalated}{approvals}
 <div class="kpis"><div class="kpi"><div class="n">USD {cost:.4f}</div><div class="muted">Costo

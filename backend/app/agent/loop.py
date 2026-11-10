@@ -20,6 +20,7 @@ from app.agent.classifier import ASK_FOR_HUMAN, CHAT, GENERAL, NOT_ALLOWED, clas
 from app.agent.grounding import GroundingVerdict, check_grounding
 from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
+from app.cases import closing
 from app.channels.whatsapp.format import to_whatsapp
 from app.db.connection import tenant_scope
 from app.identity import email_code
@@ -224,6 +225,7 @@ class Agent:
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone)
         self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
+        pending: email_code.Verification | None = None
         if not contact.verified:
             pending = email_code.open_verification(self._conn, tenant_id, contact_id)
             if pending is None and email_code.EMAIL.search(text):
@@ -237,6 +239,15 @@ class Agent:
                 handled = self._continue_verification(turn, pending, company, tone)
                 if handled is not None:
                     return handled
+        if (
+            pending is None
+            and closing.is_confirmation(text)
+            and closing.closable_by_confirmation(self._conn, tenant_id, case_id)
+        ):
+            # Regla de cierre: el cliente confirma ("gracias", "eso era todo").
+            result = self._finish(turn, "responder", closing.CLOSING_MESSAGE)
+            closing.resolve(self._conn, tenant_id, case_id, "El cliente confirmó.")
+            return result
         return self._respond(turn, company, tone)
 
     def _continue_verification(
@@ -708,6 +719,8 @@ class Agent:
         return ContactContext(id=row[0], phone_hash=row[1], verified=row[2])
 
     def _open_case(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> uuid.UUID:
+        # Regla de cierre: si su caso lleva 24 h sin respuesta, queda resuelto y empieza otro.
+        closing.close_inactive(self._conn, tenant_id, contact_id=contact_id)
         with tenant_scope(self._conn, tenant_id):
             row = self._conn.execute(
                 "select id from cases where contact_id = %s and status <> 'resolved'"

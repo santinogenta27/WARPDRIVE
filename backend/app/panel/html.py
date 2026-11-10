@@ -118,5 +118,13 @@ STATUS = {
 }
 
 
-def status_badge(status: str) -> str:
-    return f'<span class="badge {esc(status)}">{esc(STATUS.get(status, status))}</span>'
+RESOLVED_BY = {"agent": "por el asistente", "human": "con una persona"}
+
+
+def status_badge(status: str, resolved_by: str | None = None) -> str:
+    """Estado del caso. Un resuelto dice quién lo resolvió (la unidad de cobro es el caso
+    resuelto por el asistente)."""
+    label = STATUS.get(status, status)
+    if status == "resolved" and resolved_by in RESOLVED_BY:
+        label = f"{label} {RESOLVED_BY[resolved_by]}"
+    return f'<span class="badge {esc(status)}">{esc(label)}</span>'
