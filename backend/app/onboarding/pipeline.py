@@ -189,7 +189,13 @@ def main(argv: list[str] | None = None) -> int:
     from app.db.migrate import migrate
     from app.llm.cache import CachingProvider
     from app.llm.client import LLMClient, PostgresUsageRecorder
-    from app.llm.factory import embedder_from_env, llm_backend, provider_from_env
+    from app.llm.embedding_cache import CachingEmbedder
+    from app.llm.factory import (
+        embedder_from_env,
+        embedding_backend,
+        llm_backend,
+        provider_from_env,
+    )
     from app.onboarding.model import LLMOnboardingModel
     from app.policy.guardian import Guardian
 
@@ -225,7 +231,12 @@ def main(argv: list[str] | None = None) -> int:
         f"{os.environ.get('GROQ_CLASSIFIER_MODEL', '')}",
     )
     llm = LLMClient(provider=provider, recorder=recorder)
-    embedder = embedder_from_env(recorder)
+    # Lo mismo con los embeddings, que también tienen cuota diaria gratuita.
+    embedder = CachingEmbedder(
+        embedder_from_env(recorder),
+        REPO_ROOT / "evals" / ".cache" / "onboarding-embeddings",
+        profile=str(embedding_backend()),
+    )
     from app.agent.loop import Agent
 
     def agent_factory(c: psycopg.Connection, runtime: Any) -> Agent:
