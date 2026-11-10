@@ -7,7 +7,9 @@ from typing import Any
 from app.rag.search import SearchResult
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
-SYSTEM_PROMPT_VERSION = "system_v2"  # v2: cuándo derivar y cuándo explicar (docs/calidad.md)
+# v2: cuándo derivar y cuándo explicar (docs/calidad.md). v3: sin verificar, usar la herramienta
+# (dispara la verificación por código) y nunca pedir datos personales en texto (decisión 024).
+SYSTEM_PROMPT_VERSION = "system_v3"
 
 TONES = {
     "rioplatense": 'Hablá en español rioplatense con voseo ("¿Me pasás el número de pedido?").',

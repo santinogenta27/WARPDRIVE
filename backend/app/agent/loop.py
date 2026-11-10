@@ -7,6 +7,7 @@ pasos) → una de cuatro acciones: responder, ejecutar, pedir_aprobacion o deriv
 """
 
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -88,6 +89,18 @@ class _ChatFallback(Exception):
     """La charla no logró una respuesta válida: se usa el mensaje fijo, sin derivar."""
 
 
+# "mi mail es", "mi correo:", "te paso mi email": lo que rodea al email cuando lo manda solo.
+EMAIL_LEAD = re.compile(
+    r"(?i)\b(?:(?:te\s+paso|ac[aá]\s+va|este\s+es)\s+)?(?:mi\s+)?(?:e-?mail|mail|correo"
+    r"(?:\s+electr[oó]nico)?)\s*(?:es|:)?"
+)
+# El modelo le pide al cliente un dato personal en lugar de usar la herramienta (que dispara la
+# verificación por código): se reemplaza por el flujo de verificación.
+ASKS_PERSONAL_DATA = re.compile(
+    r"(?i)\b(?:e-?mail|mail|correo|tel[eé]fono|celular|n[uú]mero\s+de\s+contacto|dni|documento)\b"
+)
+
+
 def _wrong_code_message(remaining: int) -> str:
     left = "Te queda 1 intento" if remaining == 1 else f"Te quedan {remaining} intentos"
     return f"Ese código no es correcto. {left}."
@@ -128,6 +141,7 @@ class _Turn:
     documents: list[SearchResult] = field(default_factory=list)
     grounding_retries: int = 0
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
+    needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
 
 
 def _grounding_correction(tool_use_id: str | None, reason: str) -> dict[str, Any]:
@@ -182,6 +196,13 @@ class Agent:
         self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
         if not contact.verified:
             pending = email_code.open_verification(self._conn, tenant_id, contact_id)
+            if pending is None and email_code.EMAIL.search(text):
+                # Mandó su email sin que el flujo lo pidiera (por ejemplo, porque el modelo se
+                # lo pidió en texto libre): es un intento de verificarse, se le manda el código.
+                email_code.request_email(
+                    self._conn, tenant_id, contact_id, case_id, self._pending_question(turn)
+                )
+                pending = email_code.open_verification(self._conn, tenant_id, contact_id)
             if pending is not None:
                 handled = self._continue_verification(turn, pending, company, tone)
                 if handled is not None:
@@ -219,6 +240,8 @@ class Agent:
         if outcome == "verified":
             # Responde la consulta que había quedado pendiente, ya como cliente verificado.
             turn.contact = self._contact(turn.tenant_id, turn.contact.id)
+            if not pending.question.strip():
+                return self._finish(turn, "responder", VERIFIED_PREFIX + "¿En qué te ayudo?")
             turn.text = pending.question
             turn.prefix = VERIFIED_PREFIX
             return self._respond(turn, company, tone)
@@ -231,6 +254,20 @@ class Agent:
         )
         message = CODE_EXPIRED_MESSAGE if outcome == "expired" else CODE_LOCKED_MESSAGE
         return self._finish(turn, "responder", message, verification=True)
+
+    def _pending_question(self, turn: _Turn) -> str:
+        """La consulta a responder después de verificar: lo que acompaña al email en el mismo
+        mensaje o, si vino solo, el mensaje anterior del cliente en el caso."""
+        rest = EMAIL_LEAD.sub("", email_code.EMAIL.sub("", turn.text)).strip(" ,.;:-")
+        if len(rest.split()) >= 2:
+            return rest
+        with tenant_scope(self._conn, turn.tenant_id):
+            row = self._conn.execute(
+                "select text from case_messages where case_id = %s and role = 'customer'"
+                " order by created_at desc offset 1 limit 1",
+                (turn.case_id,),
+            ).fetchone()
+        return str(row[0]) if row else ""
 
     def _respond(self, turn: _Turn, company: str, tone: str) -> AgentResult:
         tenant_id, case_id, contact, text = turn.tenant_id, turn.case_id, turn.contact, turn.text
@@ -266,6 +303,7 @@ class Agent:
 
         tool_names = list(yaml.safe_load(instructions).get("herramientas") or [])
         manifests = self._guardian.manifests(tenant_id, tool_names)
+        turn.needs_identity = any(m.get("requires_verified_contact") for m in manifests)
         # La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el
         # guardián lo niega, ver _loop): una pregunta general se responde con los documentos.
         turn.documents = hybrid_search(self._conn, tenant_id, self._embedder, text, k=5)
@@ -367,6 +405,8 @@ class Agent:
             else:
                 final_name = ""
             if final_name:
+                if final_name == "responder" and self._asks_personal_data(turn, final_input):
+                    return self._request_verification(turn, str(final_input.get("mensaje")))
                 if final_name == "responder":
                     verdict = self._check_grounding(turn, final_input)
                     if not verdict.ok:
@@ -450,6 +490,28 @@ class Agent:
                 )
             messages.append({"role": "user", "content": results})
         return self._give_up(turn, f"Se alcanzó el límite de {self._max_steps} pasos.", chat)
+
+    def _asks_personal_data(self, turn: _Turn, data: dict[str, Any]) -> bool:
+        """Sin verificar, el modelo le pide al cliente el email, el teléfono u otro dato personal
+        en texto: eso no verifica a nadie."""
+        message = str(data.get("mensaje") or "")
+        return (
+            not turn.contact.verified
+            and turn.needs_identity
+            and ASKS_PERSONAL_DATA.search(message) is not None
+        )
+
+    def _request_verification(self, turn: _Turn, rejected: str) -> AgentResult:
+        """Flujo de verificación por código en lugar del pedido de datos en texto libre."""
+        email_code.request_email(
+            self._conn, turn.tenant_id, turn.contact.id, turn.case_id, turn.text
+        )
+        self._audit(
+            turn,
+            "verification_requested",
+            {"reason": "El modelo pidió datos personales en texto.", "rejected_message": rejected},
+        )
+        return self._finish(turn, "responder", VERIFICATION_MESSAGE, verification=True)
 
     def _give_up(self, turn: _Turn, reason: str, chat: str | None) -> AgentResult:
         """Sin una respuesta válida: deriva, salvo en la charla (mensaje fijo, sin derivar)."""

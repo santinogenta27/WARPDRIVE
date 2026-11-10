@@ -151,7 +151,9 @@ def test_el_prompt_dice_cuando_derivar_y_cuando_explicar() -> None:
     from app.agent import prompt
 
     text = prompt.system_prompt("Acme Store", "rioplatense", "nombre: x")
-    assert prompt.SYSTEM_PROMPT_VERSION == "system_v2"
+    assert prompt.SYSTEM_PROMPT_VERSION == "system_v3"
     assert "Derivá solo si" in text
+    # Sin verificar usa la herramienta (dispara el código); nunca pide datos en texto.
+    assert "Nunca le pidas vos el email" in text
     assert "no derives por eso" in text  # un "no se puede" se explica, no se deriva
     assert "Nunca inventes" in text

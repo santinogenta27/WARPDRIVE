@@ -33,7 +33,8 @@ class SimulatedClaude:
 
     # Modos para probar el control de fundamento: "normal", "invent" (inventa siempre),
     # "invent_once" (inventa y, corregido, responde bien), "fake_source" (cita una fuente que no
-    # recibió), "sneaky_number" (mete un dato sin respaldo sin declararlo factual).
+    # recibió), "sneaky_number" (mete un dato sin respaldo sin declararlo factual),
+    # "asks_contact" (sin verificar, pide email o teléfono en texto en vez de usar la herramienta).
     mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
@@ -114,6 +115,13 @@ class SimulatedClaude:
                 factual=False,
             )
 
+        # Lo que hizo Groq en la demo: sin verificar, pide los datos en texto en lugar de usar la
+        # herramienta (que dispara la verificación por código).
+        if self.mode == "asks_contact" and 'verificado="no"' in first and order_id:
+            return reply(
+                "Para ayudarte con eso, indícanos tu número de teléfono o correo electrónico.",
+                factual=False,
+            )
         if order_id and results:
             name, call_input, result = results[-1]
             return self._after_tool(name, call_input, result, low, message, tool_names, reply)
