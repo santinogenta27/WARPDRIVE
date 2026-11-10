@@ -26,6 +26,7 @@ from app.db.connection import connect, tenant_scope
 from app.panel import auth
 from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
 from app.panel.labels import type_label
+from app.panel.privacy import mask_codes, summary
 from app.panel.notify import notify_customer
 from app.policy.approvals import ApprovalError, ApprovalOutcome, decide
 from app.policy.guardian import Guardian
@@ -34,6 +35,14 @@ router = APIRouter(prefix="/panel", include_in_schema=False)
 
 REPORT_TENANT = "Acme Store (onboarding)"
 MAX_REPLY = 2000
+
+
+def customer_texts(case_column: str) -> str:
+    """Los primeros mensajes del cliente del caso, en orden: de ahí sale el resumen."""
+    return (
+        "array(select m.text from case_messages m where m.case_id = "
+        f"{case_column} and m.role = 'customer' order by m.created_at limit 10)"
+    )
 
 
 @dataclass
@@ -200,7 +209,8 @@ def _params(params: dict[str, Any]) -> str:
 
 def _approval_cards(rows: list[tuple[Any, ...]], csrf: str, *, back: str) -> str:
     cards = []
-    for approval_id, tool, params, case_id, created, first_message in rows:
+    for approval_id, tool, params, case_id, created, customer_messages in rows:
+        first_message = summary(customer_messages or [])
         cards.append(
             f"""<div class="card"><div class="row"><div class="grow">
 <span class="badge waiting_approval">Pendiente</span> <b class="mono">{esc(tool)}</b>
@@ -220,9 +230,7 @@ def _pending(
 ) -> list[tuple[Any, ...]]:
     with tenant_scope(conn, tenant_id):
         return conn.execute(
-            "select a.id, t.name, a.params, a.case_id, a.created_at,"
-            " (select m.text from case_messages m where m.case_id = a.case_id"
-            "  and m.role = 'customer' order by m.created_at desc limit 1)"
+            f"select a.id, t.name, a.params, a.case_id, a.created_at, {customer_texts('a.case_id')}"
             " from approvals a join tools t on t.id = a.tool_id"
             " where a.status = 'pending' and (%s::uuid is null or a.case_id = %s)"
             " order by a.created_at",
@@ -364,7 +372,7 @@ def inbox(request: Request, deps: Deps) -> Response:
     counts: dict[str, int] = {}
     for row in rows:
         counts[row[1]] = counts.get(row[1], 0) + 1
-    summary = "".join(
+    kpis = "".join(
         f'<div class="kpi"><div class="n">{counts.get(key, 0)}</div>'
         f'<div class="muted">{label}</div></div>'
         for key, label in (
@@ -382,7 +390,8 @@ color:inherit"><div class="grow"><div class="row" style="gap:8px">
 <span class="muted small">{esc(type_label(type_name))}</span>
 <span class="muted small">· {esc(CHANNELS.get(channel or "", "Canal"))}
 {" · verificado" if verified else ""}</span></div>
-<div class="ellipsis" style="margin-top:6px">{esc(preview or "(sin texto)")}</div></div>
+<div class="ellipsis" style="margin-top:6px">{esc(summary(preview or []) or "(sin texto)")}
+</div></div>
 <div class="muted small" style="text-align:right">{local_time(updated)}<br>{total} mensajes
 </div></a>"""
             for (
@@ -401,7 +410,7 @@ color:inherit"><div class="grow"><div class="row" style="gap:8px">
     )
     body = f"""<h1>Casos</h1><p class="lead">Conversaciones con su estado: primero las derivadas
 a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
-confirma o pasan 24 h sin respuesta.</p><div class="kpis">{summary}</div>
+confirma o pasan 24 h sin respuesta.</p><div class="kpis">{kpis}</div>
 {items}"""
     return HTMLResponse(page("Casos", body, active="casos"))
 
@@ -409,9 +418,7 @@ confirma o pasan 24 h sin respuesta.</p><div class="kpis">{summary}</div>
 def _inbox_rows(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[tuple[Any, ...]]:
     with tenant_scope(conn, tenant_id):
         return conn.execute(
-            f"select c.id, c.status, c.updated_at, {CASE_LABEL},"
-            " (select m.text from case_messages m where m.case_id = c.id and m.role = 'customer'"
-            "  order by m.created_at desc limit 1),"
+            f"select c.id, c.status, c.updated_at, {CASE_LABEL}, {customer_texts('c.id')},"
             " (select count(*) from case_messages m where m.case_id = c.id),"
             " (select e.payload ->> 'channel' from audit_events e where e.case_id = c.id"
             "  and e.payload ? 'channel' limit 1),"
@@ -451,7 +458,7 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
         verified = "verificado" if p.get("verified") else "sin verificar"
         return (
             "Mensaje del cliente",
-            f"“{esc(p.get('text'))}” <span class=muted>· {verified}</span>",
+            f"“{esc(mask_codes(str(p.get('text'))))}” <span class=muted>· {verified}</span>",
         )
     if kind == "model_call":
         tokens = int(p.get("input_tokens") or 0) + int(p.get("output_tokens") or 0)
@@ -538,17 +545,17 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     chat = (
         "".join(
             f'<div class="msg {esc(role)}"><div class="who">{ROLES.get(role, role)} · '
-            f"{local_time(at, '%H:%M')}</div>{esc(text)}</div>"
+            f"{local_time(at, '%H:%M')}</div>{esc(mask_codes(text))}</div>"
             for role, text, at in messages
         )
         or '<p class="muted">Sin mensajes.</p>'
     )
     escalated = ""
     if status == "escalated" and escalation:
-        summary = escalation if isinstance(escalation, dict) else json.loads(escalation)
+        handoff = escalation if isinstance(escalation, dict) else json.loads(escalation)
         escalated = (
             '<div class="card" style="border-color:var(--bad)"><b>Derivado a una persona</b>'
-            f'<div class="muted">Motivo: {esc(summary.get("motivo"))}</div></div>'
+            f'<div class="muted">Motivo: {esc(handoff.get("motivo"))}</div></div>'
         )
     approvals = _approval_cards(pending, csrf, back=f"/panel/casos/{case_id}")
 

@@ -197,6 +197,24 @@ def test_la_charla_figura_como_conversacion_general(
     assert "Caso Conversación general" in client.get(f"/panel/casos/{chat.case_id}").text
 
 
+def test_el_resumen_del_caso_no_muestra_codigos_ni_datos_personales(
+    client: TestClient, stack: SimulatedStack
+) -> None:
+    stack.add_contact("nuevo")
+    stack.send("nuevo", "Quiero el reembolso del pedido 1005")
+    stack.send("nuevo", "martin@example.com")
+    code = stack.last_code()
+    done = stack.send("nuevo", code)
+    assert done.approval_id is not None
+    login(client)
+    inbox = client.get("/panel/casos").text
+    approvals = client.get("/panel/aprobaciones").text
+    for page_text in (inbox, approvals):
+        assert "Quiero el reembolso del pedido 1005" in page_text  # el primer mensaje
+        assert code not in page_text and "martin@example.com" not in page_text
+    assert code not in client.get(f"/panel/casos/{done.case_id}").text  # ni en el detalle
+
+
 def test_la_bandeja_cierra_los_casos_sin_respuesta_hace_24_horas(
     client: TestClient, conn: psycopg.Connection, stack: SimulatedStack
 ) -> None:
