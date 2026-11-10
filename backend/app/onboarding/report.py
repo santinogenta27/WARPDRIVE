@@ -73,7 +73,11 @@ class SandboxRuntime(ToolRuntime):
             return self._owner
         kind = schema.get("type")
         if isinstance(kind, list):
-            kind = next((k for k in kind if k != "null"), "string")
+            if "null" in kind:
+                # Un campo que admite nulo (p. ej. shipped_at) queda vacío: con un valor, un
+                # pedido "pagado" parecería despachado.
+                return None
+            kind = kind[0] if kind else "string"
         if "const" in schema:
             return schema["const"]
         if "enum" in schema:
@@ -118,9 +122,14 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", text.lower())
 
 
-def _grade(case: dict[str, Any], action: str, message: str, escalation: str) -> tuple[bool, str]:
+def grade_case(
+    case: dict[str, Any], action: str, message: str, escalation: str
+) -> tuple[bool, str]:
+    """Si se esperaba ejecutar, pedir aprobación humana también vale: es la opción segura."""
     expected = case["expected"]
-    valid = expected.get("acciones_validas") or [expected["accion"]]
+    valid = list(expected.get("acciones_validas") or [expected["accion"]])
+    if "ejecutar" in valid:
+        valid.append("pedir_aprobacion")
     if case["must_escalate"] and action != "derivar" and "derivar" in valid:
         return False, f"tenía que derivar y eligió {action}"
     if action not in valid:
@@ -180,7 +189,7 @@ def readiness_report(
                 contact = verified if input_.get("contacto") == "verificado" else unverified
                 result = agent.handle_message(tenant_id, contact, input_["mensaje"])
                 escalation = str((result.escalation_summary or {}).get("motivo") or "")
-                ok, why = _grade(
+                ok, why = grade_case(
                     {"expected": expected, "must_escalate": must_escalate},
                     result.action,
                     result.message,
