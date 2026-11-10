@@ -57,6 +57,7 @@ font-weight:700;letter-spacing:-.02em}.kpi.big .n{color:var(--brand)}
 .type{display:grid;grid-template-columns:minmax(150px,1.3fr) 1fr 1fr;gap:14px;align-items:center}
 @media (max-width:640px){.type{grid-template-columns:1fr}.msg{max-width:95%}}
 .missing{margin:8px 0 0;padding-left:18px;color:var(--warn);font-size:13px}
+form.sending button{opacity:.6;cursor:wait}
 .empty{text-align:center;color:var(--muted);padding:28px}footer{text-align:center;
 color:var(--muted);font-size:12px;padding:12px}
 """
@@ -97,7 +98,16 @@ def page(title: str, body: str, *, active: str = "", logged_in: bool = True) -> 
 <body><header><div class="bar"><div class="logo">A</div>
 <div class="brand">Acme Store<small>Panel del equipo</small></div>{nav}</div></header>
 <main>{body}</main>
-<footer>Demo de Enterprise Data AI · Acme Store es una tienda ficticia</footer></body></html>"""
+<footer>Demo de Enterprise Data AI · Acme Store es una tienda ficticia</footer>
+<script>{NO_DOUBLE_SUBMIT}</script></body></html>"""
+
+
+# Doble clic en Enviar o Aprobar: el segundo envío del mismo formulario no sale (el servidor
+# además descarta un envío repetido).
+NO_DOUBLE_SUBMIT = (
+    'document.addEventListener("submit",function(e){var f=e.target;'
+    'if(f.dataset.sent){e.preventDefault();return}f.dataset.sent="1";f.classList.add("sending")});'
+)
 
 
 STATUS = {

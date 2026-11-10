@@ -526,19 +526,28 @@
 
   // Mensajes del equipo (respuestas o avisos de una aprobación desde el panel): se consultan
   // cada pocos segundos mientras la pestaña está visible.
+  // Una consulta a la vez, y cada mensaje se muestra una sola vez (por su id): el intervalo y el
+  // cambio de pestaña pueden disparar dos consultas superpuestas.
+  var polling = false;
   function poll() {
-    if (!state.session || document.hidden) return;
+    if (polling || !state.session || document.hidden) return;
+    polling = true;
     var url = "/chat/updates?session=" + encodeURIComponent(state.session) +
       (state.lastHuman ? "&after=" + encodeURIComponent(state.lastHuman) : "");
     fetch(url).then(function (r) { return r.ok ? r.json() : { messages: [] }; })
       .then(function (data) {
+        var seen = state.seenHuman || [];
         (data.messages || []).forEach(function (m) {
           state.lastHuman = m.at;
+          if (seen.indexOf(m.id) >= 0) return;
+          seen.push(m.id);
+          state.seenHuman = seen.slice(-50);
           hideTyping();
           add("human", m.text);
         });
       })
-      .catch(function () { /* sin conexión: se reintenta en la próxima vuelta */ });
+      .catch(function () { /* sin conexión: se reintenta en la próxima vuelta */ })
+      .then(function () { polling = false; });
   }
   setInterval(poll, 6000);
   document.addEventListener("visibilitychange", poll);

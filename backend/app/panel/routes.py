@@ -320,8 +320,8 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
                 decided_by=user_id,
             )
         except ApprovalError:
-            body = '<div class="card empty">Esa aprobación ya fue decidida.</div>'
-            return HTMLResponse(page("Aprobaciones", body), status_code=409)
+            # Ya decidida (doble clic o reenvío): no se ejecuta ni se avisa de nuevo.
+            return RedirectResponse("/panel/aprobaciones", status_code=303)
         notify_customer(
             conn,
             deps.tenant_id,
@@ -555,6 +555,7 @@ modelo · {tokens} tokens</div></div><div class="kpi"><div class="n">{len(events
 <div class="card"><h2 style="margin-top:0">Conversación</h2><div class="msgs">{chat}</div>
 <form method="post" action="/panel/casos/{case_id}/responder" style="margin-top:14px">
 <input type="hidden" name="csrf" value="{csrf}">
+<input type="hidden" name="envio" value="{uuid.uuid4().hex}">
 <label for="texto">Responder como persona del equipo</label>
 <textarea id="texto" name="texto" maxlength="{MAX_REPLY}" required
  placeholder="Hola, soy del equipo de Acme Store…"></textarea>
@@ -576,15 +577,34 @@ def reply(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Respo
     if deps.tenant_id is None:
         return _no_tenant()
     text = form.get("texto", "").strip()[:MAX_REPLY]
+    sending = form.get("envio", "")[:64]  # un token por formulario: el mismo envío, una vez
     if text:
         with deps.connection() as conn:
             with tenant_scope(conn, deps.tenant_id):
-                exists = conn.execute("select 1 from cases where id = %s", (case_id,)).fetchone()
+                # Bloquear el caso serializa dos envíos simultáneos del mismo formulario.
+                exists = conn.execute(
+                    "select 1 from cases where id = %s for update", (case_id,)
+                ).fetchone()
+                repeated = (
+                    sending
+                    and conn.execute(
+                        "select 1 from audit_events where case_id = %s and kind = 'human_reply'"
+                        " and payload ->> 'envio' = %s",
+                        (case_id, sending),
+                    ).fetchone()
+                )
             if exists is None:
                 body = '<div class="card empty">Ese caso no existe.</div>'
                 return HTMLResponse(page("Caso", body), status_code=404)
-            user_id = _user_id(conn, deps.tenant_id, session[1])
-            notify_customer(conn, deps.tenant_id, case_id, text, detail={"by": str(user_id)})
+            if not repeated:
+                user_id = _user_id(conn, deps.tenant_id, session[1])
+                notify_customer(
+                    conn,
+                    deps.tenant_id,
+                    case_id,
+                    text,
+                    detail={"by": str(user_id), "envio": sending},
+                )
     return RedirectResponse(f"/panel/casos/{case_id}", status_code=303)
 
 

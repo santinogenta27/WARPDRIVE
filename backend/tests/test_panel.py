@@ -137,6 +137,45 @@ def test_la_bandeja_muestra_primero_las_derivadas_y_se_responde_como_humano(
     assert kinds[-1] == "human_reply"
 
 
+def field(html: str, name: str) -> str:
+    match = re.search(rf'name="{name}" value="([^"]+)"', html)
+    assert match is not None
+    return match.group(1)
+
+
+def test_enviar_dos_veces_el_mismo_formulario_manda_un_solo_mensaje(
+    client: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    """Doble clic o reenvío del navegador: el cliente recibe la respuesta una sola vez."""
+    pending = stack.send("martin", "Quiero el reembolso del pedido 1005")
+    assert pending.approval_id is not None
+    stack.close_open_cases()  # la derivación, en otro caso
+    escalated = stack.send("martin", "quiero hablar con una persona")
+    login(client)
+    detail = client.get(f"/panel/casos/{escalated.case_id}").text
+    assert "dataset.sent" in detail  # el navegador no reenvía un formulario ya enviado
+    form = {"texto": "Hola, soy Ana.", "csrf": csrf(detail), "envio": field(detail, "envio")}
+    for _ in range(2):
+        response = client.post(
+            f"/panel/casos/{escalated.case_id}/responder", data=form, follow_redirects=False
+        )
+        assert response.status_code == 303
+
+    approvals = client.get("/panel/aprobaciones").text
+    for _ in range(2):  # la segunda vez ya está decidida: vuelve a la lista sin error
+        again = client.post(
+            f"/panel/aprobaciones/{pending.approval_id}",
+            data={"decision": "aprobar", "csrf": csrf(approvals)},
+            follow_redirects=False,
+        )
+        assert again.status_code == 303
+    with tenant_scope(conn, stack.seed.tenant_id):
+        counts = conn.execute(
+            "select case_id, count(*) from case_messages where role = 'human' group by case_id"
+        ).fetchall()
+    assert all(count == 1 for _, count in counts) and counts
+
+
 def test_el_detalle_muestra_la_auditoria_con_fuentes_y_costo(
     client: TestClient, stack: SimulatedStack
 ) -> None:

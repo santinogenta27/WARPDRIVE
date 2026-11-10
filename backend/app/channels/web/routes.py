@@ -304,13 +304,18 @@ def updates(deps: Deps, session: str = "", after: str = "") -> dict[str, Any]:
             if known is None:
                 raise HTTPException(status_code=401, detail="Sesión inválida")
             rows = conn.execute(
-                "select m.text, m.created_at from case_messages m"
+                "select m.id, m.text, m.created_at from case_messages m"
                 " join cases c on c.id = m.case_id join contacts k on k.id = c.contact_id"
                 " where k.phone_hash = %s and m.role = 'human' and m.created_at > %s"
                 " order by m.created_at limit 20",
                 (hash_address(f"{WEB_PREFIX}{token_hash(session)}"), since),
             ).fetchall()
-    return {"messages": [{"text": text, "at": at.isoformat()} for text, at in rows]}
+    return {
+        "messages": [
+            {"id": str(message_id), "text": text, "at": at.isoformat()}
+            for message_id, text, at in rows
+        ]
+    }
 
 
 @router.post("/chat/messages")

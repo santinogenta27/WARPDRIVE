@@ -305,6 +305,9 @@ def test_la_pagina_recibe_los_mensajes_del_equipo_de_su_sesion(
 
     updates = api.get("/chat/updates", params={"session": mine}).json()["messages"]
     assert [m["text"] for m in updates] == ["Hola, soy Ana del equipo."]
+    # Con el id, la página descarta un mensaje que ya mostró (dos consultas superpuestas).
+    assert uuid.UUID(updates[0]["id"])
+    assert "seen.indexOf(m.id)" in api.get("/chat").text
     later = api.get("/chat/updates", params={"session": mine, "after": updates[0]["at"]})
     assert later.json() == {"messages": []}
     assert api.get("/chat/updates", params={"session": other}).json() == {"messages": []}
