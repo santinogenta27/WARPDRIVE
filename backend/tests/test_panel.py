@@ -176,6 +176,17 @@ def test_enviar_dos_veces_el_mismo_formulario_manda_un_solo_mensaje(
     assert all(count == 1 for _, count in counts) and counts
 
 
+def test_los_tipos_de_caso_se_ven_con_nombre_legible(
+    client: TestClient, stack: SimulatedStack
+) -> None:
+    answered = stack.send("lucia", "¿Abren los domingos?")
+    login(client)
+    inbox = client.get("/panel/casos").text
+    assert "Horarios y sucursales" in inbox and ">horarios_y_sucursales<" not in inbox
+    detail = client.get(f"/panel/casos/{answered.case_id}").text
+    assert "Caso Horarios y sucursales" in detail
+
+
 def test_la_bandeja_cierra_los_casos_sin_respuesta_hace_24_horas(
     client: TestClient, conn: psycopg.Connection, stack: SimulatedStack
 ) -> None:
@@ -278,9 +289,9 @@ def test_el_reporte_de_preparacion_muestra_tipos_volumen_y_porcentaje(
     page = client.get("/panel/reporte").text
     for text in (
         "72%",
-        "consulta_estado_pedido",
+        "Consulta estado pedido",
         "100%",
-        "obtener_factura",
+        "Obtener factura",
         "50%",
         "Una herramienta para actuar",
         "4 de 4",

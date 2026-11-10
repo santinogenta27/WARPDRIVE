@@ -25,6 +25,7 @@ from app.cases.closing import close_inactive
 from app.db.connection import connect, tenant_scope
 from app.panel import auth
 from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
+from app.panel.labels import type_label
 from app.panel.notify import notify_customer
 from app.policy.approvals import ApprovalError, ApprovalOutcome, decide
 from app.policy.guardian import Guardian
@@ -372,7 +373,7 @@ def inbox(request: Request, deps: Deps) -> Response:
             f"""<a class="card row" href="/panel/casos/{case_id}" style="text-decoration:none;
 color:inherit"><div class="grow"><div class="row" style="gap:8px">
 {status_badge(status, resolved_by)}
-<span class="muted small">{esc(type_name or "sin clasificar")}</span>
+<span class="muted small">{esc(type_label(type_name))}</span>
 <span class="muted small">· {esc(CHANNELS.get(channel or "", "Canal"))}
 {" · verificado" if verified else ""}</span></div>
 <div class="ellipsis" style="margin-top:6px">{esc(preview or "(sin texto)")}</div></div>
@@ -453,7 +454,7 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
             f"{tokens} tokens · USD {esc(p.get('cost_usd'))}"
         )
     if kind == "classified":
-        return "Clasificó el caso", f"<span class=mono>{esc(p.get('case_type'))}</span>"
+        return "Clasificó el caso", esc(type_label(p.get("case_type")))
     if kind == "rag_search":
         sources = sorted(set(p.get("sources") or []))
         shown = ", ".join(f"<span class=mono>{esc(s)}</span>" for s in sources) or "sin resultados"
@@ -568,7 +569,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         f"{esc(verdict.reason)}</span>"
     )
     body = f"""<p><a href="/panel/casos">← Casos</a></p>
-<div class="row"><h1 class="grow">Caso {esc(type_name or "sin clasificar")}</h1>
+<div class="row"><h1 class="grow">Caso {esc(type_label(type_name))}</h1>
 {status_badge(status, resolved_by)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
 {escalated}{approvals}
@@ -683,7 +684,7 @@ def _report_body(report: dict[str, Any], finished: Any) -> str:
         missing = list(t.get("falta") or [])
         if share < 1 and not missing:
             missing = ["Ajustar las instrucciones del tipo con los casos que fallaron"]
-        gaps += [f"<b>{esc(t.get('nombre'))}</b>: {esc(m)}" for m in missing]
+        gaps += [f"<b>{esc(type_label(t.get('nombre')))}</b>: {esc(m)}" for m in missing]
         tools = ", ".join(esc(x) for x in t.get("herramientas") or []) or "solo información"
         errors = "".join(
             f"<li>“{esc(e.get('mensaje'))}” — {esc(e.get('motivo'))}</li>"
@@ -697,7 +698,7 @@ def _report_body(report: dict[str, Any], finished: Any) -> str:
         )
         missing_html = "".join(f"<li>{esc(m)}</li>" for m in missing)
         rows.append(
-            f"""<div class="card"><div class="type"><div><b class="mono">{esc(t.get("nombre"))}</b>
+            f"""<div class="card"><div class="type"><div><b>{esc(type_label(t.get("nombre")))}</b>
 <div class="muted small">{esc(t.get("objetivo"))}</div>
 <div class="muted small">Herramientas: {tools}</div></div>
 <div><div class="row small"><span class="grow muted">Volumen</span><b>{volume}</b>
