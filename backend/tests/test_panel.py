@@ -187,6 +187,16 @@ def test_los_tipos_de_caso_se_ven_con_nombre_legible(
     assert "Caso Horarios y sucursales" in detail
 
 
+def test_la_charla_figura_como_conversacion_general(
+    client: TestClient, stack: SimulatedStack
+) -> None:
+    chat = stack.send("lucia", "¿sos un bot?")  # charla para el clasificador simulado
+    login(client)
+    inbox = client.get("/panel/casos").text
+    assert "Conversación general" in inbox and "Sin clasificar" not in inbox
+    assert "Caso Conversación general" in client.get(f"/panel/casos/{chat.case_id}").text
+
+
 def test_la_bandeja_cierra_los_casos_sin_respuesta_hace_24_horas(
     client: TestClient, conn: psycopg.Connection, stack: SimulatedStack
 ) -> None:

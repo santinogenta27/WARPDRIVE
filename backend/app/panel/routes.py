@@ -343,6 +343,12 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
 
 # -- bandeja ---------------------------------------------------------------------------------
 CHANNELS = {"web": "Chat web", "twilio_whatsapp": "WhatsApp", "whatsapp": "WhatsApp"}
+# Tipo del caso; si no es un tipo de la empresa (charla, consulta general, pedido de una
+# persona), la última clasificación registrada en la auditoría.
+CASE_LABEL = (
+    "coalesce(t.name, (select e.payload ->> 'case_type' from audit_events e"
+    " where e.case_id = c.id and e.kind = 'classified' order by e.seq desc limit 1))"
+)
 
 
 @router.get("/casos", response_class=HTMLResponse)
@@ -403,7 +409,7 @@ confirma o pasan 24 h sin respuesta.</p><div class="kpis">{summary}</div>
 def _inbox_rows(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[tuple[Any, ...]]:
     with tenant_scope(conn, tenant_id):
         return conn.execute(
-            "select c.id, c.status, c.updated_at, t.name,"
+            f"select c.id, c.status, c.updated_at, {CASE_LABEL},"
             " (select m.text from case_messages m where m.case_id = c.id and m.role = 'customer'"
             "  order by m.created_at desc limit 1),"
             " (select count(*) from case_messages m where m.case_id = c.id),"
@@ -511,8 +517,8 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     with deps.connection() as conn:
         with tenant_scope(conn, tenant_id):
             case = conn.execute(
-                "select c.status, c.escalation, t.name, c.created_at, c.resolved_by from cases c"
-                " left join case_types t on t.id = c.case_type_id where c.id = %s",
+                f"select c.status, c.escalation, {CASE_LABEL}, c.created_at, c.resolved_by"
+                " from cases c left join case_types t on t.id = c.case_type_id where c.id = %s",
                 (case_id,),
             ).fetchone()
             messages = conn.execute(
