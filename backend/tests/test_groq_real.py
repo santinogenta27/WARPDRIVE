@@ -4,6 +4,7 @@ Gastan cuota del nivel gratuito, así que corren solo a pedido:
 
     RUN_GROQ_TESTS=1 python -m pytest backend/tests/test_groq_real.py
     RUN_GROQ_TESTS=1 GROQ_REPEAT=5 ...   # repite el flujo para medir si es estable
+    GROQ_TEST_MODEL=openai/gpt-oss-120b  # otro modelo (por defecto, el de Render)
 
 Sin caché del modelo: cada corrida le pregunta de verdad a Groq. Los embeddings sí usan la caché
 de los evals (los documentos no cambian).
@@ -32,9 +33,11 @@ TUTEO = ("indícanos", "dime ", "puedes", "quieres", "tienes", "necesitas")
 @pytest.fixture
 def groq(conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch) -> Iterator[SimulatedStack]:
     monkeypatch.setenv("LLM_PROVIDER", "groq")
-    # Los mismos modelos que el chat en Render (render.yaml).
-    monkeypatch.setenv("GROQ_AGENT_MODEL", "openai/gpt-oss-20b")
-    monkeypatch.setenv("GROQ_CLASSIFIER_MODEL", "openai/gpt-oss-20b")
+    # Por defecto, el mismo modelo que el chat en Render (render.yaml). GROQ_TEST_MODEL prueba
+    # otro (cada modelo tiene su propia cuota diaria).
+    model = os.environ.get("GROQ_TEST_MODEL") or "openai/gpt-oss-20b"
+    monkeypatch.setenv("GROQ_AGENT_MODEL", model)
+    monkeypatch.setenv("GROQ_CLASSIFIER_MODEL", model)
     yield build_real_stack(conn, runner.CACHE_DIR, cache_models=False)
 
 
