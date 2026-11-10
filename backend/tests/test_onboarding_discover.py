@@ -82,7 +82,17 @@ def test_recupera_al_menos_7_de_8_tipos_conocidos(conn: psycopg.Connection) -> N
     ingest(conn, tenant_id, uploads, business={"Acme Store"}, embedder=embedder)
 
     model = FakeModel()
-    found = discover_case_types(conn, tenant_id, model, embedder, batch_size=10)
+    checkpoints: list[int] = []
+    found = discover_case_types(
+        conn,
+        tenant_id,
+        model,
+        embedder,
+        batch_size=10,
+        checkpoint=lambda: checkpoints.append(len(model.summarized)),
+    )
+    # El avance se confirma después de cada lote (si se corta, no se pierde lo resumido).
+    assert checkpoints == [10 * (i + 1) for i in range(10)]
 
     labels = json.loads((ONBOARDING / "labels.json").read_text(encoding="utf-8"))
     with tenant_scope(conn, tenant_id):

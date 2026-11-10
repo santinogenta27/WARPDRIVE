@@ -15,6 +15,7 @@ import json
 import math
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -66,9 +67,15 @@ def transcript(conn: psycopg.Connection, conversation_id: uuid.UUID) -> str:
 
 
 def summarize_pending(
-    conn: psycopg.Connection, tenant_id: uuid.UUID, model: Summarizer, *, batch_size: int = 10
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    model: Summarizer,
+    *,
+    batch_size: int = 10,
+    checkpoint: Callable[[], None] = lambda: None,
 ) -> int:
-    """Resume las conversaciones que todavía no tienen resumen. Devuelve cuántas resumió."""
+    """Resume las conversaciones que todavía no tienen resumen. Devuelve cuántas resumió.
+    `checkpoint` se llama después de cada lote (el pipeline confirma ahí la transacción)."""
     with tenant_scope(conn, tenant_id):
         pending = conn.execute(
             "select id from conversations where summary is null order by started_at, id"
@@ -89,6 +96,7 @@ def summarize_pending(
                     (Jsonb(summary.__dict__), cid),
                 )
                 done += 1
+        checkpoint()
     return done
 
 
@@ -196,8 +204,9 @@ def discover_case_types(
     *,
     batch_size: int = 10,
     min_size: int = 3,
+    checkpoint: Callable[[], None] = lambda: None,
 ) -> list[DiscoveredType]:
-    summarize_pending(conn, tenant_id, model, batch_size=batch_size)
+    summarize_pending(conn, tenant_id, model, batch_size=batch_size, checkpoint=checkpoint)
     with tenant_scope(conn, tenant_id):
         rows = conn.execute(
             "select id, external_id, summary from conversations where summary is not null"

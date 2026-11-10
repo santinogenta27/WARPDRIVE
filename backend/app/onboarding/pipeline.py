@@ -125,7 +125,13 @@ def run_pipeline(
         "descubrimiento": lambda: [
             {"nombre": t.name, "volumen": t.volume, "objetivo": t.goal}
             for t in discover_case_types(
-                conn, tenant_id, deps.model, deps.embedder, batch_size=deps.batch_size
+                conn,
+                tenant_id,
+                deps.model,
+                deps.embedder,
+                batch_size=deps.batch_size,
+                # Con commit, cada lote resumido queda guardado aunque la etapa se corte.
+                checkpoint=conn.commit if commit else lambda: None,
             )
         ],
         "evals": lambda: {
