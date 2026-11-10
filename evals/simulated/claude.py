@@ -34,7 +34,8 @@ class SimulatedClaude:
     # Modos para probar el control de fundamento: "normal", "invent" (inventa siempre),
     # "invent_once" (inventa y, corregido, responde bien), "fake_source" (cita una fuente que no
     # recibió), "sneaky_number" (mete un dato sin respaldo sin declararlo factual),
-    # "asks_contact" (sin verificar, pide email o teléfono en texto en vez de usar la herramienta).
+    # "asks_contact" (sin verificar, pide email o teléfono en texto en vez de usar la herramienta),
+    # "tuteo" (responde con "tú" en lugar de voseo).
     mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
@@ -94,6 +95,8 @@ class SimulatedClaude:
         order_id = (re.search(r"\b(1\d{3})\b", message) or [None, None])[1]
 
         def reply(text: str, sources: list[str] | None = None, factual: bool = True) -> list[Any]:
+            if self.mode == "tuteo":  # se escapa del voseo, como a veces el modelo real
+                text = f"{text} Dime si necesitas algo más."
             data = {"mensaje": text, "fuentes": sources or [], "factual": factual}
             return [self._tool_use("responder", data)]
 

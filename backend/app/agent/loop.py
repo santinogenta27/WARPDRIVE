@@ -18,6 +18,7 @@ import yaml
 from app.agent import prompt
 from app.agent.classifier import ASK_FOR_HUMAN, CHAT, GENERAL, NOT_ALLOWED, classify
 from app.agent.grounding import GroundingVerdict, check_grounding
+from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
 from app.channels.whatsapp.format import to_whatsapp
 from app.db.connection import tenant_scope
@@ -142,6 +143,7 @@ class _Turn:
     grounding_retries: int = 0
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
+    tone: str = "rioplatense"
 
 
 def _grounding_correction(tool_use_id: str | None, reason: str) -> dict[str, Any]:
@@ -192,7 +194,7 @@ class Agent:
         contact = self._contact(tenant_id, contact_id)
         case_id = self._open_case(tenant_id, contact_id)
         self._save_message(tenant_id, case_id, "customer", text)
-        turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text)
+        turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone)
         self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
         if not contact.verified:
             pending = email_code.open_verification(self._conn, tenant_id, contact_id)
@@ -584,6 +586,8 @@ class Agent:
         approval_id: uuid.UUID | None = None,
     ) -> AgentResult:
         # Se guarda y se envía tal como lo ve el cliente.
+        if turn.tone == "rioplatense":
+            message = to_voseo(message)  # por si el modelo se escapa al tuteo
         message = to_whatsapp(turn.prefix + message)
         self._save_message(turn.tenant_id, turn.case_id, "agent", message)
         self._audit(

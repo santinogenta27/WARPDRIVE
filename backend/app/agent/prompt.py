@@ -12,7 +12,11 @@ PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 SYSTEM_PROMPT_VERSION = "system_v3"
 
 TONES = {
-    "rioplatense": 'Hablá en español rioplatense con voseo ("¿Me pasás el número de pedido?").',
+    "rioplatense": (
+        'Hablá siempre en español rioplatense con voseo: "indicanos", "decime", "pasame",'
+        ' "podés", "querés", "tenés" ("¿Me pasás el número de pedido?"). Nunca uses "tú" ni'
+        ' "usted" ni sus formas ("indícanos", "dime", "puedes").'
+    ),
     "neutro": "Hablá en español neutro con tuteo.",
     "ingles": "Answer in English.",
 }
