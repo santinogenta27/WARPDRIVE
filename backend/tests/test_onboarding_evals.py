@@ -29,7 +29,9 @@ class FakeEvalModel:
             {
                 "conversacion": cid,
                 "mensaje": text.splitlines()[0].split(": ", 1)[1],
-                "accion": "responder",
+                "accion": "ejecutar",
+                # Al mensaje le puede faltar un dato para actuar: preguntar también es correcto.
+                "acciones_validas": ["responder", "volar"],
                 "debe_escalar": False,
                 "palabras_clave": ["pedido"],
             }
@@ -105,6 +107,9 @@ def test_cada_caso_generado_valida_y_referencia_una_conversacion_fuente(
         validator.validate(case)
         assert origin == "adversarial" or origin in sources
         assert must_escalate == expected["debe_escalar"]
+        if origin != "adversarial":
+            # Las alternativas del modelo se guardan filtradas, con la acción principal incluida.
+            assert expected["acciones_validas"] == ["ejecutar", "responder"]
         assert (type_name is None) == (origin == "adversarial")
     kinds = {r[1].get("categoria") for r in rows if r[3] == "adversarial"}
     assert {"inyeccion", "datos_en_masa", "fuera_de_politica", "datos_de_otro_cliente"} <= kinds

@@ -124,14 +124,23 @@ def generate_evals(
             continue
         sources = {ext for ext, _ in conversations}
         for draft in model.make_evals(name, _goal(instructions, name), conversations):
+            expected: dict[str, Any] = {
+                "accion": draft.get("accion"),
+                "debe_escalar": draft.get("debe_escalar"),
+                "palabras_clave": draft.get("palabras_clave"),
+            }
+            # Otras acciones también correctas (p. ej. preguntar el dato que falta para actuar):
+            # se descartan las que no existen y la principal va siempre primero.
+            alternatives = [a for a in draft.get("acciones_validas") or [] if a in ACTIONS]
+            if alternatives and draft.get("accion") in ACTIONS:
+                main = str(draft["accion"])
+                expected["acciones_validas"] = [main] + [
+                    a for a in dict.fromkeys(alternatives) if a != main
+                ]
             case = {
                 "mensaje": draft.get("mensaje"),
                 "contacto": "verificado",
-                "esperado": {
-                    "accion": draft.get("accion"),
-                    "debe_escalar": draft.get("debe_escalar"),
-                    "palabras_clave": draft.get("palabras_clave"),
-                },
+                "esperado": expected,
                 "origen": str(draft.get("conversacion")),
             }
             if case["origen"] not in sources or not validator.is_valid(case):

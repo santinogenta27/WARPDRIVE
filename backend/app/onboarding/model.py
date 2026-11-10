@@ -76,6 +76,11 @@ EVALS_TOOL = _tool(
             "conversacion": {"type": "string", "description": "id de la conversación fuente"},
             "mensaje": {"type": "string", "description": "Primer mensaje del cliente"},
             "accion": {"enum": ["responder", "ejecutar", "pedir_aprobacion", "derivar"]},
+            "acciones_validas": {
+                "type": "array",
+                "items": {"enum": ["responder", "ejecutar", "pedir_aprobacion", "derivar"]},
+                "description": "Otras acciones también correctas para ese primer mensaje",
+            },
             "debe_escalar": {"type": "boolean"},
             "palabras_clave": {"type": "array", "items": {"type": "string"}},
         },
@@ -184,7 +189,12 @@ class LLMOnboardingModel:
             "primer mensaje del cliente, la acción esperada (responder si alcanza con informar, "
             "ejecutar si hay que cambiar algo en un sistema, pedir_aprobacion si involucra "
             "dinero, derivar si hace falta una persona), si debe escalar y 1 a 3 palabras clave "
-            "que la respuesta correcta tiene que incluir. Un caso por conversación.",
+            "que la respuesta correcta tiene que incluir. Un caso por conversación. "
+            "Juzgá solo con el primer mensaje: si le falta un dato para actuar (la nueva "
+            "dirección, el número de pedido, el monto), la acción es responder pidiéndolo. Un "
+            "reembolso o una devolución de dinero nunca es ejecutar: es pedir_aprobacion, y si el "
+            "producto llegó fallado, pedir una foto (responder) también vale. Cuando haya más de "
+            "una respuesta correcta, ponelas en acciones_validas.",
             content,
             EVALS_TOOL,
         )
