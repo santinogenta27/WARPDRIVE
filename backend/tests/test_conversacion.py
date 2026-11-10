@@ -52,6 +52,31 @@ def test_una_consulta_general_sin_tipo_propio_se_responde_con_los_documentos(
     assert result.case_type is None
 
 
+def test_un_mensaje_que_no_encaja_en_ningun_tipo_se_responde_sin_derivar(
+    stack: SimulatedStack,
+) -> None:
+    """Lo que el clasificador no sabe ubicar ("otro") recibe la respuesta de charla, que
+    pregunta qué necesita, en lugar de derivar: no inventa nada (docs/calidad.md)."""
+    result = stack.send("lucia", "ustedes nunca responden, es la 3ra vez")
+    assert result.action == "responder" and result.escalation_summary is None
+    assert stack.claude_requests[-1]["tool_names"] == {"responder"}
+
+
+def test_una_pregunta_de_politica_no_pide_verificacion_aunque_el_tipo_tenga_herramientas(
+    stack: SimulatedStack,
+) -> None:
+    """La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el
+    guardián la niega por falta de verificación), no por el tipo de caso: una pregunta general
+    sobre devoluciones se responde con los documentos."""
+    result = stack.send("sofia", "me arrepenti, puedo pedir la devolucion del dinero?")
+    assert result.action == "responder" and not result.verification_requested
+    assert "devoluciones_y_reembolsos" in result.sources
+    # Un pedido puntual sí la pide, y el guardián no dejó pasar nada.
+    asked = stack.send("sofia", "devolveme la plata del pedido 1006")
+    assert asked.verification_requested
+    assert all(t.status != "executed" for t in asked.tool_calls)
+
+
 def test_pedir_una_persona_sigue_derivando(stack: SimulatedStack) -> None:
     assert stack.send("lucia", "quiero hablar con una persona").action == "derivar"
 

@@ -26,7 +26,7 @@ from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
 from app.mailer import ConsoleMailer, Email, Mailer
-from app.policy.guardian import ContactContext, GuardDecision, Guardian
+from app.policy.guardian import UNVERIFIED_REASON, ContactContext, GuardDecision, Guardian
 from app.rag.search import SearchResult, hybrid_search
 
 AGENT_MODEL = "claude-sonnet-5-5"
@@ -266,10 +266,8 @@ class Agent:
 
         tool_names = list(yaml.safe_load(instructions).get("herramientas") or [])
         manifests = self._guardian.manifests(tenant_id, tool_names)
-        if not contact.verified and any(m["requires_verified_contact"] for m in manifests):
-            email_code.request_email(self._conn, tenant_id, contact.id, case_id, text)
-            return self._finish(turn, "responder", VERIFICATION_MESSAGE, verification=True)
-
+        # La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el
+        # guardián lo niega, ver _loop): una pregunta general se responde con los documentos.
         turn.documents = hybrid_search(self._conn, tenant_id, self._embedder, text, k=5)
         self._audit(
             turn,
@@ -410,6 +408,24 @@ class Agent:
                         ToolExecution(call.name, call.input, decision.status, decision.reason)
                     )
                     outcome = decision.result
+                    if decision.reason == UNVERIFIED_REASON:
+                        # Quiso usar datos de la cuenta sin verificación: se pide el email.
+                        self._audit(
+                            turn,
+                            "tool_call",
+                            {
+                                "tool": call.name,
+                                "input": call.input,
+                                "status": decision.status,
+                                "reason": decision.reason,
+                            },
+                        )
+                        email_code.request_email(
+                            self._conn, turn.tenant_id, turn.contact.id, turn.case_id, turn.text
+                        )
+                        return self._finish(
+                            turn, "responder", VERIFICATION_MESSAGE, verification=True
+                        )
                     self._audit(
                         turn,
                         "tool_call",

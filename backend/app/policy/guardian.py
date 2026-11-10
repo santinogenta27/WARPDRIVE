@@ -25,6 +25,7 @@ from app.tools.runtime import ToolRuntime, UpstreamResult, idempotency_key
 
 DecisionStatus = Literal["executed", "denied", "approval_required", "failed"]
 NOT_FOUND_FOR_CONTACT = "No hay un recurso con ese identificador entre los del contacto."
+UNVERIFIED_REASON = "El contacto no está verificado."  # el agente pide la verificación
 _HIDDEN_FIELDS = {"customer_phone"}  # el modelo no necesita el teléfono en claro
 
 
@@ -180,7 +181,7 @@ class Guardian:
             return _denied("Parámetros inválidos.", f"Parámetros inválidos: {errors[0].message}")
 
         if manifest["requires_verified_contact"] and not contact.verified:
-            return _denied("El contacto no está verificado.")
+            return _denied(UNVERIFIED_REASON)
 
         resources: dict[str, Any] = {}
         if manifest.get("owner_check"):
