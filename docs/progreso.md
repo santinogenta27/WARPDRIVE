@@ -198,6 +198,18 @@ Guion de la demo en `docs/demo.md`. Decisiones 022 (panel) y 023 (evals).
 - Con la corrección (historial limpio y red de seguridad): **sin medir todavía**. Se agotó por hoy la cuota diaria de `gpt-oss-20b`, que también usa el chat de Render. Además, la corrida con `gpt-oss-120b` se cortó por falta de memoria en la PC.
 - **Pendiente:** correr `RUN_GROQ_TESTS=1 GROQ_REPEAT=5` con cuota disponible.
 
+**Prueba en Render a las 18:33** (caso `fa25094d`, todo con Groq `gpt-oss-20b`, sin respaldo):
+
+- La verificación por código funcionó.
+- El agente consultó el pedido 1005 e inició el reembolso, y el guardián creó la aprobación.
+- El control de fundamento rechazó dos veces la respuesta "reembolso de ARS 35.000": leía "35.000" como "35" y "000", que no estaban en la herramienta (35000). Al segundo rechazo derivó.
+
+Arreglos:
+
+- El control reconoce los montos con separador de miles.
+- Con la aprobación ya creada, el turno termina siempre en pedido de aprobación, con un mensaje fijo, aunque el modelo falle o quiera derivar. Lo prueban `test_flujo_reembolso.py`, también con el principal sin cuota y el respaldo respondiendo.
+- `PYTHONUNBUFFERED=1` en Render, y ConsoleMailer con handler propio y flush.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
