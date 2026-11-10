@@ -125,10 +125,9 @@ def build_real_stack(conn: psycopg.Connection, cache_dir: Path) -> SimulatedStac
     solo proveedor: sin respaldo automático al otro gratuito."""
     import os
 
-    from simulated.cache import CachingProvider
-
     from app.llm.embedding_cache import CachingEmbedder
     from app.llm.factory import embedding_backend
+    from simulated.cache import CachingProvider
 
     os.environ["LLM_FALLBACK"] = "off"
     backend = llm_backend()
