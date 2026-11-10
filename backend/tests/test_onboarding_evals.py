@@ -125,7 +125,9 @@ def test_cada_caso_generado_valida_y_referencia_una_conversacion_fuente(
         {"accion": "pedir_aprobacion", "debe_escalar": False, "palabras_clave": ["plata"]}
     )
     assert refund["acciones_validas"] == ["pedir_aprobacion", "responder"]
-    plain = expected_from_draft({"accion": "responder", "debe_escalar": False, "palabras_clave": []})
+    plain = expected_from_draft(
+        {"accion": "responder", "debe_escalar": False, "palabras_clave": []}
+    )
     assert "acciones_validas" not in plain
 
     # Idempotente: los tipos que ya tienen casos no se vuelven a pedir al modelo.
