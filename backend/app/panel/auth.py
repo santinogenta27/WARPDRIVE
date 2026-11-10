@@ -12,12 +12,21 @@ import hmac
 import os
 import time
 
+from app.config import REPO_ROOT, load_dotenv
+
 COOKIE = "panel"
 SESSION_SECONDS = 12 * 3600
+ENV_FILE = REPO_ROOT / ".env"
+
+
+def _env(name: str) -> str:
+    """Variable del entorno o, en local, del .env (sin pisar lo que ya está definido)."""
+    load_dotenv(ENV_FILE)
+    return os.environ.get(name, "")
 
 
 def _secret() -> bytes:
-    secret = os.environ.get("PANEL_SECRET") or os.environ.get("ENCRYPTION_KEY") or ""
+    secret = _env("PANEL_SECRET") or _env("ENCRYPTION_KEY")
     if not secret:
         raise RuntimeError("Falta PANEL_SECRET o ENCRYPTION_KEY para firmar la sesión del panel")
     return secret.encode()
@@ -28,12 +37,12 @@ def _sign(data: str) -> str:
 
 
 def configured() -> bool:
-    return bool(os.environ.get("PANEL_EMAIL") and os.environ.get("PANEL_PASSWORD"))
+    return bool(_env("PANEL_EMAIL") and _env("PANEL_PASSWORD"))
 
 
 def check_credentials(email: str, password: str) -> bool:
-    expected_email = os.environ.get("PANEL_EMAIL", "").strip().lower()
-    expected_password = os.environ.get("PANEL_PASSWORD", "")
+    expected_email = _env("PANEL_EMAIL").strip().lower()
+    expected_password = _env("PANEL_PASSWORD")
     if not expected_email or not expected_password:
         return False
     same_email = hmac.compare_digest(email.strip().lower(), expected_email)
