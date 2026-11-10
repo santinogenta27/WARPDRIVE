@@ -81,7 +81,9 @@ def test_aprobar_un_reembolso_lo_ejecuta_y_el_cliente_lo_ve(
     assert pending.action == "pedir_aprobacion" and pending.approval_id is not None
     login(client)
     page = client.get("/panel/aprobaciones").text
-    assert "iniciar_reembolso" in page and "1005" in page
+    # Textos legibles, sin identificadores de la herramienta ni de sus parámetros.
+    assert "Reembolso · Pedido 1005 · $35.000" in page
+    assert "iniciar_reembolso" not in page and "order_id" not in page
 
     forged = client.post(
         f"/panel/aprobaciones/{pending.approval_id}", data={"decision": "aprobar", "csrf": "x"}

@@ -11,7 +11,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, Any
 from urllib.parse import parse_qs
@@ -26,7 +26,7 @@ from app.cases.closing import close_inactive
 from app.db.connection import connect, tenant_scope
 from app.panel import auth
 from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
-from app.panel.labels import type_label
+from app.panel.labels import action_label, money, type_label
 from app.panel.notify import notify_customer
 from app.panel.privacy import mask_codes, summary
 from app.policy.approvals import ApprovalError, ApprovalOutcome, decide
@@ -126,11 +126,7 @@ def _no_tenant() -> HTMLResponse:
 
 
 def _money(value: Any) -> str:
-    try:
-        amount = Decimal(str(value))
-    except (InvalidOperation, ValueError):
-        return esc(value)
-    return "$" + f"{amount:,.0f}".replace(",", ".")
+    return esc(money(value))
 
 
 # -- login -----------------------------------------------------------------------------------
@@ -203,12 +199,6 @@ def _user_id(conn: psycopg.Connection, tenant_id: uuid.UUID, email: str) -> uuid
 
 
 # -- aprobaciones ----------------------------------------------------------------------------
-def _params(params: dict[str, Any]) -> str:
-    parts = []
-    for key, value in params.items():
-        shown = _money(value) if key in ("amount", "monto") else esc(value)
-        parts.append(f'<span class="muted">{esc(key)}</span> <b>{shown}</b>')
-    return " · ".join(parts)
 
 
 def _approval_cards(rows: list[tuple[Any, ...]], csrf: str, *, back: str) -> str:
@@ -217,8 +207,7 @@ def _approval_cards(rows: list[tuple[Any, ...]], csrf: str, *, back: str) -> str
         first_message = summary(customer_messages or [])
         cards.append(
             f"""<div class="card"><div class="row"><div class="grow">
-<span class="badge waiting_approval">Pendiente</span> <b class="mono">{esc(tool)}</b>
-<div style="margin-top:6px">{_params(params)}</div>
+<span class="badge waiting_approval">Pendiente</span> <b>{esc(action_label(tool, params))}</b>
 <div class="muted small" style="margin-top:6px">“{esc(first_message or "")}” ·
 <a href="/panel/casos/{case_id}">ver caso</a> · {local_time(created)}</div></div>
 <form method="post" action="/panel/aprobaciones/{approval_id}" class="row">
@@ -269,7 +258,7 @@ def approvals_page(request: Request, deps: Deps) -> Response:
         f"""<div class="card row"><span class="badge {
             "resolved" if status == "approved" else "escalated"
         }">{"Aprobado" if status == "approved" else "Rechazado"}</span>
-<span class="mono">{esc(tool)}</span><span class="grow">{_params(params)}</span>
+<span class="grow">{esc(action_label(tool, params))}</span>
 <span class="muted small">{esc(email or "")} · {local_time(decided)}</span>
 <a href="/panel/casos/{case_id}">ver caso</a></div>"""
         for tool, params, status, decided, case_id, email in decided
