@@ -36,7 +36,7 @@ def last_code(stack: SimulatedStack) -> str:
     return match.group(0)
 
 
-@pytest.mark.parametrize("mode", ["normal", "asks_contact"])
+@pytest.mark.parametrize("mode", ["normal", "asks_contact", "reverify"])
 def test_reembolso_de_un_cliente_nuevo_verifica_por_codigo_y_pide_aprobacion(
     conn: psycopg.Connection, mode: str
 ) -> None:
@@ -54,6 +54,22 @@ def test_reembolso_de_un_cliente_nuevo_verifica_por_codigo_y_pide_aprobacion(
     done = send(stack, contact, last_code(stack))
     assert done.message.startswith(VERIFIED_PREFIX)
     assert done.action == "pedir_aprobacion" and done.approval_id is not None
+    assert "código" not in done.message
+
+
+def test_el_modelo_no_ve_el_intercambio_de_verificacion_en_el_historial(
+    conn: psycopg.Connection,
+) -> None:
+    """Ver "te mando un código" en el historial hacía que el modelo real volviera a pedirlo."""
+    stack = build_simulated_stack(conn)
+    contact = new_contact(stack)
+    send(stack, contact, "Quiero el reembolso del pedido 1005")
+    send(stack, contact, "martin@example.com")
+    send(stack, contact, last_code(stack))
+    assert stack.claude is not None
+    agent_turn = stack.claude_requests[-1]["body"]["messages"][0]["content"]
+    history = agent_turn.split("<historial>")[1].split("</historial>")[0]
+    assert "código" not in history and "martin@example.com" not in history
 
 
 def test_el_email_que_manda_el_cliente_sin_que_se_lo_pidan_inicia_la_verificacion(

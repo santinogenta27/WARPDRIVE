@@ -102,6 +102,30 @@ ASKS_PERSONAL_DATA = re.compile(
 )
 
 
+# Ya verificado, el modelo vuelve a hablar de códigos o de verificar (lo hizo Groq).
+VERIFICATION_TALK = re.compile(r"(?i)c[oó]digo|verific")
+VERIFIED_CORRECTION = (
+    "El cliente ya está verificado (contacto verificado=sí): no le pidas verificación, códigos "
+    "ni datos personales. Usá las herramientas para resolver su consulta."
+)
+_FIXED_VERIFICATION = (
+    "Para darte datos de tu pedido necesito verificar",
+    "Si ese email está",
+    "Ese código",
+)
+
+
+def _verification_exchange(role: str, text: str) -> bool:
+    """Mensajes del intercambio de verificación (el pedido del email, el email, el código): no
+    aportan al modelo y, al verlos, el modelo real volvía a pedir la verificación."""
+    if role == "agent":
+        return text.startswith(_FIXED_VERIFICATION)
+    if role == "customer":
+        rest = email_code.CODE.sub("", EMAIL_LEAD.sub("", email_code.EMAIL.sub("", text)))
+        return rest.strip(" ,.;:-!") == "" and text.strip() != ""
+    return False
+
+
 def _wrong_code_message(remaining: int) -> str:
     left = "Te queda 1 intento" if remaining == 1 else f"Te quedan {remaining} intentos"
     return f"Ese código no es correcto. {left}."
@@ -148,11 +172,15 @@ class _Turn:
 
 def _grounding_correction(tool_use_id: str | None, reason: str) -> dict[str, Any]:
     """Devuelve al modelo la respuesta rechazada para que la reescriba (una sola vez)."""
-    text = (
+    return _correction(
+        tool_use_id,
         f"Respuesta rechazada por el control de fundamento: {reason}. Usá solo datos de "
         "<documentos> citando su id en fuentes, o resultados de herramientas; si no alcanza, "
-        "derivá."
+        "derivá.",
     )
+
+
+def _correction(tool_use_id: str | None, text: str) -> dict[str, Any]:
     if tool_use_id is None:
         return {"role": "user", "content": text}
     return {
@@ -409,6 +437,21 @@ class Agent:
             if final_name:
                 if final_name == "responder" and self._asks_personal_data(turn, final_input):
                     return self._request_verification(turn, str(final_input.get("mensaje")))
+                if final_name == "responder" and self._reverifies(turn, final_input):
+                    self._audit(
+                        turn,
+                        "grounding_rejected",
+                        {
+                            "reason": "Pidió verificar a un contacto verificado.",
+                            "rejected_message": final_input,
+                        },
+                    )
+                    if turn.grounding_retries >= 1:
+                        return self._give_up(turn, "Volvió a pedir la verificación.", chat)
+                    turn.grounding_retries += 1
+                    messages.append({"role": "assistant", "content": response.content})
+                    messages.append(_correction(final_id, VERIFIED_CORRECTION))
+                    continue
                 if final_name == "responder":
                     verdict = self._check_grounding(turn, final_input)
                     if not verdict.ok:
@@ -501,6 +544,15 @@ class Agent:
             not turn.contact.verified
             and turn.needs_identity
             and ASKS_PERSONAL_DATA.search(message) is not None
+        )
+
+    def _reverifies(self, turn: _Turn, data: dict[str, Any]) -> bool:
+        """Ya verificado, el modelo habla de enviar un código o de verificar la cuenta."""
+        message = str(data.get("mensaje") or "")
+        return (
+            turn.contact.verified
+            and turn.needs_identity
+            and VERIFICATION_TALK.search(message) is not None
         )
 
     def _request_verification(self, turn: _Turn, rejected: str) -> AgentResult:
@@ -708,4 +760,8 @@ class Agent:
                 (case_id,),
             ).fetchall()
         labels = {"customer": "cliente", "agent": "asistente", "human": "equipo"}
-        return [(labels[r[0]], r[1]) for r in reversed(rows[1:])]
+        return [
+            (labels[role], text)
+            for role, text in reversed(rows[1:])
+            if not _verification_exchange(role, text)
+        ]

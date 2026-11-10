@@ -35,7 +35,8 @@ class SimulatedClaude:
     # "invent_once" (inventa y, corregido, responde bien), "fake_source" (cita una fuente que no
     # recibió), "sneaky_number" (mete un dato sin respaldo sin declararlo factual),
     # "asks_contact" (sin verificar, pide email o teléfono en texto en vez de usar la herramienta),
-    # "tuteo" (responde con "tú" en lugar de voseo).
+    # "tuteo" (responde con "tú" en lugar de voseo), "reverify" (ya verificado, vuelve a pedir
+    # la verificación en texto hasta que se lo corrige).
     mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
@@ -123,6 +124,14 @@ class SimulatedClaude:
         if self.mode == "asks_contact" and 'verificado="no"' in first and order_id:
             return reply(
                 "Para ayudarte con eso, indícanos tu número de teléfono o correo electrónico.",
+                factual=False,
+            )
+        # Lo que hizo Groq después de verificar: ya verificado, vuelve a hablar de enviar un
+        # código en lugar de usar la herramienta (hasta que se lo corrige).
+        if self.mode == "reverify" and 'verificado="sí"' in first and order_id and not corrected:
+            return reply(
+                "Para iniciar el reembolso necesitás verificar tu cuenta. Te enviamos un código "
+                "de 6 dígitos a tu email.",
                 factual=False,
             )
         if order_id and results:
