@@ -82,9 +82,11 @@ def user_turn(
     )
 
 
-def tool_definitions(manifests: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def tool_definitions(
+    manifests: list[dict[str, Any]], finals: tuple[str, ...] = ("responder", "derivar")
+) -> list[dict[str, Any]]:
     business = [
         {"name": m["name"], "description": m["description"], "input_schema": m["input_schema"]}
         for m in manifests
     ]
-    return business + FINAL_TOOLS
+    return business + [t for t in FINAL_TOOLS if t["name"] in finals]

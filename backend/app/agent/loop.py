@@ -15,7 +15,7 @@ import psycopg
 import yaml
 
 from app.agent import prompt
-from app.agent.classifier import ASK_FOR_HUMAN, NOT_ALLOWED, classify
+from app.agent.classifier import ASK_FOR_HUMAN, CHAT, GENERAL, NOT_ALLOWED, classify
 from app.agent.grounding import GroundingVerdict, check_grounding
 from app.audit import log as audit_log
 from app.channels.whatsapp.format import to_whatsapp
@@ -55,6 +55,37 @@ CODE_LOCKED_MESSAGE = (
     "Ese código tampoco es correcto y ya no quedan intentos. Si querés, pasame de nuevo tu "
     "email y te mando un código nuevo."
 )
+
+
+CHAT_INSTRUCTIONS = """nombre: conversacion_general
+objetivo: Charlar con el cliente de forma amable y llevarlo a lo que el asistente puede resolver
+condiciones:
+  - Respondé en una o dos frases, cálido y breve, sin derivar.
+  - Si saluda, agradece o se despide, respondé el saludo y ofrecé ayuda.
+  - Si pregunta si sos un bot o con quién habla, decí que sos el asistente virtual de {empresa}.
+  - Si pregunta qué podés hacer, contá en qué podés ayudar ({capacidades}).
+  - Si pregunta algo ajeno a la tienda, decí con amabilidad que con eso no podés ayudar
+    y ofrecé lo que sí podés hacer.
+  - Si está enojado, reconocé la molestia con empatía y pedile lo que necesitás para ayudarlo.
+  - No hay documentos en esta charla, no des datos de la tienda, de pedidos ni números.
+    Marcá factual en false.
+cierre: Ofrecé ayuda con pedidos o consultas de la tienda."""
+GENERAL_INSTRUCTIONS = """nombre: consulta_general
+objetivo: Responder consultas generales sobre la tienda y sus políticas con los documentos
+datos_necesarios: []
+herramientas: []
+condiciones:
+  - Respondé con lo que dicen los documentos y citalos en fuentes.
+  - Si la respuesta no está en los documentos, derivá.
+cierre: Preguntá si necesita algo más."""
+CHAT_FALLBACK = (
+    "¡Hola! Soy el asistente virtual de {empresa}. Te puedo ayudar con tus pedidos y con "
+    "consultas sobre la tienda. ¿En qué te ayudo?"
+)
+
+
+class _ChatFallback(Exception):
+    """La charla no logró una respuesta válida: se usa el mensaje fijo, sin derivar."""
 
 
 def _wrong_code_message(remaining: int) -> str:
@@ -204,6 +235,8 @@ class Agent:
     def _respond(self, turn: _Turn, company: str, tone: str) -> AgentResult:
         tenant_id, case_id, contact, text = turn.tenant_id, turn.case_id, turn.contact, turn.text
         case_types = self._active_case_types(tenant_id)
+        history = self._history(tenant_id, case_id)
+        previous = next((t for role, t in reversed(history) if role == "asistente"), None)
         classification = classify(
             self._llm,
             tenant_id=tenant_id,
@@ -211,6 +244,7 @@ class Agent:
             company=company,
             message=text,
             case_types={name: goal for name, (goal, _) in case_types.items()},
+            previous=previous,
         )
         self._audit_model_call(turn, "clasificador", classification.response)
         label = classification.label
@@ -219,12 +253,17 @@ class Agent:
             return self._escalate(turn, "El cliente pidió hablar con una persona.")
         if label == NOT_ALLOWED:  # inyección o datos en masa: negativa fija, sin modelo ni derivar
             return self._finish(turn, "responder", REFUSAL_MESSAGE)
-        if label not in case_types:
+        if label == CHAT:  # charla: responde solo, sin documentos, herramientas ni derivación
+            return self._chat(turn, company, tone, case_types)
+        if label == GENERAL:  # consulta general: documentos, sin herramientas ni verificación
+            instructions = GENERAL_INSTRUCTIONS
+        elif label in case_types:
+            turn.case_type = label
+            self._set_case_type(tenant_id, case_id, label)
+            instructions = case_types[label][1]
+        else:
             return self._escalate(turn, "El tipo de caso no está activo para la empresa.")
-        turn.case_type = label
-        self._set_case_type(tenant_id, case_id, label)
 
-        instructions = case_types[label][1]
         tool_names = list(yaml.safe_load(instructions).get("herramientas") or [])
         manifests = self._guardian.manifests(tenant_id, tool_names)
         if not contact.verified and any(m["requires_verified_contact"] for m in manifests):
@@ -252,6 +291,23 @@ class Agent:
         ]
         return self._run_loop(turn, system, messages, manifests)
 
+    def _chat(
+        self, turn: _Turn, company: str, tone: str, case_types: dict[str, tuple[str, str]]
+    ) -> AgentResult:
+        goals = "; ".join(goal for goal, _ in case_types.values()) or "consultas de la tienda"
+        instructions = CHAT_INSTRUCTIONS.format(empresa=company, capacidades=goals)
+        system = prompt.system_prompt(company, tone, instructions)
+        history = self._history(turn.tenant_id, turn.case_id)
+        messages: list[dict[str, Any]] = [
+            {
+                "role": "user",
+                "content": prompt.user_turn([], turn.contact.verified, history, turn.text),
+            }
+        ]
+        return self._run_loop(
+            turn, system, messages, [], chat_fallback=CHAT_FALLBACK.format(empresa=company)
+        )
+
     # -- ciclo de herramientas -------------------------------------------------------------
     def _run_loop(
         self,
@@ -259,9 +315,30 @@ class Agent:
         system: str,
         messages: list[dict[str, Any]],
         manifests: list[dict[str, Any]],
+        *,
+        chat_fallback: str | None = None,
     ) -> AgentResult:
-        tools = prompt.tool_definitions(manifests)
+        """`chat_fallback`: charla. Solo se ofrece la herramienta responder y, si el modelo no
+        logra una respuesta válida, se usa ese mensaje fijo en lugar de derivar."""
+        finals = ("responder",) if chat_fallback is not None else ("responder", "derivar")
+        tools = prompt.tool_definitions(manifests, finals)
         allowed = {m["name"] for m in manifests}
+        try:
+            return self._loop(turn, system, messages, tools, allowed, chat=chat_fallback)
+        except _ChatFallback:
+            assert chat_fallback is not None
+            return self._finish(turn, "responder", chat_fallback)
+
+    def _loop(
+        self,
+        turn: _Turn,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        allowed: set[str],
+        *,
+        chat: str | None,
+    ) -> AgentResult:
         for _ in range(self._max_steps):
             response = self._llm.complete(
                 tenant_id=turn.tenant_id,
@@ -275,7 +352,7 @@ class Agent:
             )
             self._audit_model_call(turn, "agente", response)
             if response.stop_reason == "refusal":
-                return self._escalate(turn, "El modelo no pudo responder este pedido.")
+                return self._give_up(turn, "El modelo no pudo responder este pedido.", chat)
             final = next(
                 (c for c in response.tool_calls if c.name in prompt.FINAL_TOOL_NAMES), None
             )
@@ -284,7 +361,7 @@ class Agent:
             if not response.tool_calls:  # texto suelto: se trata como respuesta sin fuentes
                 final_name, final_input, final_id = (
                     "responder",
-                    {"mensaje": response.text, "fuentes": [], "factual": True},
+                    {"mensaje": response.text, "fuentes": [], "factual": chat is None},
                     None,
                 )
             elif final is not None and not business:
@@ -301,11 +378,15 @@ class Agent:
                             {"reason": verdict.reason, "rejected_message": final_input},
                         )
                         if turn.grounding_retries >= 1:
-                            return self._escalate(turn, f"Control de fundamento: {verdict.reason}.")
+                            return self._give_up(
+                                turn, f"Control de fundamento: {verdict.reason}.", chat
+                            )
                         turn.grounding_retries += 1
                         messages.append({"role": "assistant", "content": response.content})
                         messages.append(_grounding_correction(final_id, verdict.reason))
                         continue
+                if final_name == "derivar" and chat is not None:
+                    raise _ChatFallback  # en la charla no se deriva
                 return self._final_action(turn, final_name, final_input)
 
             messages.append({"role": "assistant", "content": response.content})
@@ -352,7 +433,13 @@ class Agent:
                     }
                 )
             messages.append({"role": "user", "content": results})
-        return self._escalate(turn, f"Se alcanzó el límite de {self._max_steps} pasos.")
+        return self._give_up(turn, f"Se alcanzó el límite de {self._max_steps} pasos.", chat)
+
+    def _give_up(self, turn: _Turn, reason: str, chat: str | None) -> AgentResult:
+        """Sin una respuesta válida: deriva, salvo en la charla (mensaje fijo, sin derivar)."""
+        if chat is not None:
+            raise _ChatFallback
+        return self._escalate(turn, reason)
 
     def _check_grounding(self, turn: _Turn, data: dict[str, Any]) -> GroundingVerdict:
         documents: dict[str, str] = {}

@@ -107,6 +107,12 @@ class SimulatedClaude:
             )
         if re.search(r"\b(persona|humano|operador)\b", low):
             return escalate("El cliente pidió hablar con una persona")
+        if "derivar" not in tool_names:  # charla: solo puede responder, sin datos de la tienda
+            return reply(
+                "¡Hola! Soy el asistente virtual de la tienda. Te puedo ayudar con tus pedidos y "
+                "con consultas sobre la tienda. ¿En qué te ayudo?",
+                factual=False,
+            )
 
         if order_id and results:
             name, call_input, result = results[-1]
@@ -235,6 +241,12 @@ def _best_document(question: str, docs: dict[str, str]) -> tuple[str, str] | Non
 _RULES = [
     (r"ignor\w* (tus|las) instrucciones|todos los (pedidos|clientes)", "pedido_no_permitido"),
     (r"\b(persona|humano|operador)\b", "derivar_humano"),
+    (
+        r"^\W*(hola+|buenas+|buen d[ií]a+|gracias|chau|como andas|jaja\w*)\W*$|sos un bot"
+        r"|q(ue)? pod[eé]s hacer|partido|peli\b|clima",
+        "conversacion_general",
+    ),
+    (r"cu[aá]nto tarda|env[ií]o gratis|gu[ií]a de talles", "consulta_general"),
     (r"direcci", "cambiar_direccion"),
     (r"cancel", "cancelar_pedido"),
     (r"reembols|devoluc|devuelv|plata", "reembolso"),
