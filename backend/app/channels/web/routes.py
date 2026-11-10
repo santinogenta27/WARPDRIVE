@@ -24,6 +24,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Any
@@ -36,9 +37,16 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from app.agent.loop import Agent
 from app.channels.base import InboundMessage, InvalidSignature
 from app.channels.inbound import handle_inbound
-from app.channels.web.channel import DEMO_ADDRESS, WebChannel, session_token, token_hash
+from app.channels.web.channel import (
+    _TOKEN,
+    DEMO_ADDRESS,
+    WebChannel,
+    session_token,
+    token_hash,
+)
 from app.channels.whatsapp.routing import channel_for_number
 from app.config import load_dotenv
+from app.contacts import WEB_PREFIX, hash_address
 from app.db.connection import connect, tenant_scope
 
 logger = logging.getLogger(__name__)
@@ -275,6 +283,34 @@ async def _stream(
 
 async def _only(chunk: str) -> AsyncIterator[str]:
     yield chunk
+
+
+@router.get("/chat/updates")
+def updates(deps: Deps, session: str = "", after: str = "") -> dict[str, Any]:
+    """Mensajes de una persona del equipo para esta sesión (respuestas o avisos desde el panel),
+    posteriores a `after`. La página lo consulta cada pocos segundos."""
+    if not _TOKEN.match(session):
+        raise HTTPException(status_code=401, detail="Sesión inválida")
+    try:
+        since = datetime.fromisoformat(after) if after else datetime.min.replace(tzinfo=UTC)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail="Fecha inválida") from error
+    with deps.connection() as conn:
+        tenant_id = _tenant(conn, deps.address)
+        with tenant_scope(conn, tenant_id):
+            known = conn.execute(
+                "select 1 from web_sessions where token_hash = %s", (token_hash(session),)
+            ).fetchone()
+            if known is None:
+                raise HTTPException(status_code=401, detail="Sesión inválida")
+            rows = conn.execute(
+                "select m.text, m.created_at from case_messages m"
+                " join cases c on c.id = m.case_id join contacts k on k.id = c.contact_id"
+                " where k.phone_hash = %s and m.role = 'human' and m.created_at > %s"
+                " order by m.created_at limit 20",
+                (hash_address(f"{WEB_PREFIX}{token_hash(session)}"), since),
+            ).fetchall()
+    return {"messages": [{"text": text, "at": at.isoformat()} for text, at in rows]}
 
 
 @router.post("/chat/messages")

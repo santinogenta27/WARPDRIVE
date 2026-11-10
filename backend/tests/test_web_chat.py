@@ -30,6 +30,7 @@ from app.channels.whatsapp.routing import register_whatsapp_channel
 from app.db.connection import tenant_scope
 from app.jobs.queue import Job
 from app.main import app
+from app.panel.notify import notify_customer
 
 SCRIPTED = {
     case["id"]: case
@@ -285,3 +286,33 @@ def test_una_sesion_inexistente_se_rechaza(api: TestClient) -> None:
     response = api.post("/chat/messages", json={"session": "x" * 32, "text": "hola"})
     assert response.status_code == 401
     assert api.post("/chat/messages", json={"text": "hola"}).status_code == 401
+    assert api.get("/chat/updates", params={"session": "x" * 32}).status_code == 401
+
+
+def test_la_pagina_recibe_los_mensajes_del_equipo_de_su_sesion(
+    api: TestClient, conn: psycopg.Connection, stack: SimulatedStack
+) -> None:
+    """Lo que una persona del equipo escribe desde el panel llega a la sesión del caso, y a
+    ninguna otra."""
+    mine, other = new_session(api), new_session(api)
+    chat(api, mine, "quiero hablar con una persona")
+    chat(api, other, "¿Abren los domingos?")
+    assert api.get("/chat/updates", params={"session": mine}).json() == {"messages": []}
+    with tenant_scope(conn, stack.seed.tenant_id):
+        row = conn.execute("select id from cases where status = 'escalated'").fetchone()
+    assert row is not None
+    notify_customer(conn, stack.seed.tenant_id, row[0], "Hola, soy Ana del equipo.")
+
+    updates = api.get("/chat/updates", params={"session": mine}).json()["messages"]
+    assert [m["text"] for m in updates] == ["Hola, soy Ana del equipo."]
+    later = api.get("/chat/updates", params={"session": mine, "after": updates[0]["at"]})
+    assert later.json() == {"messages": []}
+    assert api.get("/chat/updates", params={"session": other}).json() == {"messages": []}
+    with tenant_scope(conn, stack.seed.tenant_id):
+        kinds = [
+            r[0]
+            for r in conn.execute(
+                "select kind from audit_events where case_id = %s order by seq", (row[0],)
+            ).fetchall()
+        ]
+    assert kinds[-1] == "human_reply"  # queda en la auditoría del caso

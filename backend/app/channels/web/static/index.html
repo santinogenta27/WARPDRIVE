@@ -136,6 +136,9 @@
   }
   .agent .bubble { background: var(--bubble-in); border-bottom-left-radius: 6px; }
   .user .bubble { background: var(--brand); color: var(--on-brand); border-bottom-right-radius: 6px; }
+  .row.human { align-self: flex-start; }
+  .human .bubble { background: var(--bubble-in); border-left: 3px solid var(--brand); border-bottom-left-radius: 6px; }
+  .who { font-size: 11px; font-weight: 600; color: var(--brand); margin: 0 6px 3px; }
   .time { font-size: 11px; color: var(--muted); margin: 3px 6px 0; }
   .notice {
     align-self: center;
@@ -348,6 +351,12 @@
     }
     var row = document.createElement("div");
     row.className = "row " + item.kind;
+    if (item.kind === "human") {  // una persona del equipo, desde el panel
+      var who = document.createElement("div");
+      who.className = "who";
+      who.textContent = "Equipo de Acme Store";
+      row.appendChild(who);
+    }
     var bubble = document.createElement("div");
     bubble.className = "bubble";
     bubble.innerHTML = format(item.text);
@@ -514,6 +523,25 @@
       .catch(function () { add("notice", "No pudimos conectar con el asistente. Probá de nuevo en un momento."); })
       .then(function () { hideTyping(); setBusy(false); if (!state.locked) input.focus(); });
   }
+
+  // Mensajes del equipo (respuestas o avisos de una aprobación desde el panel): se consultan
+  // cada pocos segundos mientras la pestaña está visible.
+  function poll() {
+    if (!state.session || document.hidden) return;
+    var url = "/chat/updates?session=" + encodeURIComponent(state.session) +
+      (state.lastHuman ? "&after=" + encodeURIComponent(state.lastHuman) : "");
+    fetch(url).then(function (r) { return r.ok ? r.json() : { messages: [] }; })
+      .then(function (data) {
+        (data.messages || []).forEach(function (m) {
+          state.lastHuman = m.at;
+          hideTyping();
+          add("human", m.text);
+        });
+      })
+      .catch(function () { /* sin conexión: se reintenta en la próxima vuelta */ });
+  }
+  setInterval(poll, 6000);
+  document.addEventListener("visibilitychange", poll);
 
   function autosize() {
     input.style.height = "auto";
