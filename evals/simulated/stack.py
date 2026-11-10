@@ -140,9 +140,12 @@ def model_profile(backend: str | None) -> str:
     return str(backend)
 
 
-def build_real_stack(conn: psycopg.Connection, cache_dir: Path) -> SimulatedStack:
+def build_real_stack(
+    conn: psycopg.Connection, cache_dir: Path, *, cache_models: bool = True
+) -> SimulatedStack:
     """Modelos y embeddings reales según las claves del entorno; Acme sigue simulada. Mide un
-    solo proveedor: sin respaldo automático al otro gratuito."""
+    solo proveedor: sin respaldo automático al otro gratuito. `cache_models=False`: cada pedido
+    va al modelo (los embeddings siguen en caché)."""
     import os
 
     from app.llm.embedding_cache import CachingEmbedder
@@ -156,8 +159,12 @@ def build_real_stack(conn: psycopg.Connection, cache_dir: Path) -> SimulatedStac
     embedder = CachingEmbedder(
         embedder_from_env(recorder), cache_dir / "embeddings", profile=str(embedding_backend())
     )
-    provider = CachingProvider(
-        provider_from_env(), cache_dir / str(backend), profile=model_profile(backend)
+    provider = (
+        CachingProvider(
+            provider_from_env(), cache_dir / str(backend), profile=model_profile(backend)
+        )
+        if cache_models
+        else provider_from_env()
     )
     llm = LLMClient(provider=provider, recorder=recorder)
     acme = TestClient(create_app())
