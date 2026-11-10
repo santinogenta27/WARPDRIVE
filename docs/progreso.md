@@ -105,20 +105,19 @@ El chat web (local y Render) usa `gpt-oss-20b`. Línea base: `evals/baseline.gro
 
 60 conversaciones realistas en `evals/fixtures/acme/quality_conversations.json`, con su runner `evals/quality.py`. El informe está en `docs/calidad.md`.
 
-| Medición | Resultado |
-|---|---|
-| Base, Groq `gpt-oss-20b` | 26/60 (43%) |
-| Base, serie `qwen3.8-27b` (agente) + `gpt-oss-120b` (clasificador) | 34/60 (57%) |
-| Arreglo 1, charla y consulta general sin derivar, sobre 32 conversaciones medidas | 11 → 29 resueltas, sin regresiones |
+La medición base con Groq `gpt-oss-20b` dio 26/60 (43%), casi todo por derivaciones del clasificador. Como esa medición agotó la cuota diaria de ese modelo, la serie de arreglos se midió entera con agente `qwen3.8-27b` y clasificador `gpt-oss-120b`. Cada arreglo se compara con el anterior sobre las mismas conversaciones:
 
-**Arreglos commiteados:**
-1. La charla, los saludos, "¿sos un bot?" y los temas fuera de tema se responden sin derivar, y las consultas generales se responden con los documentos.
-2. Prompt `system_v2`: cuándo derivar y cuándo explicar.
-3. El control de fundamento acepta horas en punto, herramientas citadas y fuentes que no son documentos cuando la respuesta sale de una herramienta.
+| # | Arreglo | Medidas | Antes → después | Regresiones |
+|---|---|---|---|---|
+| 0 | Base de la serie | 60 | 34/60 (57%) | — |
+| 1 | Charla, saludos, "¿sos un bot?", fuera de tema y consultas generales sin derivar | 32 | 11 → 29 | Ninguna |
+| 2 | Prompt `system_v2` (cuándo derivar y cuándo explicar) y control de fundamento sin falsos rechazos | 13 | 5 → 10 | Ninguna |
+| 3 | Pedidos ajenos a la tienda y quejas generales tratados como charla | 13 | 10 → 12 | Ninguna |
+| 4 | Verificación pedida recién cuando el agente intenta usar datos de la cuenta | 13 | 12 → 13 | Ninguna |
 
-**Pendiente:**
-- Medir el arreglo 2 (R2, sobre un subconjunto de 13 conversaciones) y completar R1. Groq tiene un límite gratis de 200.000 tokens por día y por modelo, y se agotó.
-- Anotar los resultados en `docs/calidad.md`.
+Ninguna medición tuvo fallas críticas: ni datos de otro cliente, ni inyecciones exitosas, ni respuestas inventadas. Los tests de seguridad no se tocaron. Me detuve con el subconjunto resuelto entero.
+
+Los arreglos 2 a 4 se midieron sobre un subconjunto de 13 conversaciones, y no sobre las 60, por la cuota diaria. **Pendiente:** correr las 60 de una vez con los cuatro arreglos: `python evals/quality.py --restart`, con `LLM_PROVIDER=groq`.
 
 ## Etapa 3 — Hito 4, autoconfiguración (rama `hito-4`, sale de `calidad`)
 
@@ -129,8 +128,23 @@ Tareas 14 a 19 hechas, con sus tests: `test_onboarding_*.py`. Guía en `docs/onb
 - Descubrimiento: 8 tipos de caso, que recuperan 7 de los 8 reales. Junta cancelar con reembolso y divide facturación en dos.
 - Evals: 2 por tipo, más 4 adversariales.
 - Herramientas: generadas desde el OpenAPI, todas sin aprobar.
-- Reporte: resolvería solo **54%** del volumen. Adversariales: 3 de 4 superados.
-- Modelos: resúmenes con `gpt-oss-120b` y evals y herramientas con `gpt-oss-20b`. El reporte corrió con `gpt-oss-120b` porque `gpt-oss-20b` agotó su cuota diaria. Ese modelo genera llamadas inválidas (la herramienta `json`) y deriva, lo que baja el porcentaje.
+- Reporte, con el agente en `gpt-oss-20b` (el del chat): resolvería solo **56%** del volumen. Adversariales: 3 de 4 superados.
+  - Al 100%: estado del pedido, cambio de talle, medios de pago y horarios.
+  - Al 50%: los dos tipos de facturación. El reporte marca que falta una herramienta, porque la API no tiene operaciones de facturación.
+  - Al 0%: reembolsos y cambio de dirección. En parte el agente explica en lugar de pedir aprobación. En parte los evals generados esperan "ejecutar" cuando el cliente todavía no dio la nueva dirección, o cuando el pedido simulado del sandbox ya figura despachado.
+  - Hay que revisar a mano los evals generados antes de tomar ese porcentaje como definitivo.
+- Una primera corrida del reporte con `gpt-oss-120b` dio 54%: ese modelo a veces llama a una herramienta inexistente (`json`) y deriva.
+- Modelos: resúmenes y clasificador con `gpt-oss-120b`; evals, herramientas y agente del reporte con `gpt-oss-20b`. Las respuestas y los embeddings quedan en caché, así que retomar no vuelve a gastar cuota.
+
+## Resumen de las tres etapas
+
+| Etapa | Rama | Resultado | Tests |
+|---|---|---|---|
+| 1. Groq | `hito-3` | Groq detrás de `LLMClient`, con respaldo entre gratuitos. `gpt-oss-20b` resolvió 10/10 evals de Acme (Gemini 9/10) y quedó en el chat web | `test_groq.py`, `test_deploy.py` |
+| 2. Calidad | `calidad` | 60 conversaciones realistas, 4 arreglos medidos uno por uno, sin regresiones ni fallas críticas | `test_quality.py`, `test_conversacion.py`, `test_grounding.py` |
+| 3. Hito 4 | `hito-4` | Tareas 14 a 19: de los archivos de Acme al reporte de preparación sin intervención. Corrida real con Groq: 7 de 8 tipos recuperados, 56% de resolución estimada | `test_onboarding_*.py` (incluido el test de hito) |
+
+**En Render:** agregar `GROQ_API_KEY` como variable secreta.
 
 ## Qué significa "simulado"
 
