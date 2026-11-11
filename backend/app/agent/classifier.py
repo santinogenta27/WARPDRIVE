@@ -26,7 +26,7 @@ def classify(
     llm: LLMClient,
     *,
     tenant_id: uuid.UUID,
-    case_id: uuid.UUID,
+    case_id: uuid.UUID | None,
     company: str,
     message: str,
     case_types: dict[str, str],

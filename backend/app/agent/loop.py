@@ -16,11 +16,18 @@ import psycopg
 import yaml
 
 from app.agent import prompt
-from app.agent.classifier import ASK_FOR_HUMAN, CHAT, GENERAL, NOT_ALLOWED, classify
+from app.agent.classifier import (
+    ASK_FOR_HUMAN,
+    CHAT,
+    GENERAL,
+    NOT_ALLOWED,
+    Classification,
+    classify,
+)
 from app.agent.grounding import GroundingVerdict, check_grounding
 from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
-from app.cases import closing
+from app.cases import billing, closing
 from app.channels.whatsapp.format import to_whatsapp
 from app.db.connection import tenant_scope
 from app.identity import email_code
@@ -120,6 +127,12 @@ ASKS_PERSONAL_DATA = re.compile(
 )
 
 
+# Amenaza de denuncia o de acción legal: deriva siempre a una persona.
+LEGAL = "amenaza_legal"
+LEGAL_THREAT = re.compile(
+    r"(?i)\b(?:denunci\w+|demand(?:a|o|ar|arlos|arlas)\b|abogad\w+|carta\s+documento|juicio"
+    r"|defensa\s+(?:del?|al)\s+consumidor|acci[oó]n\s+legal|acciones\s+legales)"
+)
 # Ya verificado, el modelo vuelve a hablar de códigos o de verificar (lo hizo Groq).
 VERIFICATION_TALK = re.compile(r"(?i)c[oó]digo|verific")
 VERIFIED_CORRECTION = (
@@ -185,6 +198,8 @@ class _Turn:
     grounding_retries: int = 0
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
+    # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
+    classification: Classification | None = None
     tone: str = "rioplatense"
 
 
@@ -248,9 +263,10 @@ class Agent:
     def _handle(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
         company, tone = self._tenant(tenant_id)
         contact = self._contact(tenant_id, contact_id)
-        case_id = self._open_case(tenant_id, contact_id)
+        case_id, classification = self._open_case(tenant_id, contact_id, company, text)
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone)
+        turn.classification = classification
         self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
         pending: email_code.Verification | None = None
         if not contact.verified:
@@ -339,10 +355,15 @@ class Agent:
 
     def _respond(self, turn: _Turn, company: str, tone: str) -> AgentResult:
         tenant_id, case_id, contact, text = turn.tenant_id, turn.case_id, turn.contact, turn.text
+        if LEGAL_THREAT.search(text):
+            # Una amenaza de denuncia o de acción legal la atiende una persona, siempre: no
+            # depende de lo que decida el modelo (decisión 027).
+            self._audit(turn, "classified", {"case_type": LEGAL})
+            return self._escalate(turn, "El cliente amenaza con una denuncia o acción legal.")
         case_types = self._active_case_types(tenant_id)
         history = self._history(tenant_id, case_id)
         previous = next((t for role, t in reversed(history) if role == "asistente"), None)
-        classification = classify(
+        classification = turn.classification or classify(
             self._llm,
             tenant_id=tenant_id,
             case_id=case_id,
@@ -351,6 +372,7 @@ class Agent:
             case_types={name: goal for name, (goal, _) in case_types.items()},
             previous=previous,
         )
+        turn.classification = None  # vale solo para el mensaje con el que se abrió el caso
         self._audit_model_call(turn, "clasificador", classification.response)
         label = classification.label
         self._audit(turn, "classified", {"case_type": label})
@@ -781,7 +803,13 @@ class Agent:
             raise LookupError("Contacto inexistente")
         return ContactContext(id=row[0], phone_hash=row[1], verified=row[2])
 
-    def _open_case(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> uuid.UUID:
+    def _open_case(
+        self, tenant_id: uuid.UUID, contact_id: uuid.UUID, company: str, text: str
+    ) -> tuple[uuid.UUID, Classification | None]:
+        """El caso del mensaje: el que el contacto tiene abierto; si no, el que resolvió hace
+        menos de 7 días por el mismo tema, que se reabre (regla de reapertura); si no, uno
+        nuevo. Para saber si es el mismo tema hay que clasificar el mensaje: esa clasificación
+        se devuelve para no repetirla."""
         # Regla de cierre: si su caso lleva 24 h sin respuesta, queda resuelto y empieza otro.
         closing.close_inactive(self._conn, tenant_id, contact_id=contact_id)
         with tenant_scope(self._conn, tenant_id):
@@ -790,14 +818,31 @@ class Agent:
                 " and archived_at is null order by created_at desc limit 1",
                 (contact_id,),
             ).fetchone()
-            if row is None:
-                row = self._conn.execute(
-                    "insert into cases (tenant_id, contact_id) values (%s, %s) returning id",
-                    (tenant_id, contact_id),
-                ).fetchone()
+        if row is not None:
+            return row[0], None
+        classification: Classification | None = None
+        candidate = billing.reopen_candidate(self._conn, tenant_id, contact_id)
+        if candidate is not None and not closing.is_confirmation(text):
+            case_types = self._active_case_types(tenant_id)
+            classification = classify(
+                self._llm,
+                tenant_id=tenant_id,
+                case_id=None,  # todavía no se sabe a qué caso va el mensaje
+                company=company,
+                message=text,
+                case_types={name: goal for name, (goal, _) in case_types.items()},
+            )
+            if classification.label == candidate[1]:
+                billing.reopen(self._conn, tenant_id, candidate[0])
+                return candidate[0], classification
+        with tenant_scope(self._conn, tenant_id):
+            row = self._conn.execute(
+                "insert into cases (tenant_id, contact_id) values (%s, %s) returning id",
+                (tenant_id, contact_id),
+            ).fetchone()
         assert row is not None
         case_id: uuid.UUID = row[0]
-        return case_id
+        return case_id, classification
 
     def _active_case_types(self, tenant_id: uuid.UUID) -> dict[str, tuple[str, str]]:
         """nombre -> (objetivo, instrucciones YAML) de los tipos activos."""
