@@ -8,7 +8,24 @@ El pipeline toma el historial y los documentos de una empresa y, sin intervenci�
 
 Nada queda activo: el cliente elige qué tipos y herramientas activar. Decisión 021.
 
-## Correrlo con la demo de Acme
+## Desde el panel, sin comandos (Hito 6)
+
+Es el camino de una empresa real. Decisión 026.
+
+1. **El operador crea la empresa.** Panel → **Empresas**: nombre, email y clave del usuario.
+2. **El usuario de la empresa ingresa** al panel con ese email y esa clave.
+3. **Configuración → Sistema de la empresa:** sube el OpenAPI de su sistema. Es opcional: sin OpenAPI, el asistente solo informa.
+4. **Onboarding:** sube el historial de chats y los documentos, y toca **Analizar mi historial**.
+   - La pantalla muestra las 6 etapas y se actualiza sola.
+   - Si una etapa falla, por ejemplo por la cuota del modelo, el análisis se reintenta desde esa etapa.
+5. **Reporte:** qué parte de la atención resolvería el asistente.
+6. **Configuración:** activa los tipos de caso, aprueba las herramientas y fija sus límites. Pasa al asistente en vivo en el momento.
+7. **Configuración → Sistema de la empresa:** carga la URL base y las credenciales, prueba la conexión y la activa. Hasta entonces las herramientas responden en modo simulado.
+8. **Chat de prueba:** el enlace `/c/…` de Configuración abre el chat propio de la empresa.
+
+Test: `test_empresas.py`.
+
+## Correrlo por línea de comandos con la demo de Acme
 
 ```
 PYTHONPATH=backend python -m app.onboarding.pipeline
