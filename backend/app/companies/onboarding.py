@@ -22,6 +22,7 @@ from app.companies import connection as system
 from app.db.connection import tenant_scope
 from app.jobs.queue import Job, enqueue
 from app.llm.embedder import Embedder
+from app.mailer import ConsoleMailer
 from app.onboarding.ingest import IngestResult, Upload, ingest
 from app.onboarding.pipeline import STAGES, PipelineDeps, run_pipeline
 
@@ -183,7 +184,8 @@ def production_pipeline_deps(conn: psycopg.Connection, tenant_id: uuid.UUID) -> 
     )
 
     def agent_factory(c: psycopg.Connection, runtime: ToolRuntime) -> Agent:
-        return Agent(c, llm, embedder, Guardian(c, runtime))
+        # El replay de evals nunca envía emails reales (decisión 029).
+        return Agent(c, llm, embedder, Guardian(c, runtime), mailer=ConsoleMailer())
 
     found = system.load(conn, tenant_id)
     return PipelineDeps(
