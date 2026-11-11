@@ -244,7 +244,7 @@ def test_un_usuario_no_ve_ni_toca_datos_de_otra_empresa(world: World) -> None:
         tool_id = conn.execute("select id from tools where name = 'iniciar_reembolso'").fetchone()
         conn.execute(
             "insert into onboarding_runs (tenant_id, status, report) values (%s, 'done', %s)",
-            (acme, json.dumps({"conversaciones": 77, "tipos": [], "adversariales": {}})),
+            (acme, json.dumps({"conversaciones": 7777777, "tipos": [], "adversariales": {}})),
         )
     assert type_id is not None and tool_id is not None
 
@@ -259,8 +259,11 @@ def test_un_usuario_no_ve_ni_toca_datos_de_otra_empresa(world: World) -> None:
     ):
         page = norte.get(path)
         assert page.status_code == 200, path
-        for leak in ("Abren los domingos", "1005", "Reembolso", "Horarios y sucursales", "77"):
+        # Marcas largas: una corta ("77", "1005") puede aparecer por azar dentro del token
+        # anti-CSRF o del identificador del chat, que son hexadecimales al azar.
+        for leak in ("Abren los domingos", "Reembolso", "Horarios y sucursales", "7777777"):
             assert leak not in page.text, (path, leak)
+        assert "pedido 1005" not in page.text.lower(), path
         assert str(answered.case_id) not in page.text
 
     # Cada endpoint responde 404 a un id de Acme, igual que a uno que no existe, y no cambia nada.
