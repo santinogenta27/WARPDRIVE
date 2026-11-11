@@ -16,9 +16,11 @@ transacción: si falla, se revierte todo y no se descuenta nada.
 """
 
 import hashlib
+import html
 import json
 import logging
 import os
+import re
 import secrets
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
@@ -78,6 +80,9 @@ class WebDeps:
     connection: Callable[[], AbstractContextManager[psycopg.Connection]]
     agent: Callable[[psycopg.Connection], Agent]
     address: str = DEMO_ADDRESS  # canal web en la tabla channels (tenant Acme en la demo)
+    # El agente de la empresa de la sesión (cada empresa tiene su chat en /c/<enlace>). Sin
+    # esto, todas las sesiones usan `agent`.
+    agent_for: Callable[[psycopg.Connection, uuid.UUID], Agent] | None = None
     ip_daily_limit: int = 30  # mensajes por IP en 24 h
     daily_limit: int = 300  # mensajes en total en 24 h (cuida la cuota diaria del modelo)
     client_ip: str = "direct"  # de dónde sale la IP del cliente (ver client_ip)
@@ -118,6 +123,7 @@ def _transaction() -> Iterator[psycopg.Connection]:
 
 @lru_cache(maxsize=1)
 def _production_deps() -> WebDeps:
+    from app.companies.agent import build_agent
     from app.demo.acme import build_demo_agent, shared_acme
 
     load_dotenv()
@@ -126,6 +132,9 @@ def _production_deps() -> WebDeps:
         # La API de Acme simulada vive en memoria y la comparte el panel ("Reiniciar demo" la
         # vuelve a su estado inicial): se toma la vigente en cada mensaje.
         agent=lambda conn: build_demo_agent(conn, shared_acme()),
+        # Cada sesión usa el agente de su empresa: Acme con la API simulada, las demás con su
+        # sistema (o en modo simulado hasta que activen la conexión).
+        agent_for=build_agent,
         ip_daily_limit=int(os.environ.get("WEB_CHAT_IP_DAILY_LIMIT") or 30),
         daily_limit=int(os.environ.get("WEB_CHAT_DAILY_LIMIT") or 300),
         client_ip=os.environ.get("WEB_CHAT_CLIENT_IP") or "direct",
@@ -144,6 +153,20 @@ def _tenant(conn: psycopg.Connection, address: str) -> uuid.UUID:
     if channel is None:
         raise HTTPException(status_code=503, detail="El chat web no está configurado")
     return channel.tenant_id
+
+
+def _route(conn: psycopg.Connection, token: str) -> tuple[uuid.UUID, str]:
+    """(empresa, dirección de su chat web) de una sesión. Es una consulta fuera de un tenant,
+    como el ruteo de un webhook: el token de la sesión es lo que identifica a la empresa."""
+    row = conn.execute(
+        "select s.tenant_id, c.phone_number_id from web_sessions s join channels c"
+        " on c.tenant_id = s.tenant_id and c.kind = 'web' and c.status = 'active'"
+        " where s.token_hash = %s order by c.created_at limit 1",
+        (token_hash(token),),
+    ).fetchone()
+    if row is None:
+        raise UnknownSession
+    return row[0], str(row[1])
 
 
 @dataclass(frozen=True)
@@ -195,11 +218,74 @@ def page() -> HTMLResponse:
     return HTMLResponse(PAGE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
 
 
+def _js(value: str) -> str:
+    """Cadena de JavaScript segura dentro de <script> (no puede cerrar la etiqueta)."""
+    return json.dumps(value).replace("<", "\\u003c").replace(">", "\\u003e")
+
+
+def company_page(name: str, slug: str) -> str:
+    """La página del chat para una empresa: la misma de la demo, con su nombre, su enlace y
+    sin los ejemplos de Acme."""
+    safe = html.escape(name)
+    text = PAGE.read_text(encoding="utf-8")
+    start, end = text.index(HOW_START), text.index(HOW_END)
+    text = text[:start] + COMPANY_FOOTER + text[end:]
+    text = HELP.sub(COMPANY_HELP, text, count=1)
+    text = SUGGESTIONS.sub("var SUGGESTIONS = [];", text, count=1)
+    text = text.replace('var KEY = "acme-chat";', f"var KEY = {_js('chat-' + slug)};")
+    text = text.replace(
+        'fetch("/chat/session", { method: "POST" })',
+        f'fetch("/chat/session?canal=" + encodeURIComponent({_js(slug)}),'
+        ' { method: "POST" })',
+    )
+    greeting = f"¡Hola! Soy el asistente virtual de {name}. ¿En qué te puedo ayudar?"
+    text = GREETING.sub(lambda _: f"var GREETING = {_js(greeting)};", text, count=1)
+    text = text.replace('"Equipo de Acme Store"', _js(f"Equipo de {name}"))
+    return text.replace("Acme Store", safe)
+
+
+HOW_START = "Demo de Enterprise Data AI"
+HOW_END = '<button type="button" id="how">'
+COMPANY_FOOTER = "Chat de prueba · "
+# El cuadro "Cómo probarla" de la demo trae ejemplos de Acme: cada empresa tiene el suyo.
+HELP = re.compile(r'<h2 id="help-title">.*?</ul>', re.S)
+COMPANY_HELP = (
+    '<h2 id="help-title">Chat de prueba</h2><p class="lead">Este chat usa el asistente de '
+    "Acme Store con sus tipos de caso activos, sus herramientas aprobadas y sus documentos."
+    "</p><ul><li>Escribí como lo haría un cliente. Las conversaciones aparecen en el panel, "
+    "en Casos.</li><li>Cada conversación tiene hasta 20 mensajes.</li></ul>"
+)
+SUGGESTIONS = re.compile(r"var SUGGESTIONS = \[.*?\];")
+GREETING = re.compile(r'var GREETING = ".*?";')
+_SLUG = re.compile(r"^[a-z0-9-]{3,60}$")
+
+
+@router.get("/c/{slug}", response_class=HTMLResponse, include_in_schema=False)
+def company_chat(slug: str, deps: Deps) -> HTMLResponse:
+    """El chat de prueba de una empresa. El enlace lleva una parte al azar: no se adivina."""
+    if not _SLUG.match(slug):
+        raise HTTPException(status_code=404, detail="Chat inexistente")
+    with deps.connection() as conn:
+        channel = channel_for_number(conn, f"{WEB_PREFIX}{slug}", kind="web")
+        if channel is None:
+            raise HTTPException(status_code=404, detail="Chat inexistente")
+        with tenant_scope(conn, channel.tenant_id):
+            row = conn.execute(
+                "select name from tenants where id = %s", (channel.tenant_id,)
+            ).fetchone()
+    assert row is not None
+    return HTMLResponse(company_page(str(row[0]), slug), headers={"Cache-Control": "no-cache"})
+
+
 @router.post("/chat/session", status_code=201)
-def create_session(deps: Deps) -> dict[str, Any]:
+def create_session(deps: Deps, canal: str = "") -> dict[str, Any]:
+    """Sesión nueva en el chat de la demo o, con `canal`, en el de una empresa."""
+    if canal and not _SLUG.match(canal):
+        raise HTTPException(status_code=404, detail="Chat inexistente")
+    address = f"{WEB_PREFIX}{canal}" if canal else deps.address
     token = secrets.token_urlsafe(32)
     with deps.connection() as conn:
-        tenant_id = _tenant(conn, deps.address)
+        tenant_id = _tenant(conn, address)
         with tenant_scope(conn, tenant_id):
             conn.execute(
                 "insert into web_sessions (tenant_id, token_hash) values (%s, %s)",
@@ -208,11 +294,11 @@ def create_session(deps: Deps) -> dict[str, Any]:
     return {"session": token, "limit": MESSAGE_LIMIT, "remaining": MESSAGE_LIMIT}
 
 
-def _precheck(deps: WebDeps, token: str, ip_hash: str) -> str | None:
-    """Límite alcanzado antes de abrir el stream (sin correr el agente), o None."""
+def _precheck(deps: WebDeps, token: str, ip_hash: str) -> tuple[str | None, str]:
+    """(límite alcanzado antes de abrir el stream, o None; dirección del chat de la sesión)."""
     with deps.connection() as conn:
-        tenant_id = _tenant(conn, deps.address)
-        return _exceeded(deps, _usage(conn, tenant_id, token, ip_hash, lock=False))
+        tenant_id, address = _route(conn, token)
+        return _exceeded(deps, _usage(conn, tenant_id, token, ip_hash, lock=False)), address
 
 
 def _process(
@@ -225,7 +311,14 @@ def _process(
     """Corre el agente y descuenta el mensaje, en una sola transacción y con los límites
     bloqueados. Devuelve los mensajes que quedan."""
     with deps.connection() as conn:
-        tenant_id = _tenant(conn, deps.address)
+        tenant_id, _ = _route(conn, token)
+        agent = deps.agent
+        if deps.agent_for is not None:
+            build = deps.agent_for
+
+            def agent(c: psycopg.Connection) -> Agent:
+                return build(c, tenant_id)
+
         usage = _usage(conn, tenant_id, token, ip_hash, lock=True)
         scope = _exceeded(deps, usage)
         if scope is not None:
@@ -236,7 +329,7 @@ def _process(
                 "remaining_today": deps.ip_daily_limit - usage.ip,
             }
         for message in messages:
-            handle_inbound(conn, message, channel=channel, agent=deps.agent)
+            handle_inbound(conn, message, channel=channel, agent=agent)
         with tenant_scope(conn, tenant_id):
             conn.execute(
                 "update web_sessions set messages = messages + 1 where token_hash = %s",
@@ -297,13 +390,11 @@ def updates(deps: Deps, session: str = "", after: str = "") -> dict[str, Any]:
     except ValueError as error:
         raise HTTPException(status_code=400, detail="Fecha inválida") from error
     with deps.connection() as conn:
-        tenant_id = _tenant(conn, deps.address)
+        try:
+            tenant_id, _ = _route(conn, session)
+        except UnknownSession as error:
+            raise HTTPException(status_code=401, detail="Sesión inválida") from error
         with tenant_scope(conn, tenant_id):
-            known = conn.execute(
-                "select 1 from web_sessions where token_hash = %s", (token_hash(session),)
-            ).fetchone()
-            if known is None:
-                raise HTTPException(status_code=401, detail="Sesión inválida")
             rows = conn.execute(
                 "select m.id, m.text, m.created_at from case_messages m"
                 " join cases c on c.id = m.case_id join contacts k on k.id = c.contact_id"
@@ -323,13 +414,13 @@ def updates(deps: Deps, session: str = "", after: str = "") -> dict[str, Any]:
 @router.post("/chat/messages")
 async def post_message(request: Request, deps: Deps) -> StreamingResponse:
     body = await request.body()
-    channel = WebChannel(deps.address)
     peer = request.client.host if request.client else None
     ip_hash = _ip_hash(client_ip(deps.client_ip, request.headers, peer))
     try:
-        messages = channel.receive(str(request.url), body, request.headers)
         token = session_token(body)
-        scope = await run_in_threadpool(_precheck, deps, token, ip_hash)
+        scope, address = await run_in_threadpool(_precheck, deps, token, ip_hash)
+        channel = WebChannel(address)  # el chat de la empresa de la sesión
+        messages = channel.receive(str(request.url), body, request.headers)
     except (InvalidSignature, UnknownSession) as error:
         raise HTTPException(status_code=401, detail="Sesión inválida") from error
     headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}

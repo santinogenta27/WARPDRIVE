@@ -18,6 +18,8 @@ from app.db.migrate import migrate
 def encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clave de cifrado propia de los tests (no depende del .env local)."""
     monkeypatch.setenv("ENCRYPTION_KEY", "s3gMcV8bfYlqsO1y1V2N2rU0n-c4Wcq1xYQq0p6CwVU=")
+    # El worker del onboarding que vive en la API no arranca en los tests.
+    monkeypatch.setenv("ONBOARDING_WORKER", "off")
 
 
 @pytest.fixture(scope="session")

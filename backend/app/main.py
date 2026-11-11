@@ -1,15 +1,31 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from app.channels.twilio.webhook import router as twilio_router
 from app.channels.web.routes import router as web_router
 from app.channels.whatsapp.webhook import router as whatsapp_router
+from app.panel.company_routes import router as company_router
 from app.panel.routes import router as panel_router
 
-app = FastAPI(title="Enterprise Data AI")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Al arrancar, el worker del onboarding retoma una corrida que haya quedado a mitad por un
+    # reinicio del servicio (decisión 026). Después duerme hasta que alguien encole otra.
+    from app.companies.worker import kick
+
+    kick()
+    yield
+
+
+app = FastAPI(title="Enterprise Data AI", lifespan=lifespan)
 app.include_router(whatsapp_router)
 app.include_router(twilio_router)
 app.include_router(web_router)
 app.include_router(panel_router)
+app.include_router(company_router)
 
 
 @app.get("/health")

@@ -10,6 +10,7 @@ SPECIAL = {
     "consulta_general": "Consulta general",
     "derivar_humano": "Pidió hablar con una persona",
     "pedido_no_permitido": "Pedido no permitido",
+    "amenaza_legal": "Amenaza de denuncia o acción legal",
     "otro": "Otro tema",
 }
 # Los nombres de los tipos van sin tildes (son identificadores): se restituyen para mostrarlos.

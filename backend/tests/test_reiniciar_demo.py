@@ -46,7 +46,7 @@ def client(
     app.dependency_overrides[panel_deps] = lambda: PanelDeps(
         connection=lambda: nullcontext(conn),
         tenant_id=stack.seed.tenant_id,
-        guardian=lambda c: Guardian(c, ToolRuntime(stack.acme)),
+        guardian=lambda c, tenant: Guardian(c, ToolRuntime(stack.acme)),
         report_tenant=stack.seed.tenant_id,
         reset_sandbox=lambda: resets.append("acme"),
     )

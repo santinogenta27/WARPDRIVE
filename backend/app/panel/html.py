@@ -3,6 +3,10 @@
 
 import html
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.panel.auth import Session
 
 CSS = """
 :root{--bg:#f3f4f7;--surface:#fff;--ink:#14171c;--muted:#667085;--line:#e4e7ec;
@@ -58,11 +62,32 @@ font-weight:700;letter-spacing:-.02em}.kpi.big .n{color:var(--brand)}
 @media (max-width:640px){.type{grid-template-columns:1fr}.msg{max-width:95%}}
 .missing{margin:8px 0 0;padding-left:18px;color:var(--warn);font-size:13px}
 form.sending button{opacity:.6;cursor:wait}
+select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
+background:var(--surface);color:var(--ink);font:inherit;font-size:16px}
+input[type=checkbox],input[type=radio]{width:auto}table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);
+font-size:14px;vertical-align:top}
+th{color:var(--muted);font-weight:600}.num{text-align:right;font-variant-numeric:tabular-nums}
+.steps{list-style:none;padding:0;margin:0}
+.steps li{display:flex;gap:12px;align-items:baseline;padding:10px 0;
+border-bottom:1px solid var(--line)}
+.steps li:last-child{border:0}.badge.hecha{background:var(--ok-soft);color:var(--ok)}
+.badge.fallo{background:var(--bad-soft);color:var(--bad)}
+.badge.en_curso{background:var(--warn-soft);color:var(--warn)}
+.alert{border-color:var(--bad);color:var(--bad)}.okmsg{border-color:var(--ok)}
+pre{overflow:auto;background:var(--bg);padding:10px;border-radius:10px;font-size:12.5px}
 .empty{text-align:center;color:var(--muted);padding:28px}footer{text-align:center;
 color:var(--muted);font-size:12px;padding:12px}
 """
 
-NAV = [("casos", "Casos"), ("aprobaciones", "Aprobaciones"), ("reporte", "Reporte de preparación")]
+NAV = [
+    ("casos", "Casos"),
+    ("aprobaciones", "Aprobaciones"),
+    ("onboarding", "Onboarding"),
+    ("reporte", "Reporte"),
+    ("configuracion", "Configuración"),
+]
+ADMIN_NAV = [("empresas", "Empresas")]  # solo el operador de la plataforma
 
 
 def esc(value: object) -> str:
@@ -79,26 +104,45 @@ def local_time(value: datetime | str, fmt: str = "%d/%m %H:%M") -> str:
     return moment.astimezone(ARGENTINA).strftime(fmt)
 
 
-def page(title: str, body: str, *, active: str = "", logged_in: bool = True) -> str:
+def page(
+    title: str,
+    body: str,
+    *,
+    active: str = "",
+    logged_in: bool = True,
+    session: "Session | None" = None,
+    refresh: int | None = None,
+) -> str:
+    """`session`: de ahí salen el nombre de la empresa del encabezado y el menú. `refresh`:
+    segundos para volver a cargar la página sola (avance del onboarding)."""
+    company = session.company if session and session.company else "Enterprise Data AI"
+    admin = bool(session and session.admin)
+    items = NAV + (ADMIN_NAV if admin else [])
     links = "".join(
         f'<a href="/panel/{slug}" class="{"on" if slug == active else ""}">{label}</a>'
-        for slug, label in NAV
+        for slug, label in items
     )
     nav = (
         f'<nav>{links}<form method="post" action="/panel/logout" style="margin:0">'
         '<button type="submit">Salir</button></form></nav>'
-        if logged_in
+        if logged_in and session is not None
         else ""
     )
+    footer = (
+        "Demo de Enterprise Data AI · Acme Store es una tienda ficticia"
+        if admin
+        else "Enterprise Data AI"
+    )
+    reload = f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else ""
     return f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<title>{esc(title)} · Acme Store</title><style>{CSS}</style></head>
-<body><header><div class="bar"><div class="logo">A</div>
-<div class="brand">Acme Store<small>Panel del equipo</small></div>{nav}</div></header>
+<meta name="color-scheme" content="light dark">{reload}
+<title>{esc(title)} · {esc(company)}</title><style>{CSS}</style></head>
+<body><header><div class="bar"><div class="logo">{esc(company[:1].upper())}</div>
+<div class="brand">{esc(company)}<small>Panel del equipo</small></div>{nav}</div></header>
 <main>{body}</main>
-<footer>Demo de Enterprise Data AI · Acme Store es una tienda ficticia</footer>
+<footer>{footer}</footer>
 <script>{NO_DOUBLE_SUBMIT}</script></body></html>"""
 
 
@@ -121,10 +165,12 @@ STATUS = {
 RESOLVED_BY = {"agent": "por el asistente", "human": "con una persona"}
 
 
-def status_badge(status: str, resolved_by: str | None = None) -> str:
+def status_badge(status: str, resolved_by: str | None = None, reopened: bool = False) -> str:
     """Estado del caso. Un resuelto dice quién lo resolvió (la unidad de cobro es el caso
     resuelto por el asistente)."""
     label = STATUS.get(status, status)
     if status == "resolved" and resolved_by in RESOLVED_BY:
         label = f"{label} {RESOLVED_BY[resolved_by]}"
+    if reopened:  # el cliente volvió por el mismo tema: ya no cuenta para el cobro
+        label = f"{label} · reabierto"
     return f'<span class="badge {esc(status)}">{esc(label)}</span>'

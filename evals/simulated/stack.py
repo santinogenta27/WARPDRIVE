@@ -57,6 +57,7 @@ class SimulatedStack:
     results: list[AgentResult] = field(default_factory=list)
     mailer: RecordingMailer = field(default_factory=RecordingMailer)
     exhausted: Any = None  # ExhaustedProvider si el principal está sin cuota
+    embedder: Any = None  # el mismo que usa el agente (para armar otro agente o ingerir)
 
     @property
     def exhausted_calls(self) -> int:
@@ -150,6 +151,7 @@ def build_simulated_stack(
         mode="simulated",
         mailer=mailer,
         exhausted=exhausted,
+        embedder=embedder,
     )
 
 
@@ -200,5 +202,12 @@ def build_real_stack(
     agent = Agent(conn, llm, embedder, guardian, mailer=mailer)
     mode = backend if backend in ("gemini", "groq") else "real"
     return SimulatedStack(
-        conn=conn, seed=seed, agent=agent, acme=acme, llm=llm, mode=mode, mailer=mailer
+        conn=conn,
+        seed=seed,
+        agent=agent,
+        acme=acme,
+        llm=llm,
+        mode=mode,
+        mailer=mailer,
+        embedder=embedder,
     )

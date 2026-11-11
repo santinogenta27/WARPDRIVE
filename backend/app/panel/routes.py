@@ -10,7 +10,7 @@ import json
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, Any
@@ -23,7 +23,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from app.audit import log as audit_log
 from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
+from app.companies.connection import ClientFactory, http_client
 from app.db.connection import connect, tenant_scope
+from app.llm.embedder import Embedder
 from app.panel import auth
 from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
 from app.panel.labels import action_label, money, type_label
@@ -46,14 +48,24 @@ def customer_texts(case_column: str) -> str:
     )
 
 
+def _no_embedder(conn: psycopg.Connection) -> Embedder:
+    raise RuntimeError("Falta configurar los embeddings")
+
+
 @dataclass
 class PanelDeps:
     connection: Callable[[], AbstractContextManager[psycopg.Connection]]
-    tenant_id: uuid.UUID | None  # la empresa del panel (Acme en la demo)
-    guardian: Callable[[psycopg.Connection], Guardian]
-    report_tenant: uuid.UUID | None = None  # de dónde sale el reporte de preparación
+    tenant_id: uuid.UUID | None  # la empresa de demo (Acme): a la que entra el operador
+    # El guardián de la empresa de la sesión: sus herramientas llegan a su propio sistema.
+    guardian: Callable[[psycopg.Connection, uuid.UUID], Guardian]
+    report_tenant: uuid.UUID | None = None  # reporte de Acme del hito 4 (otro tenant)
     # "Reiniciar demo" también devuelve los pedidos de la API simulada a su estado inicial.
     reset_sandbox: Callable[[], None] = lambda: None
+    # Onboarding desde el panel: embeddings para indexar documentos, aviso al worker y cliente
+    # HTTP para probar la conexión con el sistema de la empresa.
+    embedder: Callable[[psycopg.Connection], Embedder] = _no_embedder
+    kick_worker: Callable[[], None] = lambda: None
+    client_factory: ClientFactory = http_client
 
 
 @contextmanager
@@ -71,9 +83,12 @@ def _transaction() -> Iterator[psycopg.Connection]:
 
 @lru_cache(maxsize=1)
 def _production_deps() -> PanelDeps:
+    from app.companies.agent import build_guardian
+    from app.companies.worker import kick
     from app.config import load_dotenv
     from app.demo.acme import find_demo_tenant, shared_acme
-    from app.tools.runtime import ToolRuntime
+    from app.llm.client import PostgresUsageRecorder
+    from app.llm.factory import embedder_from_env
 
     load_dotenv()
     with _transaction() as conn:
@@ -82,10 +97,13 @@ def _production_deps() -> PanelDeps:
     return PanelDeps(
         connection=_transaction,
         tenant_id=tenant_id,
-        # La misma API simulada que usa el agente del chat: lo aprobado se ve en el pedido.
-        guardian=lambda conn: Guardian(conn, ToolRuntime(shared_acme())),
+        # Acme: la misma API simulada que usa el agente del chat (lo aprobado se ve en el
+        # pedido). Las demás empresas: su sistema, o el modo simulado hasta que lo activen.
+        guardian=build_guardian,
         report_tenant=row[0] if row else None,
         reset_sandbox=shared_acme.cache_clear,
+        embedder=lambda conn: embedder_from_env(PostgresUsageRecorder(conn)),
+        kick_worker=kick,
     )
 
 
@@ -104,25 +122,62 @@ async def form_data(request: Request) -> dict[str, str]:
 Form = Annotated[dict[str, str], Depends(form_data)]
 
 
-def _session(request: Request) -> tuple[str, str] | None:
-    """(token, email) de la sesión del panel, o None."""
-    token = request.cookies.get(auth.COOKIE)
-    email = auth.read_session(token) if auth.configured() else None
-    return (token, email) if token and email else None
+DEMO_COMPANY = "Acme Store"
+
+
+def _session(request: Request, deps: PanelDeps) -> auth.Session | None:
+    """La sesión del panel con su empresa, o None. La empresa sale siempre de acá (de la cookie
+    firmada), nunca de la URL ni de un formulario: un usuario solo ve y toca la suya."""
+    session = auth.read_claims(request.cookies.get(auth.COOKIE))
+    if session is None:
+        return None
+    if session.admin:  # operador de la plataforma: entra a la empresa de demo
+        if not auth.configured() or session.email != auth.operator_email():
+            return None
+        return replace(session, tenant_id=deps.tenant_id, company=DEMO_COMPANY)
+    return session if session.tenant_id is not None else None
 
 
 def _to_login() -> RedirectResponse:
     return RedirectResponse("/panel/login", status_code=303)
 
 
-def _forbidden() -> HTMLResponse:
-    body = '<div class="card empty">El formulario venció. Volvé a cargar la página.</div>'
+def _forbidden(message: str = "El formulario venció. Volvé a cargar la página.") -> HTMLResponse:
+    body = f'<div class="card empty">{esc(message)}</div>'
     return HTMLResponse(page("Sin permiso", body), status_code=403)
+
+
+def _not_found(what: str, session: auth.Session) -> HTMLResponse:
+    """La misma respuesta si no existe o si es de otra empresa: no se revela cuál de las dos."""
+    body = f'<div class="card empty">{esc(what)} no existe.</div>'
+    return HTMLResponse(page("No existe", body, session=session), status_code=404)
 
 
 def _no_tenant() -> HTMLResponse:
     body = '<div class="card empty">La empresa de la demo todavía no está cargada.</div>'
     return HTMLResponse(page("Panel", body), status_code=503)
+
+
+@dataclass(frozen=True)
+class Ctx:
+    """Lo que necesita una ruta ya autorizada: la sesión, su empresa y el token anti-CSRF."""
+
+    session: auth.Session
+    tenant_id: uuid.UUID
+    csrf: str
+
+
+def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None) -> Ctx | Response:
+    """Puerta de entrada de cada ruta del panel. Sin sesión, va al login. Con `form` (un POST
+    que cambia algo), exige además el token anti-CSRF. Devuelve la empresa de la sesión."""
+    session = _session(request, deps)
+    if session is None:
+        return _to_login()
+    if form is not None and not auth.valid_csrf(session.token, form.get("csrf", "")):
+        return _forbidden()
+    if session.tenant_id is None:
+        return _no_tenant()
+    return Ctx(session, session.tenant_id, auth.csrf_token(session.token))
 
 
 def _money(value: Any) -> str:
@@ -138,7 +193,7 @@ def _login_page(error: str = "") -> str:
     )
     alert = f'<p style="color:var(--bad)">{esc(error)}</p>' if error else ""
     body = f"""<div class="card" style="max-width:400px;margin:40px auto">
-<h1>Ingresar al panel</h1><p class="lead">Equipo de atención de Acme Store.</p>{alert}{note}
+<h1>Ingresar al panel</h1><p class="lead">Panel del equipo de atención.</p>{alert}{note}
 <form method="post" action="/panel/login">
 <label for="email">Email</label><input id="email" name="email" type="email" required
  autocomplete="username">
@@ -150,8 +205,8 @@ def _login_page(error: str = "") -> str:
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request) -> Response:
-    return RedirectResponse("/panel/casos" if _session(request) else "/panel/login", 303)
+def home(request: Request, deps: Deps) -> Response:
+    return RedirectResponse("/panel/casos" if _session(request, deps) else "/panel/login", 303)
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -160,15 +215,28 @@ def login_form() -> HTMLResponse:
 
 
 @router.post("/login")
-def login(request: Request, form: Form) -> Response:
-    email, password = form.get("email", ""), form.get("password", "")
-    if not auth.configured() or not auth.check_credentials(email, password):
-        return HTMLResponse(_login_page("Email o clave incorrectos."), status_code=401)
+def login(request: Request, form: Form, deps: Deps) -> Response:
+    email, password = form.get("email", "").strip().lower(), form.get("password", "")
+    if auth.too_many_failures(email):
+        message = "Demasiados intentos. Probá de nuevo en unos minutos."
+        return HTMLResponse(_login_page(message), status_code=429)
+    if auth.configured() and auth.check_credentials(email, password):
+        token = auth.new_session(email)  # operador de la plataforma: entra a la demo
+    else:
+        with deps.connection() as conn:
+            user = auth.company_login(conn, email, password)
+        if user is None:
+            auth.record_failure(email)
+            return HTMLResponse(_login_page("Email o clave incorrectos."), status_code=401)
+        token = auth.new_session(
+            user.email, tenant_id=user.tenant_id, company=user.company, admin=False
+        )
+    auth.clear_failures(email)
     response = RedirectResponse("/panel/casos", status_code=303)
     secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     response.set_cookie(
         auth.COOKIE,
-        auth.new_session(email.strip().lower()),
+        token,
         max_age=auth.SESSION_SECONDS,
         httponly=True,
         samesite="lax",
@@ -235,14 +303,12 @@ def _pending(
 
 @router.get("/aprobaciones", response_class=HTMLResponse)
 def approvals_page(request: Request, deps: Deps) -> Response:
-    session = _session(request)
-    if session is None:
-        return _to_login()
-    if deps.tenant_id is None:
-        return _no_tenant()
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
     with deps.connection() as conn:
-        pending = _pending(conn, deps.tenant_id)
-        with tenant_scope(conn, deps.tenant_id):
+        pending = _pending(conn, ctx.tenant_id)
+        with tenant_scope(conn, ctx.tenant_id):
             decided = conn.execute(
                 "select t.name, a.params, a.status, a.decided_at, a.case_id, u.email"
                 " from approvals a join tools t on t.id = a.tool_id"
@@ -250,8 +316,7 @@ def approvals_page(request: Request, deps: Deps) -> Response:
                 " left join users u on u.id = a.decided_by"
                 " where a.status <> 'pending' order by a.decided_at desc nulls last limit 10"
             ).fetchall()
-    csrf = auth.csrf_token(session[0])
-    cards = _approval_cards(pending, csrf, back="/panel/aprobaciones") or (
+    cards = _approval_cards(pending, ctx.csrf, back="/panel/aprobaciones") or (
         '<div class="card empty">No hay pedidos esperando aprobación.</div>'
     )
     history = "".join(
@@ -268,7 +333,7 @@ def approvals_page(request: Request, deps: Deps) -> Response:
 no se ejecutan hasta que una persona las aprueba. Al aprobar, se ejecuta por el guardián y el
 cliente recibe el aviso en el chat.</p>{cards}
 {f"<h2>Decididas</h2>{history}" if history else ""}"""
-    return HTMLResponse(page("Aprobaciones", body, active="aprobaciones"))
+    return HTMLResponse(page("Aprobaciones", body, active="aprobaciones", session=ctx.session))
 
 
 def _approval_message(tool: str, params: dict[str, Any], outcome: ApprovalOutcome) -> str:
@@ -295,32 +360,27 @@ def _approval_message(tool: str, params: dict[str, Any], outcome: ApprovalOutcom
 
 @router.post("/aprobaciones/{approval_id}")
 def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Response:
-    session = _session(request)
-    if session is None:
-        return _to_login()
-    if not auth.valid_csrf(session[0], form.get("csrf", "")):
-        return _forbidden()
-    if deps.tenant_id is None:
-        return _no_tenant()
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
     approve = form.get("decision") == "aprobar"
     back = form.get("volver", "")
     with deps.connection() as conn:
-        with tenant_scope(conn, deps.tenant_id):
+        with tenant_scope(conn, ctx.tenant_id):
             row = conn.execute(
                 "select a.case_id, t.name, a.params from approvals a"
                 " join tools t on t.id = a.tool_id where a.id = %s",
                 (approval_id,),
             ).fetchone()
         if row is None:
-            body = '<div class="card empty">Esa aprobación no existe.</div>'
-            return HTMLResponse(page("Aprobaciones", body), status_code=404)
+            return _not_found("Esa aprobación", ctx.session)
         case_id, tool, params = row
-        user_id = _user_id(conn, deps.tenant_id, session[1])
+        user_id = _user_id(conn, ctx.tenant_id, ctx.session.email)
         try:
             outcome = decide(
                 conn,
-                deps.guardian(conn),
-                deps.tenant_id,
+                deps.guardian(conn, ctx.tenant_id),
+                ctx.tenant_id,
                 approval_id,
                 approve=approve,
                 decided_by=user_id,
@@ -330,7 +390,7 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
             return RedirectResponse("/panel/aprobaciones", status_code=303)
         notify_customer(
             conn,
-            deps.tenant_id,
+            ctx.tenant_id,
             case_id,
             _approval_message(tool, params, outcome),
             kind="approval_decided",
@@ -357,14 +417,13 @@ CASE_LABEL = (
 
 @router.get("/casos", response_class=HTMLResponse)
 def inbox(request: Request, deps: Deps) -> Response:
-    if _session(request) is None:
-        return _to_login()
-    if deps.tenant_id is None:
-        return _no_tenant()
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
     with deps.connection() as conn:
         # Regla de cierre: los que llevan 24 h sin respuesta del cliente quedan resueltos.
-        close_inactive(conn, deps.tenant_id)
-        rows = _inbox_rows(conn, deps.tenant_id)
+        close_inactive(conn, ctx.tenant_id)
+        rows = _inbox_rows(conn, ctx.tenant_id)
     counts: dict[str, int] = {}
     for row in rows:
         counts[row[1]] = counts.get(row[1], 0) + 1
@@ -382,7 +441,7 @@ def inbox(request: Request, deps: Deps) -> Response:
         "".join(
             f"""<a class="card row" href="/panel/casos/{case_id}" style="text-decoration:none;
 color:inherit"><div class="grow"><div class="row" style="gap:8px">
-{status_badge(status, resolved_by)}
+{status_badge(status, resolved_by, reopened)}
 <span class="muted small">{esc(type_label(type_name))}</span>
 <span class="muted small">· {esc(CHANNELS.get(channel or "", "Canal"))}
 {" · verificado" if verified else ""}</span></div>
@@ -400,24 +459,27 @@ color:inherit"><div class="grow"><div class="row" style="gap:8px">
                 channel,
                 verified,
                 resolved_by,
+                reopened,
             ) in rows
         )
         or '<div class="card empty">Todavía no hay conversaciones.</div>'
     )
-    body = f"""<div class="row"><h1 class="grow">Casos</h1>
-<a class="btn" href="/panel/reiniciar">Reiniciar demo</a></div>
+    reset = '<a class="btn" href="/panel/reiniciar">Reiniciar demo</a>' if ctx.session.admin else ""
+    body = f"""<div class="row"><h1 class="grow">Casos</h1>{reset}</div>
 <p class="lead">Conversaciones con su estado: primero las derivadas
 a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
 confirma o pasan 24 h sin respuesta.</p><div class="kpis">{kpis}</div>
 {items}"""
-    return HTMLResponse(page("Casos", body, active="casos"))
+    return HTMLResponse(page("Casos", body, active="casos", session=ctx.session))
 
 
 @router.get("/reiniciar", response_class=HTMLResponse)
-def reset_form(request: Request) -> Response:
-    session = _session(request)
-    if session is None:
-        return _to_login()
+def reset_form(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    if not ctx.session.admin:  # solo la empresa de demo se reinicia
+        return _forbidden("Solo el operador de la demo puede reiniciarla.")
     body = f"""<div class="card" style="max-width:560px;margin:24px auto">
 <h1>Reiniciar demo</h1>
 <p>Deja el panel limpio para empezar una demo nueva:</p>
@@ -427,23 +489,21 @@ def reset_form(request: Request) -> Response:
 <p class="muted small">La auditoría de cada caso queda guardada e íntegra: es de solo
 inserción y no se borra.</p>
 <form method="post" action="/panel/reiniciar" class="row">
-<input type="hidden" name="csrf" value="{auth.csrf_token(session[0])}">
+<input type="hidden" name="csrf" value="{ctx.csrf}">
 <a class="btn" href="/panel/casos">Cancelar</a>
 <button class="primary" type="submit">Reiniciar demo</button></form></div>"""
-    return HTMLResponse(page("Reiniciar demo", body, active="casos"))
+    return HTMLResponse(page("Reiniciar demo", body, active="casos", session=ctx.session))
 
 
 @router.post("/reiniciar")
 def reset_demo(request: Request, form: Form, deps: Deps) -> Response:
-    session = _session(request)
-    if session is None:
-        return _to_login()
-    if not auth.valid_csrf(session[0], form.get("csrf", "")):
-        return _forbidden()
-    if deps.tenant_id is None:
-        return _no_tenant()
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    if not ctx.session.admin:
+        return _forbidden("Solo el operador de la demo puede reiniciarla.")
     with deps.connection() as conn:
-        archive_cases(conn, deps.tenant_id, _user_id(conn, deps.tenant_id, session[1]))
+        archive_cases(conn, ctx.tenant_id, _user_id(conn, ctx.tenant_id, ctx.session.email))
     deps.reset_sandbox()
     return RedirectResponse("/panel/casos", status_code=303)
 
@@ -455,7 +515,7 @@ def _inbox_rows(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[tuple[An
             " (select count(*) from case_messages m where m.case_id = c.id),"
             " (select e.payload ->> 'channel' from audit_events e where e.case_id = c.id"
             "  and e.payload ? 'channel' limit 1),"
-            " coalesce(k.verified_until > now(), false), c.resolved_by"
+            " coalesce(k.verified_until > now(), false), c.resolved_by, c.reopened"
             " from cases c join contacts k on k.id = c.contact_id"
             " left join case_types t on t.id = c.case_type_id"
             " where c.archived_at is null"
@@ -536,6 +596,8 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "case_resolved":
         who = RESOLVED_BY.get(str(p.get("resuelto_por")), "")
         return f"Caso resuelto {who}".strip(), esc(p.get("motivo"))
+    if kind == "case_reopened":
+        return "Caso reabierto", esc(p.get("motivo"))
     if kind == "turn_timing":
         parts = " · ".join(
             f"{label} {_seconds(p.get(key))}"
@@ -562,21 +624,20 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     return kind, esc(json.dumps(p, ensure_ascii=False))
 
 
-ROLES = {"customer": "Cliente", "agent": "Asistente", "human": "Equipo de Acme Store"}
+ROLES = {"customer": "Cliente", "agent": "Asistente"}
 
 
 @router.get("/casos/{case_id}", response_class=HTMLResponse)
 def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
-    session = _session(request)
-    if session is None:
-        return _to_login()
-    if deps.tenant_id is None:
-        return _no_tenant()
-    tenant_id = deps.tenant_id
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    tenant_id, company = ctx.tenant_id, ctx.session.company
     with deps.connection() as conn:
         with tenant_scope(conn, tenant_id):
             case = conn.execute(
-                f"select c.status, c.escalation, {CASE_LABEL}, c.created_at, c.resolved_by"
+                f"select c.status, c.escalation, {CASE_LABEL}, c.created_at, c.resolved_by,"
+                " c.reopened"
                 " from cases c left join case_types t on t.id = c.case_type_id"
                 " where c.id = %s and c.archived_at is null",
                 (case_id,),
@@ -587,17 +648,17 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
                 (case_id,),
             ).fetchall()
         if case is None:
-            body = '<div class="card empty">Ese caso no existe.</div>'
-            return HTMLResponse(page("Caso", body), status_code=404)
+            return _not_found("Ese caso", ctx.session)
         events = audit_log.reconstruct_case(conn, tenant_id, case_id)
         verdict = audit_log.verify_chain(conn, tenant_id, case_id)
         pending = _pending(conn, tenant_id, case_id)
-    status, escalation, type_name, created, resolved_by = case
-    csrf = auth.csrf_token(session[0])
+    status, escalation, type_name, created, resolved_by, reopened = case
+    csrf = ctx.csrf
+    roles = {**ROLES, "human": f"Equipo de {company}"}
 
     chat = (
         "".join(
-            f'<div class="msg {esc(role)}"><div class="who">{ROLES.get(role, role)} · '
+            f'<div class="msg {esc(role)}"><div class="who">{esc(roles.get(role, role))} · '
             f"{local_time(at, '%H:%M')}</div>{esc(mask_codes(text))}</div>"
             for role, text, at in messages
         )
@@ -636,7 +697,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     )
     body = f"""<p><a href="/panel/casos">← Casos</a></p>
 <div class="row"><h1 class="grow">Caso {esc(type_label(type_name))}</h1>
-{status_badge(status, resolved_by)}</div>
+{status_badge(status, resolved_by, reopened)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
 {escalated}{approvals}
 <div class="kpis"><div class="kpi"><div class="n">USD {cost:.4f}</div><div class="muted">Costo
@@ -650,29 +711,25 @@ modelo · {tokens} tokens</div></div><div class="kpi"><div class="n">{len(events
 <input type="hidden" name="envio" value="{uuid.uuid4().hex}">
 <label for="texto">Responder como persona del equipo</label>
 <textarea id="texto" name="texto" maxlength="{MAX_REPLY}" required
- placeholder="Hola, soy del equipo de Acme Store…"></textarea>
+ placeholder="Hola, soy del equipo de {esc(company)}…"></textarea>
 <p class="muted small">En el chat web el cliente lo ve en unos segundos.</p>
 <button class="primary" type="submit">Enviar</button></form></div>
 <div class="card"><div class="row"><h2 class="grow" style="margin:0">Auditoría paso a paso</h2>
 {chain}</div><p class="muted small">Costo total: USD {cost:.6f}</p>
 <ol class="audit">{steps}</ol></div>"""
-    return HTMLResponse(page("Caso", body, active="casos"))
+    return HTMLResponse(page("Caso", body, active="casos", session=ctx.session))
 
 
 @router.post("/casos/{case_id}/responder")
 def reply(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Response:
-    session = _session(request)
-    if session is None:
-        return _to_login()
-    if not auth.valid_csrf(session[0], form.get("csrf", "")):
-        return _forbidden()
-    if deps.tenant_id is None:
-        return _no_tenant()
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
     text = form.get("texto", "").strip()[:MAX_REPLY]
     sending = form.get("envio", "")[:64]  # un token por formulario: el mismo envío, una vez
     if text:
         with deps.connection() as conn:
-            with tenant_scope(conn, deps.tenant_id):
+            with tenant_scope(conn, ctx.tenant_id):
                 # Bloquear el caso serializa dos envíos simultáneos del mismo formulario.
                 exists = conn.execute(
                     "select 1 from cases where id = %s for update", (case_id,)
@@ -686,13 +743,12 @@ def reply(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Respo
                     ).fetchone()
                 )
             if exists is None:
-                body = '<div class="card empty">Ese caso no existe.</div>'
-                return HTMLResponse(page("Caso", body), status_code=404)
+                return _not_found("Ese caso", ctx.session)
             if not repeated:
-                user_id = _user_id(conn, deps.tenant_id, session[1])
+                user_id = _user_id(conn, ctx.tenant_id, ctx.session.email)
                 notify_customer(
                     conn,
-                    deps.tenant_id,
+                    ctx.tenant_id,
                     case_id,
                     text,
                     detail={"by": str(user_id), "envio": sending},
@@ -711,29 +767,37 @@ def _tone(value: float) -> str:
 
 @router.get("/reporte", response_class=HTMLResponse)
 def report_page(request: Request, deps: Deps) -> Response:
-    if _session(request) is None:
-        return _to_login()
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    # El reporte de la propia empresa. Acme, además, conserva el de su corrida del hito 4, que
+    # quedó en otro tenant: se usa solo si la empresa de demo no tiene una corrida propia.
+    sources = [ctx.tenant_id]
+    if ctx.session.admin and deps.report_tenant is not None:
+        sources.append(deps.report_tenant)
     report: dict[str, Any] | None = None
     finished = None
-    if deps.report_tenant is not None:
-        with deps.connection() as conn, tenant_scope(conn, deps.report_tenant):
-            row = conn.execute(
-                "select report, updated_at from onboarding_runs where status = 'done'"
-                " and report is not null order by updated_at desc limit 1"
-            ).fetchone()
-        if row is not None:
-            report, finished = row
+    with deps.connection() as conn:
+        for source in sources:
+            with tenant_scope(conn, source):
+                row = conn.execute(
+                    "select report, updated_at from onboarding_runs where status = 'done'"
+                    " and report is not null order by updated_at desc limit 1"
+                ).fetchone()
+            if row is not None:
+                report, finished = row
+                break
     if report is None:
         body = (
             '<h1>Reporte de preparación</h1><div class="card empty">Todavía no hay un '
-            "onboarding terminado.</div>"
+            'onboarding terminado. Empezá en <a href="/panel/onboarding">Onboarding</a>.</div>'
         )
-        return HTMLResponse(page("Reporte", body, active="reporte"))
-    body = _report_body(report, finished)
-    return HTMLResponse(page("Reporte de preparación", body, active="reporte"))
+        return HTMLResponse(page("Reporte", body, active="reporte", session=ctx.session))
+    body = _report_body(report, finished, ctx.session.company)
+    return HTMLResponse(page("Reporte de preparación", body, active="reporte", session=ctx.session))
 
 
-def _report_body(report: dict[str, Any], finished: Any) -> str:
+def _report_body(report: dict[str, Any], finished: Any, company: str) -> str:
     types: list[dict[str, Any]] = sorted(
         report.get("tipos") or [], key=lambda t: -int(t.get("volumen") or 0)
     )
@@ -783,7 +847,7 @@ def _report_body(report: dict[str, Any], finished: Any) -> str:
     gaps_html = "".join(f"<li>{g}</li>" for g in gaps) or "<li>Nada pendiente.</li>"
     when = f" · {local_time(finished, '%d/%m/%Y')}" if finished else ""
     return f"""<h1>Reporte de preparación</h1>
-<p class="lead">Qué parte de la atención de Acme Store resolvería el asistente por su cuenta,
+<p class="lead">Qué parte de la atención de {esc(company)} resolvería el asistente por su cuenta,
 medido con su propio historial{when}.</p>
 <div class="kpis"><div class="kpi big"><div class="n">{_pct(estimate)}</div><div class="muted">del
 volumen lo resolvería solo</div></div><div class="kpi"><div class="n">{total}</div>

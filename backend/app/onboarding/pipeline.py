@@ -95,6 +95,23 @@ def _save(
         )
 
 
+def ingested_totals(conn: psycopg.Connection, tenant_id: uuid.UUID) -> dict[str, int]:
+    """Lo que ya está ingerido en la empresa (mismas claves que `IngestResult`)."""
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "select (select count(*) from sources), (select count(*) from conversations),"
+            " (select count(*) from messages), (select count(*) from documents)"
+        ).fetchone()
+    assert row is not None
+    return {
+        "sources": row[0],
+        "conversations": row[1],
+        "messages": row[2],
+        "documents": row[3],
+        "skipped": 0,
+    }
+
+
 def check_anonymized(conn: psycopg.Connection, tenant_id: uuid.UUID) -> dict[str, int]:
     with tenant_scope(conn, tenant_id):
         texts = [r[0] for r in conn.execute("select text from messages").fetchall()]
@@ -115,12 +132,27 @@ def run_pipeline(
     log: Callable[[str], None] = lambda message: None,
 ) -> tuple[uuid.UUID, dict[str, Any]]:
     run_id, stages = _run(conn, tenant_id)
+
+    def ingest_stage() -> dict[str, int]:
+        result = ingest(conn, tenant_id, uploads, business=deps.business, embedder=deps.embedder)
+        if uploads:
+            return result.__dict__
+        # Desde el panel las fuentes se ingieren al subirlas: la etapa informa lo que ya hay.
+        totals = ingested_totals(conn, tenant_id)
+        if not totals["conversations"]:
+            raise RuntimeError("Todavía no hay conversaciones: subí un historial de chats.")
+        return totals
+
+    def tools_stage() -> list[dict[str, Any]]:
+        if not (deps.openapi.get("paths") or {}):
+            return []  # sin OpenAPI no hay herramientas: los tipos solo informan
+        return [
+            {"nombre": m["name"], "riesgo": m["risk"]}
+            for m in generate_tools(conn, tenant_id, deps.model, deps.openapi)
+        ]
+
     steps: dict[str, Callable[[], Any]] = {
-        "ingesta": lambda: (
-            ingest(
-                conn, tenant_id, uploads, business=deps.business, embedder=deps.embedder
-            ).__dict__
-        ),
+        "ingesta": ingest_stage,
         "anonimizacion": lambda: check_anonymized(conn, tenant_id),
         "descubrimiento": lambda: [
             {"nombre": t.name, "volumen": t.volume, "objetivo": t.goal}
@@ -137,10 +169,7 @@ def run_pipeline(
         "evals": lambda: {
             "creados": generate_evals(conn, tenant_id, deps.model, per_type=deps.evals_per_type)
         },
-        "herramientas": lambda: [
-            {"nombre": m["name"], "riesgo": m["risk"]}
-            for m in generate_tools(conn, tenant_id, deps.model, deps.openapi)
-        ],
+        "herramientas": tools_stage,
         "reporte": lambda: readiness_report(conn, tenant_id, deps.openapi, deps.agent_factory),
     }
     report: dict[str, Any] | None = stages.get("reporte", {}).get("resultado")
@@ -149,6 +178,10 @@ def run_pipeline(
             log(f"{stage}: ya estaba hecha")
             continue
         log(f"{stage}: empieza")
+        if commit:  # el panel muestra qué etapa está corriendo
+            stages[stage] = {"estado": "en_curso"}
+            _save(conn, tenant_id, run_id, stages)
+            conn.commit()
         try:
             result = steps[stage]()
         except Exception as error:
