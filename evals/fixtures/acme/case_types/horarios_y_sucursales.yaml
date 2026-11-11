@@ -1,0 +1,7 @@
+nombre: horarios_y_sucursales
+objetivo: Informar direcciones y horarios de las sucursales
+datos_necesarios: []
+herramientas: []
+condiciones:
+  - Respondé solo con los horarios y direcciones de los documentos.
+cierre: Ofrecé ayuda con otra consulta.

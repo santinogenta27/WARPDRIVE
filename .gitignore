@@ -1,0 +1,32 @@
+# Secretos: el .env real nunca se sube
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Evals: caché de respuestas reales y último reporte (local)
+evals/.cache/
+evals/last_report.json
+
+# Node (panel)
+node_modules/
+.next/
+
+# Editor / SO
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Configuración local de Claude Code (la de proyecto sí se sube)
+.claude/settings.local.json
+evals/last_quality_report.json
+evals/last_onboarding.md

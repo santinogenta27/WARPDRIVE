@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1e3a5f">
+<title>Acme Store · Atención al cliente</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231e3a5f'/%3E%3Ctext x='16' y='22' font-family='Arial' font-size='17' font-weight='700' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #eef0f3;
+    --surface: #ffffff;
+    --ink: #15181d;
+    --muted: #6b7280;
+    --line: #e4e7ec;
+    --brand: #1e3a5f;
+    --brand-soft: #e8eef6;
+    --on-brand: #ffffff;
+    --bubble-in: #f2f4f7;
+    --online: #16a34a;
+    --notice: #fff7e6;
+    --notice-ink: #7a4b00;
+    --shadow: 0 18px 50px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.06);
+    --radius: 18px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d11;
+      --surface: #14171c;
+      --ink: #e7e9ed;
+      --muted: #9aa1ab;
+      --line: #252a31;
+      --brand: #5b8cc8;
+      --brand-soft: #1b2633;
+      --on-brand: #0b0d11;
+      --bubble-in: #1e2228;
+      --online: #22c55e;
+      --notice: #2a2213;
+      --notice-ink: #f3c977;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    max-width: 460px;
+    margin: 0 auto;
+    background: var(--surface);
+  }
+  @media (min-width: 600px) {
+    body { display: grid; place-items: center; padding: 24px; }
+    .app {
+      width: 100%;
+      height: min(780px, calc(100dvh - 48px));
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+  }
+
+  /* Encabezado */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    padding-top: max(14px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .logo {
+    flex: none;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: var(--brand);
+    color: var(--on-brand);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: -0.02em;
+  }
+  .who { flex: 1; min-width: 0; }
+  .who h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
+  .status { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--online); }
+  .icon-btn {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--muted);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  .icon-btn:hover { color: var(--ink); background: var(--bubble-in); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  /* Conversación */
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 14px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overscroll-behavior: contain;
+  }
+  .day { align-self: center; font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
+  .row { display: flex; flex-direction: column; max-width: 84%; margin-top: 6px; }
+  .row.agent { align-self: flex-start; }
+  .row.user { align-self: flex-end; align-items: flex-end; }
+  .bubble {
+    padding: 10px 13px;
+    border-radius: var(--radius);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    animation: rise 0.18s ease-out;
+  }
+  .agent .bubble { background: var(--bubble-in); border-bottom-left-radius: 6px; }
+  .user .bubble { background: var(--brand); color: var(--on-brand); border-bottom-right-radius: 6px; }
+  .row.human { align-self: flex-start; }
+  .human .bubble { background: var(--bubble-in); border-left: 3px solid var(--brand); border-bottom-left-radius: 6px; }
+  .who { font-size: 11px; font-weight: 600; color: var(--brand); margin: 0 6px 3px; }
+  .time { font-size: 11px; color: var(--muted); margin: 3px 6px 0; }
+  .notice {
+    align-self: center;
+    max-width: 92%;
+    margin: 10px 0;
+    padding: 9px 12px;
+    border-radius: 12px;
+    background: var(--notice);
+    color: var(--notice-ink);
+    font-size: 13px;
+    text-align: center;
+  }
+  .typing { display: inline-flex; gap: 4px; padding: 13px 14px; }
+  .typing span {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: 0.4;
+    animation: blink 1.2s infinite ease-in-out;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 0.9; transform: translateY(-2px); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .bubble, .typing span { animation: none; } }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+  .chip {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 8px 13px;
+    font: inherit;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--brand); color: var(--brand); }
+
+  /* Escritura */
+  form {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px 12px 6px;
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  textarea {
+    flex: 1;
+    resize: none;
+    max-height: 120px;
+    min-height: 44px;
+    padding: 11px 14px;
+    border-radius: 22px;
+    border: 1px solid var(--line);
+    background: var(--bubble-in);
+    color: var(--ink);
+    font: inherit;
+    font-size: 16px; /* evita el zoom automático en iOS */
+    line-height: 1.35;
+    outline: none;
+    overflow-y: hidden; /* aparece solo al llegar a la altura máxima (autosize) */
+  }
+  textarea:focus { border-color: var(--brand); background: var(--surface); }
+  textarea:disabled { opacity: 0.6; }
+  #send {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 0;
+    background: var(--brand);
+    color: var(--on-brand);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  #send:disabled { opacity: 0.4; cursor: default; }
+  #send svg { width: 20px; height: 20px; }
+  footer {
+    padding: 2px 16px 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    text-align: center;
+    font-size: 11.5px;
+    color: var(--muted);
+    background: var(--surface);
+  }
+  footer button {
+    border: 0; background: none; padding: 0; font: inherit; color: inherit;
+    text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+  }
+  #remaining { display: none; }
+
+  /* Ayuda de la demo */
+  dialog {
+    width: min(400px, calc(100vw - 32px));
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 20px;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: var(--shadow);
+  }
+  dialog::backdrop { background: rgba(10, 12, 16, 0.45); }
+  dialog h2 { margin: 0 0 4px; font-size: 16px; }
+  dialog p.lead { margin: 0 0 12px; color: var(--muted); font-size: 13.5px; }
+  dialog ul { margin: 0 0 16px; padding-left: 18px; font-size: 14px; }
+  dialog li { margin-bottom: 8px; }
+  dialog code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; font-size: 13px; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn {
+    border-radius: 10px; padding: 9px 14px; font: inherit; font-size: 14px; cursor: pointer;
+    border: 1px solid var(--line); background: transparent; color: var(--ink);
+  }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo" aria-hidden="true">A</div>
+    <div class="who">
+      <h1>Acme Store</h1>
+      <div class="status"><span class="dot" aria-hidden="true"></span>Asistente virtual · responde al instante</div>
+    </div>
+    <button class="icon-btn" id="info" type="button" aria-label="Sobre esta demo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/></svg>
+    </button>
+  </header>
+
+  <main id="log" aria-live="polite" aria-label="Conversación con Acme Store"></main>
+
+  <form id="composer" autocomplete="off">
+    <textarea id="input" rows="1" maxlength="1000" placeholder="Escribí tu consulta…" aria-label="Mensaje"></textarea>
+    <button id="send" type="submit" aria-label="Enviar" disabled>
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg>
+    </button>
+  </form>
+  <footer>
+    <span id="remaining"></span>
+    Demo de Enterprise Data AI · Acme Store es una tienda ficticia · <button type="button" id="how">Cómo probarla</button>
+  </footer>
+</div>
+
+<dialog id="help" aria-labelledby="help-title">
+  <h2 id="help-title">Demo de Enterprise Data AI</h2>
+  <p class="lead">Acme Store es una tienda ficticia. El asistente usa el mismo agente, las mismas reglas y la misma auditoría que por WhatsApp.</p>
+  <ul>
+    <li>Preguntá por horarios, cuotas, envíos, cambios o devoluciones.</li>
+    <li>Para ver un pedido, escribí <em>«¿Dónde está mi pedido 1001?»</em> y verificá tu identidad con <code>lucia@example.com</code>. En esta demo no se envían emails: el código aparece en la consola del servidor.</li>
+    <li>Cada conversación tiene hasta 20 mensajes, y hay un límite de uso diario por conexión.</li>
+  </ul>
+  <div class="actions">
+    <button class="btn" id="reset" type="button">Empezar de nuevo</button>
+    <button class="btn primary" id="close" type="button">Entendido</button>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  "use strict";
+  var KEY = "acme-chat";
+  var GREETING = "¡Hola! Soy el asistente virtual de Acme Store. ¿En qué te puedo ayudar?";
+  var SUGGESTIONS = ["¿Dónde está mi pedido 1001?", "¿Tienen cuotas sin interés?", "¿Abren los domingos?", "Quiero hablar con una persona"];
+
+  var log = document.getElementById("log");
+  var form = document.getElementById("composer");
+  var input = document.getElementById("input");
+  var send = document.getElementById("send");
+  var remainingEl = document.getElementById("remaining");
+  var help = document.getElementById("help");
+
+  // Estado por navegador (comodidad: si no hay almacenamiento, funciona igual).
+  var state = load() || { session: null, items: [], remaining: null, locked: false };
+  var busy = false;
+  var typingRow = null;
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; }
+  }
+  function save() {
+    try {
+      state.items = state.items.slice(-60);
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch (e) { /* sin almacenamiento */ }
+  }
+
+  function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  // Negrita estilo WhatsApp (*texto*) y saltos de línea; todo lo demás se muestra como texto.
+  function format(text) {
+    return escapeHtml(text)
+      .replace(/\*(\S(?:[^*\n]*\S)?)\*/g, "<strong>$1</strong>")
+      .replace(/\n/g, "<br>");
+  }
+  function clock(ts) {
+    var d = new Date(ts);
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  function scrollDown() { log.scrollTop = log.scrollHeight; }
+
+  function renderItem(item) {
+    if (item.kind === "notice") {
+      var n = document.createElement("div");
+      n.className = "notice";
+      n.textContent = item.text;
+      log.appendChild(n);
+      return;
+    }
+    var row = document.createElement("div");
+    row.className = "row " + item.kind;
+    if (item.kind === "human") {  // una persona del equipo, desde el panel
+      var who = document.createElement("div");
+      who.className = "who";
+      who.textContent = "Equipo de Acme Store";
+      row.appendChild(who);
+    }
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = format(item.text);
+    var time = document.createElement("div");
+    time.className = "time";
+    time.textContent = clock(item.ts);
+    row.appendChild(bubble);
+    row.appendChild(time);
+    log.appendChild(row);
+  }
+  function add(kind, text) {
+    var item = { kind: kind, text: text, ts: Date.now() };
+    state.items.push(item);
+    save();
+    removeChips();
+    renderItem(item);
+    scrollDown();
+  }
+
+  function renderAll() {
+    log.innerHTML = "";
+    var day = document.createElement("div");
+    day.className = "day";
+    day.textContent = "Hoy";
+    log.appendChild(day);
+    renderItem({ kind: "agent", text: GREETING, ts: state.items.length ? state.items[0].ts : Date.now() });
+    state.items.forEach(renderItem);
+    if (!state.items.length) renderChips();
+    updateRemaining();
+    setBusy(false);
+    scrollDown();
+  }
+  function renderChips() {
+    var box = document.createElement("div");
+    box.className = "chips";
+    box.id = "chips";
+    SUGGESTIONS.forEach(function (text) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = text;
+      chip.addEventListener("click", function () { submit(text); });
+      box.appendChild(chip);
+    });
+    log.appendChild(box);
+  }
+  function removeChips() {
+    var chips = document.getElementById("chips");
+    if (chips) chips.remove();
+  }
+
+  function showTyping() {
+    if (typingRow) return;
+    typingRow = document.createElement("div");
+    typingRow.className = "row agent";
+    typingRow.innerHTML = '<div class="bubble typing" aria-label="Escribiendo"><span></span><span></span><span></span></div>';
+    log.appendChild(typingRow);
+    scrollDown();
+  }
+  function hideTyping() {
+    if (typingRow) { typingRow.remove(); typingRow = null; }
+  }
+
+  function updateRemaining() {
+    var r = state.remaining;
+    if (r !== null && r <= 5 && !state.locked) {
+      remainingEl.style.display = "inline";
+      remainingEl.textContent = (r === 1 ? "Te queda 1 mensaje" : "Te quedan " + r + " mensajes") + " · ";
+    } else {
+      remainingEl.style.display = "none";
+    }
+  }
+  function setBusy(value) {
+    busy = value;
+    input.disabled = state.locked;
+    input.placeholder = state.locked ? "Llegaste al límite de esta demo" : "Escribí tu consulta…";
+    send.disabled = busy || state.locked || !input.value.trim();
+  }
+
+  function newSession() {
+    return fetch("/chat/session", { method: "POST" }).then(function (r) {
+      if (!r.ok) throw new Error("session " + r.status);
+      return r.json();
+    }).then(function (data) {
+      state.session = data.session;
+      state.remaining = data.remaining;
+      save();
+      return data.session;
+    });
+  }
+  function post(text, retried) {
+    var ready = state.session ? Promise.resolve(state.session) : newSession();
+    return ready.then(function (session) {
+      return fetch("/chat/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: session, text: text })
+      });
+    }).then(function (response) {
+      if (response.status === 401 && !retried) {  // sesión vencida o de otra base: una nueva
+        state.session = null;
+        return post(text, true);
+      }
+      if (!response.ok) throw new Error("messages " + response.status);
+      return response;
+    });
+  }
+
+  // Server-Sent Events sobre un POST: se leen los bloques "event: …\ndata: …".
+  function readEvents(response, onEvent) {
+    var reader = response.body.getReader();
+    var decoder = new TextDecoder();
+    var buffer = "";
+    function pump() {
+      return reader.read().then(function (chunk) {
+        if (chunk.done) return;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        var cut;
+        while ((cut = buffer.indexOf("\n\n")) >= 0) {
+          var block = buffer.slice(0, cut);
+          buffer = buffer.slice(cut + 2);
+          var name = "message", data = "";
+          block.split("\n").forEach(function (line) {
+            if (line.indexOf("event: ") === 0) name = line.slice(7);
+            else if (line.indexOf("data: ") === 0) data += line.slice(6);
+          });
+          try { onEvent(name, data ? JSON.parse(data) : {}); } catch (e) { /* bloque inválido */ }
+        }
+        return pump();
+      });
+    }
+    return pump();
+  }
+
+  function onEvent(name, data) {
+    if (name === "typing") showTyping();
+    else if (name === "message") { hideTyping(); add("agent", data.text); }
+    else if (name === "done") {
+      var today = typeof data.remaining_today === "number" ? data.remaining_today : data.remaining;
+      state.remaining = Math.min(data.remaining, today);
+      save();
+      updateRemaining();
+    }
+    else if (name === "limit") {
+      hideTyping();
+      // El de la sesión cierra esta conversación; los diarios (IP o total) vencen solos.
+      if (data.scope === "session") { state.locked = true; save(); }
+      add("notice", data.message);
+      updateRemaining();
+    }
+    else if (name === "error") { hideTyping(); add("notice", data.message); }
+  }
+
+  function submit(text) {
+    text = (text || "").trim();
+    if (!text || busy || state.locked) return;
+    add("user", text);
+    input.value = "";
+    autosize();
+    setBusy(true);
+    showTyping();
+    post(text, false)
+      .then(function (response) { return readEvents(response, onEvent); })
+      .catch(function () { add("notice", "No pudimos conectar con el asistente. Probá de nuevo en un momento."); })
+      .then(function () { hideTyping(); setBusy(false); if (!state.locked) input.focus(); });
+  }
+
+  // Mensajes del equipo (respuestas o avisos de una aprobación desde el panel): se consultan
+  // cada pocos segundos mientras la pestaña está visible.
+  // Una consulta a la vez, y cada mensaje se muestra una sola vez (por su id): el intervalo y el
+  // cambio de pestaña pueden disparar dos consultas superpuestas.
+  var polling = false;
+  function poll() {
+    if (polling || !state.session || document.hidden) return;
+    polling = true;
+    var url = "/chat/updates?session=" + encodeURIComponent(state.session) +
+      (state.lastHuman ? "&after=" + encodeURIComponent(state.lastHuman) : "");
+    fetch(url).then(function (r) { return r.ok ? r.json() : { messages: [] }; })
+      .then(function (data) {
+        var seen = state.seenHuman || [];
+        (data.messages || []).forEach(function (m) {
+          state.lastHuman = m.at;
+          if (seen.indexOf(m.id) >= 0) return;
+          seen.push(m.id);
+          state.seenHuman = seen.slice(-50);
+          hideTyping();
+          add("human", m.text);
+        });
+      })
+      .catch(function () { /* sin conexión: se reintenta en la próxima vuelta */ })
+      .then(function () { polling = false; });
+  }
+  setInterval(poll, 6000);
+  document.addEventListener("visibilitychange", poll);
+
+  function autosize() {
+    input.style.height = "auto";
+    var needed = input.scrollHeight + 2;  // + el borde (box-sizing: border-box)
+    input.style.height = Math.min(needed, 120) + "px";
+    input.style.overflowY = needed > 120 ? "auto" : "hidden";
+  }
+
+  form.addEventListener("submit", function (e) { e.preventDefault(); submit(input.value); });
+  input.addEventListener("input", function () { autosize(); setBusy(busy); });
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(input.value); }
+  });
+  function openHelp() { if (help.showModal) help.showModal(); else help.setAttribute("open", ""); }
+  function closeHelp() { if (help.close) help.close(); else help.removeAttribute("open"); }
+  document.getElementById("info").addEventListener("click", openHelp);
+  document.getElementById("how").addEventListener("click", openHelp);
+  document.getElementById("close").addEventListener("click", closeHelp);
+  document.getElementById("reset").addEventListener("click", function () {
+    state = { session: null, items: [], remaining: null, locked: false };
+    save();
+    closeHelp();
+    renderAll();
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

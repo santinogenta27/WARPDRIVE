@@ -1,0 +1,214 @@
+"""Carga de la empresa de demo Acme desde evals/fixtures/acme/ (datos ficticios)."""
+
+import json
+import sys
+import uuid
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import psycopg
+from fastapi.testclient import TestClient
+from psycopg.types.json import Jsonb
+
+from app.config import REPO_ROOT
+from app.contacts import hash_phone
+from app.db.connection import tenant_scope
+from app.llm.embedder import Embedder
+from app.rag.indexer import index_document
+
+if TYPE_CHECKING:
+    from app.agent.loop import Agent
+
+ACME_DIR = REPO_ROOT / "evals" / "fixtures" / "acme"
+
+
+@dataclass(frozen=True)
+class AcmeSeed:
+    tenant_id: uuid.UUID
+    contacts: dict[str, uuid.UUID]  # etiqueta del fixture -> id del contacto
+    phones: dict[str, str]
+
+
+def _company() -> dict[str, Any]:
+    data: dict[str, Any] = json.loads((ACME_DIR / "company.json").read_text(encoding="utf-8"))
+    return data
+
+
+def _settings(company: dict[str, Any]) -> dict[str, Any]:
+    return {"tone": company["tone"]}
+
+
+def acme_openapi() -> dict[str, Any]:
+    path = REPO_ROOT / "mocks" / "acme-api" / "openapi.json"
+    spec: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return spec
+
+
+def configure_acme(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
+    """Configura Acme por el mismo camino que cualquier empresa (decisión 026), sin insertar
+    nada ya activo ni aprobado:
+
+    1. Conecta su sistema: la API simulada de la demo, con su OpenAPI. De ahí sale también cómo
+       buscar un cliente por email para verificar su identidad.
+    2. Las herramientas se generan desde el OpenAPI con el generador del onboarding y quedan
+       sin aprobar.
+    3. Los tipos de caso quedan cargados e inactivos, como después del descubrimiento.
+    4. La revisión de la empresa: aprueba cada herramienta con sus límites y activa cada tipo
+       con sus instrucciones.
+
+    Lo curado a mano es lo que una empresa edita al revisar: las instrucciones de cada tipo
+    (`case_types/*.yaml`) y los límites (`tool_limits` de `company.json`). Idempotente: sobre
+    una base que ya tenía la demo, lleva los cambios de los fixtures."""
+    from app.companies import connection as system
+    from app.companies import review
+    from app.onboarding.toolgen import _snake, build_manifests, operations, store_tools
+
+    company = _company()
+    spec = acme_openapi()
+    system.connect_demo(conn, tenant_id, spec)
+
+    instructions = {
+        kind["name"]: (ACME_DIR / "case_types" / f"{kind['name']}.yaml").read_text(encoding="utf-8")
+        for kind in company["case_types"]
+    }
+    by_tool = {_snake(op.operation_id): op.operation_id for op in operations(spec)}
+    picked = {
+        name: [
+            by_tool[tool]
+            for tool in review.parse_instructions(text).get("herramientas") or []
+            if tool in by_tool
+        ]
+        for name, text in instructions.items()
+    }
+    store_tools(conn, tenant_id, build_manifests(spec, picked))
+    with tenant_scope(conn, tenant_id):
+        for name, text in instructions.items():
+            conn.execute(
+                "insert into case_types (tenant_id, name, instructions, active)"
+                " values (%s, %s, %s, false) on conflict (tenant_id, name) do nothing",
+                (tenant_id, name, text),
+            )
+
+    limits: dict[str, dict[str, Any]] = company.get("tool_limits") or {}
+    for tool in review.tools(conn, tenant_id):
+        mine = limits.get(tool.name, {})
+        review.set_tool(
+            conn,
+            tenant_id,
+            tool.id,
+            approved=True,
+            max_amount=mine.get("max_amount"),
+            approval_over=mine.get("approval_over"),
+            amount_from=mine.get("amount_from"),
+        )
+    active = {kind["name"]: bool(kind["active"]) for kind in company["case_types"]}
+    for kind in review.case_types(conn, tenant_id):
+        if kind.name in instructions:
+            review.set_case_type(
+                conn,
+                tenant_id,
+                kind.id,
+                active=active[kind.name],
+                instructions=instructions[kind.name],
+            )
+
+
+def seed_acme(conn: psycopg.Connection, embedder: Embedder) -> AcmeSeed:
+    """Crea el tenant Acme, lo configura por el flujo de revisión (`configure_acme`) y carga
+    sus contactos de prueba y sus documentos."""
+    company = _company()
+    row = conn.execute(
+        "insert into tenants (name, settings) values (%s, %s) returning id",
+        (company["name"], Jsonb(_settings(company))),
+    ).fetchone()
+    assert row is not None
+    tenant_id: uuid.UUID = row[0]
+    configure_acme(conn, tenant_id)
+    contacts: dict[str, uuid.UUID] = {}
+    with tenant_scope(conn, tenant_id):
+        for contact in company["contacts"]:
+            found = conn.execute(
+                "insert into contacts (tenant_id, phone_hash, verified_until) values"
+                " (%s, %s, case when %s then now() + interval '30 days' end) returning id",
+                (tenant_id, hash_phone(contact["phone"]), contact["verified"]),
+            ).fetchone()
+            assert found is not None
+            contacts[contact["label"]] = found[0]
+    index_acme_documents(conn, tenant_id, embedder)
+    phones = {c["label"]: c["phone"] for c in company["contacts"]}
+    return AcmeSeed(tenant_id=tenant_id, contacts=contacts, phones=phones)
+
+
+def find_demo_tenant(conn: psycopg.Connection) -> uuid.UUID | None:
+    """Tenant Acme permanente de la demo (marcado con settings.demo = 'acme')."""
+    row = conn.execute("select id from tenants where settings ->> 'demo' = 'acme'").fetchone()
+    return row[0] if row else None
+
+
+def ensure_demo_tenant(conn: psycopg.Connection, embedder: Embedder) -> uuid.UUID:
+    """Crea una sola vez el tenant Acme permanente de la demo. Si ya existe, lleva su
+    configuración al estado de los fixtures por el mismo flujo."""
+    tenant_id = find_demo_tenant(conn)
+    if tenant_id is None:
+        tenant_id = seed_acme(conn, embedder).tenant_id
+    conn.execute(
+        "update tenants set settings = settings || %s where id = %s",
+        (Jsonb({**_settings(_company()), "demo": "acme"}), tenant_id),
+    )
+    sync_demo_config(conn, tenant_id)
+    return tenant_id
+
+
+def sync_demo_config(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
+    """Lleva a una base que ya tenía la demo los cambios de los fixtures (instrucciones de los
+    tipos de caso, contrato y límites de las herramientas)."""
+    configure_acme(conn, tenant_id)
+
+
+def acme_sandbox_client() -> TestClient:
+    """API de Acme simulada en proceso, como en los evals (los datos viven en memoria)."""
+    mocks = str(REPO_ROOT / "mocks" / "acme-api")
+    if mocks not in sys.path:
+        sys.path.insert(0, mocks)
+    from acme_api import create_app
+
+    return TestClient(create_app())
+
+
+@lru_cache(maxsize=1)
+def shared_acme() -> TestClient:
+    """La API simulada de la demo que comparten el chat y el panel: un reembolso aprobado desde
+    el panel se ve después en el pedido que consulta el agente."""
+    return acme_sandbox_client()
+
+
+def build_demo_agent(conn: psycopg.Connection, acme: TestClient) -> "Agent":
+    """Agente de la demo: modelos del entorno (Claude o Gemini) y la API de Acme simulada."""
+    from app.agent.loop import Agent
+    from app.llm.client import LLMClient, PostgresUsageRecorder
+    from app.llm.factory import embedder_from_env, provider_from_env
+    from app.policy.guardian import Guardian
+    from app.tools.runtime import ToolRuntime
+
+    recorder = PostgresUsageRecorder(conn)
+    llm = LLMClient(provider=provider_from_env(), recorder=recorder)
+    guardian = Guardian(conn, ToolRuntime(acme))
+    return Agent(conn, llm, embedder_from_env(recorder), guardian)
+
+
+def _title(text: str, fallback: str) -> str:
+    first = text.strip().splitlines()[0] if text.strip() else ""
+    return first.lstrip("# ").strip() if first.startswith("#") else fallback
+
+
+def index_acme_documents(conn: psycopg.Connection, tenant_id: uuid.UUID, embedder: Embedder) -> int:
+    """Indexa los documentos de políticas de Acme. Devuelve cuántos indexó."""
+    paths: list[Path] = sorted((ACME_DIR / "documents").glob("*.md"))
+    for path in paths:
+        text = path.read_text(encoding="utf-8")
+        index_document(
+            conn, tenant_id, embedder, title=_title(text, path.stem), source=path.stem, text=text
+        )
+    return len(paths)

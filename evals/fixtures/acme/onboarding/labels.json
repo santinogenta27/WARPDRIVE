@@ -1,0 +1,402 @@
+{
+ "acme-001": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-002": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-003": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-004": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-005": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-006": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-007": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-008": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-009": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-010": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-011": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-012": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-013": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-014": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-015": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-016": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-017": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-018": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-019": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-020": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-021": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-022": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-023": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-024": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-025": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-026": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-027": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-028": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-029": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-030": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-031": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-032": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-033": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-034": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-035": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-036": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-037": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-038": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-039": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-040": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-041": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-042": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-043": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-044": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-045": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-046": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-047": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-048": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-049": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-050": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-051": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-052": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-053": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-054": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-055": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-056": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-057": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-058": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-059": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-060": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-061": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-062": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-063": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-064": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-065": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-066": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-067": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-068": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-069": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-070": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-071": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-072": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-073": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-074": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-075": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-076": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-077": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-078": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-079": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-080": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-081": {
+  "tipo": "facturacion",
+  "accion_en_sistema": false
+ },
+ "acme-082": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-083": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-084": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-085": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-086": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-087": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-088": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ },
+ "acme-089": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-090": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-091": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-092": {
+  "tipo": "horarios_y_sucursales",
+  "accion_en_sistema": false
+ },
+ "acme-093": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-094": {
+  "tipo": "reembolso",
+  "accion_en_sistema": true
+ },
+ "acme-095": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-096": {
+  "tipo": "medios_de_pago_y_cuotas",
+  "accion_en_sistema": false
+ },
+ "acme-097": {
+  "tipo": "cancelar_pedido",
+  "accion_en_sistema": true
+ },
+ "acme-098": {
+  "tipo": "cambio_por_talle",
+  "accion_en_sistema": false
+ },
+ "acme-099": {
+  "tipo": "donde_esta_mi_pedido",
+  "accion_en_sistema": false
+ },
+ "acme-100": {
+  "tipo": "cambiar_direccion",
+  "accion_en_sistema": true
+ }
+}

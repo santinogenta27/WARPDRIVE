@@ -1,0 +1,7 @@
+nombre: cambio_por_talle
+objetivo: Explicar cómo cambiar un producto por otro talle
+datos_necesarios: []
+herramientas: []
+condiciones:
+  - Respondé solo con la política de cambios de los documentos.
+cierre: Indicá el plazo y los pasos para iniciar el cambio.

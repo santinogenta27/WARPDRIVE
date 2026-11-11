@@ -1,0 +1,65 @@
+{
+  "name": "Acme Store",
+  "description": "Tienda online argentina de ropa y calzado, con envíos a todo el país. Empresa ficticia de demo.",
+  "tone": "rioplatense",
+  "case_types": [
+    {
+      "name": "donde_esta_mi_pedido",
+      "active": true
+    },
+    {
+      "name": "cambiar_direccion",
+      "active": true
+    },
+    {
+      "name": "cancelar_pedido",
+      "active": true
+    },
+    {
+      "name": "reembolso",
+      "active": true
+    },
+    {
+      "name": "cambio_por_talle",
+      "active": true
+    },
+    {
+      "name": "medios_de_pago_y_cuotas",
+      "active": true
+    },
+    {
+      "name": "facturacion",
+      "active": true
+    },
+    {
+      "name": "horarios_y_sucursales",
+      "active": true
+    }
+  ],
+  "contacts": [
+    {
+      "label": "lucia",
+      "phone": "+5491155550101",
+      "verified": true
+    },
+    {
+      "label": "martin",
+      "phone": "+5491155550202",
+      "verified": true
+    },
+    {
+      "label": "sofia",
+      "phone": "+5491155550303",
+      "verified": false
+    }
+  ],
+  "tool_limits": {
+    "iniciar_reembolso": {
+      "max_amount": 50000
+    },
+    "cancelar_pedido": {
+      "approval_over": 100000,
+      "amount_from": "order.total"
+    }
+  }
+}

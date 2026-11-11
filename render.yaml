@@ -1,0 +1,57 @@
+# Blueprint de Render: chat web de Acme Store (demo pública), plan gratis. La base es Neon.
+# Paso a paso en docs/render.md. Los secretos (sync: false) se cargan en Render, nunca acá.
+services:
+  - type: web
+    name: acme-chat-demo
+    runtime: python
+    plan: free
+    region: virginia # Neon está en São Paulo; Render no tiene región en Sudamérica
+    branch: hito-5 # chat web + panel de la empresa en el mismo servicio (decisión 022)
+    autoDeploy: true
+    buildCommand: pip install -r backend/requirements.txt
+    # Aplica las migraciones pendientes (idempotente) y arranca la API con el chat web.
+    startCommand: python -m app.db.migrate && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: PYTHONPATH
+        value: backend
+      # Sin buffer: los logs (y el código de verificación de la demo) salen en el momento.
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      # Login del panel (/panel): un usuario de demo. La sesión se firma con ENCRYPTION_KEY.
+      - key: PANEL_EMAIL
+        sync: false
+      - key: PANEL_PASSWORD
+        sync: false
+      # El agente corre con Groq: gpt-oss-20b resolvió 10/10 casos de Acme (decisión 020).
+      # Gemini hace los embeddings y queda de respaldo si Groq se queda sin cuota.
+      - key: LLM_PROVIDER
+        value: groq
+      - key: GROQ_AGENT_MODEL
+        value: openai/gpt-oss-20b
+      - key: GROQ_CLASSIFIER_MODEL
+        value: openai/gpt-oss-20b
+      - key: GEMINI_AGENT_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_CLASSIFIER_MODEL
+        value: gemini-3.5-flash-lite
+      # Límites de la demo pública (mensajes en 24 h) para no agotar la cuota de Gemini.
+      - key: WEB_CHAT_IP_DAILY_LIMIT
+        value: "30"
+      - key: WEB_CHAT_DAILY_LIMIT
+        value: "300"
+      # El proxy de Render agrega la IP del cliente a X-Forwarded-For (docs/render.md).
+      - key: WEB_CHAT_CLIENT_IP
+        value: x-forwarded-for:first

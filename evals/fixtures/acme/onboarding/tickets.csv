@@ -1,0 +1,137 @@
+ticket_id,created_at,author_type,author_name,body
+acme-041,2026-08-11T13:45,end_user,Lautaro Medina,puedo pagar con mercado pago?
+acme-041,2026-08-11T13:47,end_user,Lautaro Medina,"soy Lautaro Medina, mi cel es +54 9 11 5220-9415"
+acme-041,2026-08-11T13:49,agent,Acme Store,"Tenemos 3 y 6 cuotas sin interés con tarjetas bancarias, y 10% off pagando por transferencia."
+acme-041,2026-08-11T13:51,end_user,Lautaro Medina,ok
+acme-042,2026-08-11T18:05,end_user,Tomás Ramírez,"quiero que me devuelvan la plata del pedido 1950, vino fallado"
+acme-042,2026-08-11T18:07,agent,Acme Store,Ya cargué la devolución del 1950. El dinero vuelve en 5 a 10 días hábiles.
+acme-042,2026-08-11T18:09,end_user,Tomás Ramírez,les mando foto?
+acme-042,2026-08-11T18:11,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-042,2026-08-11T18:13,end_user,Tomás Ramírez,gracias
+acme-043,2026-08-11T14:16,end_user,Lautaro Herrera,se puede cambiar de talle un jean?
+acme-043,2026-08-11T14:18,agent,Acme Store,"Claro, el primer cambio es gratis. Podés ir a una sucursal o lo retiramos por tu casa."
+acme-043,2026-08-11T14:20,end_user,Lautaro Herrera,gracias!
+acme-044,2026-08-12T09:43,end_user,Micaela Medina,me pasan el seguimiento del pedido 1643?
+acme-044,2026-08-12T09:45,agent,Acme Store,"Ya lo revisé: el 1643 está en camino, la entrega estimada es el 17/11."
+acme-044,2026-08-12T09:47,end_user,Micaela Medina,llega a la direccion de siempre?
+acme-044,2026-08-12T09:49,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-044,2026-08-12T09:51,end_user,Micaela Medina,ok gracias!!
+acme-045,2026-08-12T11:24,end_user,Sofía López,"quiero que me devuelvan la plata del pedido 1203, vino fallado"
+acme-045,2026-08-12T11:26,end_user,Sofía López,"soy Sofía López, mi cel es +54 9 11 5531-2132"
+acme-045,2026-08-12T11:28,agent,Acme Store,Ya cargué la devolución del 1203. El dinero vuelve en 5 a 10 días hábiles.
+acme-045,2026-08-12T11:30,end_user,Sofía López,les mando foto?
+acme-045,2026-08-12T11:32,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-045,2026-08-12T11:34,end_user,Sofía López,gracias
+acme-046,2026-08-12T15:42,end_user,Rocío Torres,me pasan el seguimiento del pedido 1712?
+acme-046,2026-08-12T15:44,agent,Acme Store,Hola Rocío Torres! El pedido 1712 fue despachado y llega el 11/11.
+acme-046,2026-08-12T15:46,end_user,Rocío Torres,me pasan el numero de seguimiento?
+acme-046,2026-08-12T15:48,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-046,2026-08-12T15:50,end_user,Rocío Torres,ok gracias!!
+acme-047,2026-08-12T11:05,end_user,Sofía López,puedo pagar con mercado pago?
+acme-047,2026-08-12T11:07,agent,Acme Store,"Aceptamos tarjetas, transferencia y billeteras virtuales. Con transferencia hay 10% de descuento."
+acme-047,2026-08-12T11:09,end_user,Sofía López,y con debito?
+acme-047,2026-08-12T11:11,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-047,2026-08-12T11:13,end_user,Sofía López,barbaro
+acme-048,2026-08-13T13:58,end_user,Lucía Flores,pedi la devolucion del 1382 hace dias y nada
+acme-048,2026-08-13T14:00,agent,Acme Store,Te inicié el reembolso del pedido 1382; una persona del equipo lo aprueba en 48 h.
+acme-048,2026-08-13T14:02,end_user,Lucía Flores,mi DNI es 33.752.870 por si lo necesitan
+acme-048,2026-08-13T14:04,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-048,2026-08-13T14:06,end_user,Lucía Flores,ok espero
+acme-049,2026-08-13T12:53,end_user,Martín Pérez,buenas! cuando me llega el pedido 1473
+acme-049,2026-08-13T12:55,agent,Acme Store,"Ya lo revisé: el 1473 está en camino, la entrega estimada es el 15/11."
+acme-049,2026-08-13T12:57,end_user,Martín Pérez,genial gracias
+acme-050,2026-08-13T15:57,end_user,Mateo Pérez,como cancelo una compra? es el pedido 1874
+acme-050,2026-08-13T15:59,agent,Acme Store,"Listo, el 1874 quedó cancelado y te devolvemos el dinero por el mismo medio."
+acme-050,2026-08-13T16:01,end_user,Mateo Pérez,y la plata cuando vuelve?
+acme-050,2026-08-13T16:03,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-050,2026-08-13T16:05,end_user,Mateo Pérez,ok gracias
+acme-051,2026-08-13T10:50,end_user,Lautaro Medina,quiero cancelar el pedido 1162
+acme-051,2026-08-13T10:52,agent,Acme Store,"Listo, el 1162 quedó cancelado y te devolvemos el dinero por el mismo medio."
+acme-051,2026-08-13T10:54,end_user,Lautaro Medina,dale
+acme-052,2026-08-14T18:25,end_user,Juan Gómez,"hola, donde esta mi pedido 1706?"
+acme-052,2026-08-14T18:27,agent,Acme Store,Hola Juan Gómez! El pedido 1706 fue despachado y llega el 15/11.
+acme-052,2026-08-14T18:29,end_user,Juan Gómez,llega a la direccion de siempre?
+acme-052,2026-08-14T18:31,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-052,2026-08-14T18:33,end_user,Juan Gómez,genial gracias
+acme-053,2026-08-14T16:53,end_user,Nicolás Álvarez,"hace una semana compre y no me llego nada, pedido 1781"
+acme-053,2026-08-14T16:55,agent,Acme Store,Hola Nicolás Álvarez! El pedido 1781 fue despachado y llega el 16/11.
+acme-053,2026-08-14T16:57,end_user,Nicolás Álvarez,perfecto
+acme-054,2026-08-14T09:45,end_user,Paula Flores,"hola, donde esta mi pedido 1905?"
+acme-054,2026-08-14T09:47,agent,Acme Store,Hola Paula Flores! El pedido 1905 fue despachado y llega el 22/11.
+acme-054,2026-08-14T09:49,end_user,Paula Flores,me pasan el numero de seguimiento?
+acme-054,2026-08-14T09:51,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-054,2026-08-14T09:53,end_user,Paula Flores,ok gracias!!
+acme-055,2026-08-14T09:32,end_user,Julieta Gómez,como cancelo una compra? es el pedido 1563
+acme-055,2026-08-14T09:34,agent,Acme Store,Cancelé el pedido 1563. El reintegro se ve en tu tarjeta 4509 9535 6623 3704 en el próximo resumen.
+acme-055,2026-08-14T09:36,end_user,Julieta Gómez,y la plata cuando vuelve?
+acme-055,2026-08-14T09:38,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-055,2026-08-14T09:40,end_user,Julieta Gómez,dale
+acme-056,2026-08-15T19:49,end_user,Micaela Medina,necesito cambiar la direccion de envio del pedido 1991
+acme-056,2026-08-15T19:51,agent,Acme Store,"Listo Micaela Medina, actualicé la dirección del pedido 1991 a Av. Corrientes 1234, CABA."
+acme-056,2026-08-15T19:53,end_user,Micaela Medina,mil gracias
+acme-057,2026-08-15T14:48,end_user,Facundo Flores,no me llego la factura del pedido 1569
+acme-057,2026-08-15T14:50,end_user,Facundo Flores,"soy Facundo Flores, mi cel es +54 9 11 5925-9567"
+acme-057,2026-08-15T14:52,agent,Acme Store,La factura llega por email dentro de las 48 horas hábiles. Te la reenvío a facundo.flores47@example.com.
+acme-057,2026-08-15T14:54,end_user,Facundo Flores,gracias
+acme-058,2026-08-15T16:15,end_user,Mateo Acosta,"quiero que me devuelvan la plata del pedido 1845, vino fallado"
+acme-058,2026-08-15T16:17,agent,Acme Store,Ya cargué la devolución del 1845. El dinero vuelve en 5 a 10 días hábiles.
+acme-058,2026-08-15T16:19,end_user,Mateo Acosta,les mando foto?
+acme-058,2026-08-15T16:21,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-058,2026-08-15T16:23,end_user,Mateo Acosta,ok espero
+acme-059,2026-08-15T15:45,end_user,Bruno Herrera,quiero cancelar el pedido 1935
+acme-059,2026-08-15T15:47,agent,Acme Store,Cancelé el pedido 1935. El reintegro se ve en tu tarjeta 4111 1111 1111 1111 en el próximo resumen.
+acme-059,2026-08-15T15:49,end_user,Bruno Herrera,y la plata cuando vuelve?
+acme-059,2026-08-15T15:51,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-059,2026-08-15T15:53,end_user,Bruno Herrera,ok gracias
+acme-060,2026-08-16T12:39,end_user,Rocío López,"hola, donde esta mi pedido 1927?"
+acme-060,2026-08-16T12:41,end_user,Rocío López,"soy Rocío López, mi cel es +54 9 11 5969-9886"
+acme-060,2026-08-16T12:43,agent,Acme Store,"Ya lo revisé: el 1927 está en camino, la entrega estimada es el 16/11."
+acme-060,2026-08-16T12:45,end_user,Rocío López,me pasan el numero de seguimiento?
+acme-060,2026-08-16T12:47,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-060,2026-08-16T12:49,end_user,Rocío López,ok gracias!!
+acme-061,2026-08-16T17:47,end_user,Lucía Herrera,"me mude, se puede mandar el 1972 a otra direccion?"
+acme-061,2026-08-16T17:49,end_user,Lucía Herrera,"soy Lucía Herrera, mi cel es +54 9 11 5583-4061"
+acme-061,2026-08-16T17:51,agent,Acme Store,"Listo Lucía Herrera, actualicé la dirección del pedido 1972 a Belgrano 200, Mendoza."
+acme-061,2026-08-16T17:53,end_user,Lucía Herrera,buenisimo
+acme-062,2026-08-16T15:55,end_user,Nicolás Medina,si pago con transferencia hay descuento?
+acme-062,2026-08-16T15:57,agent,Acme Store,"Tenemos 3 y 6 cuotas sin interés con tarjetas bancarias, y 10% off pagando por transferencia."
+acme-062,2026-08-16T15:59,end_user,Nicolás Medina,con visa tambien?
+acme-062,2026-08-16T16:01,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-062,2026-08-16T16:03,end_user,Nicolás Medina,ok
+acme-063,2026-08-16T15:32,end_user,Lautaro Sosa,pedi la devolucion del 1960 hace dias y nada
+acme-063,2026-08-16T15:34,agent,Acme Store,Te inicié el reembolso del pedido 1960; una persona del equipo lo aprueba en 48 h.
+acme-063,2026-08-16T15:36,end_user,Lautaro Sosa,mi DNI es 42.595.449 por si lo necesitan
+acme-063,2026-08-16T15:38,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-063,2026-08-16T15:40,end_user,Lautaro Sosa,ok espero
+acme-064,2026-08-17T14:44,end_user,Santiago Ramírez,"la remera me quedo chica, la puedo cambiar por un L?"
+acme-064,2026-08-17T14:46,agent,Acme Store,"Sí, Santiago Ramírez: tenés 30 días para cambiarlo, sin uso y con etiqueta, en cualquier sucursal."
+acme-064,2026-08-17T14:48,end_user,Santiago Ramírez,joya
+acme-065,2026-08-17T18:02,end_user,Florencia Ramírez,"me arrepenti, cancelen el 1409 x favor"
+acme-065,2026-08-17T18:04,agent,Acme Store,"Listo, el 1409 quedó cancelado y te devolvemos el dinero por el mismo medio."
+acme-065,2026-08-17T18:06,end_user,Florencia Ramírez,y la plata cuando vuelve?
+acme-065,2026-08-17T18:08,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-065,2026-08-17T18:10,end_user,Florencia Ramírez,ok gracias
+acme-066,2026-08-17T19:17,end_user,Rocío Fernández,me hicieron factura B y necesitaba A
+acme-066,2026-08-17T19:19,agent,Acme Store,"Para factura A hay que cargar el CUIT al comprar; si ya se emitió, lo revisa administración."
+acme-066,2026-08-17T19:21,end_user,Rocío Fernández,mi mail es rocio.fernandez40@example.com
+acme-066,2026-08-17T19:23,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-066,2026-08-17T19:25,end_user,Rocío Fernández,gracias
+acme-067,2026-08-17T19:29,end_user,Valentina Martínez,me hicieron factura B y necesitaba A
+acme-067,2026-08-17T19:31,agent,Acme Store,La factura llega por email dentro de las 48 horas hábiles. Te la reenvío a valentina.martinez42@example.com.
+acme-067,2026-08-17T19:33,end_user,Valentina Martínez,mi mail es valentina.martinez42@example.com
+acme-067,2026-08-17T19:35,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-067,2026-08-17T19:37,end_user,Valentina Martínez,ok
+acme-068,2026-08-18T15:52,end_user,Facundo Ramírez,donde queda la sucursal de rosario?
+acme-068,2026-08-18T15:54,agent,Acme Store,"En Rosario estamos en Córdoba 1500, de lunes a sábado de 10 a 20."
+acme-068,2026-08-18T15:56,end_user,Facundo Ramírez,y los feriados?
+acme-068,2026-08-18T15:58,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-068,2026-08-18T16:00,end_user,Facundo Ramírez,gracias
+acme-069,2026-08-18T16:21,end_user,Martín Acosta,"quiero que me devuelvan la plata del pedido 1821, vino fallado"
+acme-069,2026-08-18T16:23,end_user,Martín Acosta,"soy Martín Acosta, mi cel es +54 9 11 5838-7895"
+acme-069,2026-08-18T16:25,agent,Acme Store,Ya cargué la devolución del 1821. El dinero vuelve en 5 a 10 días hábiles.
+acme-069,2026-08-18T16:27,end_user,Martín Acosta,mi DNI es 42.771.889 por si lo necesitan
+acme-069,2026-08-18T16:29,agent,Acme Store,"Sí, te confirmo. Cualquier cosa escribime por acá."
+acme-069,2026-08-18T16:31,end_user,Martín Acosta,gracias
+acme-070,2026-08-18T16:59,end_user,Nicolás Herrera,tienen cuotas sin interes?
+acme-070,2026-08-18T17:01,agent,Acme Store,"Aceptamos tarjetas, transferencia y billeteras virtuales. Con transferencia hay 10% de descuento."
+acme-070,2026-08-18T17:03,end_user,Nicolás Herrera,barbaro

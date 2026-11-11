@@ -1,0 +1,8 @@
+nombre: medios_de_pago_y_cuotas
+objetivo: Informar medios de pago, cuotas y promociones vigentes
+datos_necesarios: []
+herramientas: []
+condiciones:
+  - Respondé solo con lo que dicen los documentos de medios de pago.
+  - Si pregunta por un medio puntual que los documentos no nombran, contá qué medios se aceptan.
+cierre: Ofrecé ayuda con otra consulta.

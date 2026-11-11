@@ -1,0 +1,80 @@
+[
+  {
+    "id": "1001",
+    "customer_phone": "+5491155550101",
+    "customer_name": "Lucía Ferrari",
+    "status": "shipped",
+    "items": [{"sku": "ZAP-URB-38", "name": "Zapatillas urbanas", "size": "38", "quantity": 1, "unit_price": 45990}],
+    "total": 45990,
+    "currency": "ARS",
+    "shipping_address": "Av. Rivadavia 4500, CABA",
+    "created_at": "2026-11-02T14:10:00-03:00",
+    "shipped_at": "2026-11-05T09:30:00-03:00",
+    "estimated_delivery": "2026-11-10"
+  },
+  {
+    "id": "1002",
+    "customer_phone": "+5491155550101",
+    "customer_name": "Lucía Ferrari",
+    "status": "paid",
+    "items": [{"sku": "REM-ALG-M", "name": "Remera de algodón", "size": "M", "quantity": 2, "unit_price": 14250}],
+    "total": 28500,
+    "currency": "ARS",
+    "shipping_address": "Calle Los Aromos 123, Rosario",
+    "created_at": "2026-11-06T18:45:00-03:00",
+    "shipped_at": null,
+    "estimated_delivery": "2026-11-14"
+  },
+  {
+    "id": "1003",
+    "customer_phone": "+5491155550202",
+    "customer_name": "Martín Ibarra",
+    "status": "paid",
+    "items": [{"sku": "CAM-JEAN-L", "name": "Campera de jean", "size": "L", "quantity": 1, "unit_price": 61200}],
+    "total": 61200,
+    "currency": "ARS",
+    "shipping_address": "Belgrano 900, Mendoza",
+    "created_at": "2026-11-04T11:00:00-03:00",
+    "shipped_at": null,
+    "estimated_delivery": "2026-11-13"
+  },
+  {
+    "id": "1004",
+    "customer_phone": "+5491155550101",
+    "customer_name": "Lucía Ferrari",
+    "status": "paid",
+    "items": [{"sku": "BOT-CUE-38", "name": "Botas de cuero", "size": "38", "quantity": 1, "unit_price": 152000}],
+    "total": 152000,
+    "currency": "ARS",
+    "shipping_address": "Av. Rivadavia 4500, CABA",
+    "created_at": "2026-11-07T10:20:00-03:00",
+    "shipped_at": null,
+    "estimated_delivery": "2026-11-15"
+  },
+  {
+    "id": "1005",
+    "customer_phone": "+5491155550202",
+    "customer_name": "Martín Ibarra",
+    "status": "delivered",
+    "items": [{"sku": "BUZ-LAN-L", "name": "Buzo de lana", "size": "L", "quantity": 1, "unit_price": 35000}],
+    "total": 35000,
+    "currency": "ARS",
+    "shipping_address": "Belgrano 900, Mendoza",
+    "created_at": "2026-10-20T16:00:00-03:00",
+    "shipped_at": "2026-10-22T08:00:00-03:00",
+    "estimated_delivery": "2026-10-28"
+  },
+  {
+    "id": "1006",
+    "customer_phone": "+5491155550303",
+    "customer_name": "Sofía Benítez",
+    "status": "shipped",
+    "items": [{"sku": "PAN-GAB-40", "name": "Pantalón de gabardina", "size": "40", "quantity": 1, "unit_price": 39900}],
+    "total": 39900,
+    "currency": "ARS",
+    "shipping_address": "San Martín 250, Córdoba",
+    "created_at": "2026-11-03T12:00:00-03:00",
+    "shipped_at": "2026-11-06T10:00:00-03:00",
+    "estimated_delivery": "2026-11-11"
+  }
+]

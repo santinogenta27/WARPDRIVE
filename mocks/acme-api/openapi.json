@@ -1,0 +1,217 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Acme Store — API de pedidos (simulada)",
+    "version": "1.0.0",
+    "description": "API ficticia de la tienda de demo Acme Store. Datos sintéticos; sirve para desarrollo, CI y demos."
+  },
+  "paths": {
+    "/customers": {
+      "get": {
+        "operationId": "buscarClientes",
+        "summary": "Clientes con un email registrado (sin distinguir mayúsculas); lista vacía si no hay",
+        "parameters": [
+          {"name": "email", "in": "query", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Clientes encontrados",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CustomerList"}}}
+          }
+        }
+      }
+    },
+    "/orders": {
+      "get": {
+        "operationId": "listarPedidos",
+        "summary": "Pedidos de un cliente por teléfono",
+        "parameters": [
+          {"name": "customer_phone", "in": "query", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Pedidos del cliente",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OrderList"}}}
+          }
+        }
+      }
+    },
+    "/orders/{order_id}": {
+      "get": {
+        "operationId": "consultarPedido",
+        "summary": "Consulta estado, dirección y fecha estimada de entrega de un pedido del contacto verificado",
+        "parameters": [{"$ref": "#/components/parameters/OrderId"}],
+        "responses": {
+          "200": {
+            "description": "Pedido",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Order"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/orders/{order_id}/address": {
+      "patch": {
+        "operationId": "actualizarDireccion",
+        "summary": "Actualiza la dirección de envío de un pedido del contacto verificado que todavía no fue despachado",
+        "parameters": [{"$ref": "#/components/parameters/OrderId"}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AddressChange"}}}
+        },
+        "responses": {
+          "200": {
+            "description": "Pedido actualizado",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Order"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/orders/{order_id}/cancel": {
+      "post": {
+        "operationId": "cancelarPedido",
+        "summary": "Cancela un pedido del contacto verificado antes de que sea despachado",
+        "parameters": [
+          {"$ref": "#/components/parameters/OrderId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Pedido cancelado",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Order"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/orders/{order_id}/refunds": {
+      "post": {
+        "operationId": "iniciarReembolso",
+        "summary": "Inicia un reembolso para un pedido entregado del cliente verificado",
+        "parameters": [
+          {"$ref": "#/components/parameters/OrderId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RefundRequest"}}}
+        },
+        "responses": {
+          "201": {
+            "description": "Reembolso iniciado (o el ya existente para la misma clave de idempotencia)",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Refund"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "OrderId": {"name": "order_id", "in": "path", "required": true, "description": "Número de pedido, por ejemplo 1001", "schema": {"type": "string"}},
+      "IdempotencyKey": {"name": "Idempotency-Key", "in": "header", "required": false, "schema": {"type": "string"}}
+    },
+    "responses": {
+      "NotFound": {
+        "description": "Pedido inexistente",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      },
+      "Conflict": {
+        "description": "La operación no aplica al estado del pedido",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {"code": {"type": "string"}, "message": {"type": "string"}},
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "sku": {"type": "string"},
+          "name": {"type": "string"},
+          "size": {"type": "string"},
+          "quantity": {"type": "integer", "minimum": 1},
+          "unit_price": {"type": "number", "minimum": 0}
+        },
+        "required": ["sku", "name", "size", "quantity", "unit_price"],
+        "additionalProperties": false
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "customer_phone": {"type": "string"},
+          "customer_name": {"type": "string"},
+          "status": {"type": "string", "enum": ["paid", "shipped", "delivered", "cancelled"]},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/Item"}},
+          "total": {"type": "number", "minimum": 0},
+          "currency": {"type": "string", "const": "ARS"},
+          "shipping_address": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "shipped_at": {"type": ["string", "null"], "format": "date-time"},
+          "estimated_delivery": {"type": ["string", "null"], "format": "date"}
+        },
+        "required": [
+          "id", "customer_phone", "customer_name", "status", "items", "total", "currency",
+          "shipping_address", "created_at", "shipped_at", "estimated_delivery"
+        ],
+        "additionalProperties": false
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "email": {"type": "string"},
+          "phone": {"type": "string"}
+        },
+        "required": ["id", "name", "email", "phone"],
+        "additionalProperties": false
+      },
+      "CustomerList": {
+        "type": "object",
+        "properties": {"customers": {"type": "array", "items": {"$ref": "#/components/schemas/Customer"}}},
+        "required": ["customers"],
+        "additionalProperties": false
+      },
+      "OrderList": {
+        "type": "object",
+        "properties": {"orders": {"type": "array", "items": {"$ref": "#/components/schemas/Order"}}},
+        "required": ["orders"],
+        "additionalProperties": false
+      },
+      "AddressChange": {
+        "type": "object",
+        "properties": {"address": {"type": "string", "minLength": 5}},
+        "required": ["address"],
+        "additionalProperties": false
+      },
+      "RefundRequest": {
+        "type": "object",
+        "properties": {"amount": {"type": "number", "exclusiveMinimum": 0}},
+        "required": ["amount"],
+        "additionalProperties": false
+      },
+      "Refund": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "order_id": {"type": "string"},
+          "amount": {"type": "number"},
+          "status": {"type": "string", "enum": ["requested"]},
+          "created_at": {"type": "string", "format": "date-time"}
+        },
+        "required": ["id", "order_id", "amount", "status", "created_at"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

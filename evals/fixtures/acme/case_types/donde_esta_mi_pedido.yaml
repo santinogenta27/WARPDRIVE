@@ -1,0 +1,8 @@
+nombre: donde_esta_mi_pedido
+objetivo: Informar el estado y la fecha estimada de entrega de un pedido del cliente
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido]
+condiciones:
+  - Si el cliente no da el número de pedido, pedíselo.
+  - Si el pedido no aparece entre los del cliente, decilo sin dar datos de otros pedidos.
+cierre: Confirmá el estado y la fecha estimada de entrega.

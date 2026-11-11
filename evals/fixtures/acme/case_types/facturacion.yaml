@@ -1,0 +1,8 @@
+nombre: facturacion
+objetivo: Explicar tipos de factura, cómo pedirla y cómo corregirla
+datos_necesarios: []
+herramientas: []
+condiciones:
+  - Respondé solo con la política de facturación de los documentos.
+  - Si piden corregir una factura ya emitida, derivá a un humano.
+cierre: Indicá dónde llega la factura y en qué plazo.

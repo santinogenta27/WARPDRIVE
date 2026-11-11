@@ -1,0 +1,10 @@
+nombre: reembolso
+objetivo: Iniciar el reembolso de un pedido entregado
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido, iniciar_reembolso]
+condiciones:
+  - Consultá el pedido y, si fue entregado, iniciá el reembolso con iniciar_reembolso por el total del pedido, salvo que el cliente pida otro monto.
+  - No preguntes el motivo ni pidas comprobantes para iniciarlo.
+  - Todo reembolso requiere aprobación humana; avisá que queda en revisión.
+  - Si el pedido no fue entregado, explicá la política y ofrecé derivar.
+cierre: Confirmá que el reembolso quedó registrado y el plazo de acreditación según la política.

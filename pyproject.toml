@@ -1,0 +1,31 @@
+[project]
+name = "enterprise-data-ai"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend", "mocks/acme-api", "evals"]
+addopts = "-q"
+# El TestClient de la API simulada ignora el timeout por pedido (el cliente real sí lo usa).
+filterwarnings = ["ignore:You should not use the 'timeout' argument with the TestClient"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "acme_api"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["backend/app", "mocks/acme-api", "evals"]
+mypy_path = ["backend", "mocks/acme-api"]
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_unused_ignores = true
+ignore_missing_imports = true
