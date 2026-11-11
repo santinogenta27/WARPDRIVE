@@ -46,7 +46,7 @@ El historial sintético se regenera con `python evals/fixtures/acme/onboarding/g
 
 | Etapa | Qué hace | Test |
 |---|---|---|
-| 1. Ingesta | WhatsApp (.txt/.zip), tickets (CSV/JSON) y documentos (Markdown, DOCX, URL) → conversaciones normalizadas y RAG | `test_onboarding_ingest.py`: los 3 formatos dan el mismo esquema |
+| 1. Ingesta | WhatsApp (.txt/.zip), tickets (CSV/JSON) y documentos (Markdown, DOCX, PDF, URL) → conversaciones normalizadas y RAG | `test_onboarding_ingest.py`: los 3 formatos dan el mismo esquema |
 | 2. Anonimización | Nombres, teléfonos, emails, DNI/CUIT y tarjetas → `<NAME_1>`, `<PHONE_1>`…, antes de guardar | `test_onboarding_anonymize.py`: 0 datos sembrados en la salida |
 | 3. Descubrimiento | Resúmenes en lotes, embeddings, agrupamiento y nombres | `test_onboarding_discover.py`: recupera ≥ 7 de 8 tipos conocidos |
 | 4. Evals | Casos de prueba desde conversaciones reales, más adversariales | `test_onboarding_evals.py`: cada caso valida y tiene fuente |
@@ -58,4 +58,6 @@ El historial sintético se regenera con `python evals/fixtures/acme/onboarding/g
 - **WhatsApp:** el `.txt` de "Exportar chat" (Android `9/11/26, 14:03 - Nombre: texto` o iOS `[9/11/26, 14:03:12] Nombre: texto`) o un `.zip` con varios. Los avisos de multimedia se ignoran. Los mensajes del número de la empresa son del agente.
 - **Tickets CSV:** una fila por mensaje. Hacen falta columnas de ticket, rol del autor y texto, por ejemplo `ticket_id`, `author_type` (`end_user` o `agent`) y `body`, o sus equivalentes en castellano.
 - **Tickets JSON:** una lista de tickets con `requester` y `comments` (formato tipo Zendesk).
-- **Documentos:** Markdown o texto, DOCX y URL. PDF todavía no.
+- **Documentos:** Markdown o texto, DOCX, PDF con texto y URL (decisión 030).
+  - Un PDF escaneado, con contraseña o dañado no se guarda: la pantalla avisa por qué y el resto de la carga sigue.
+  - Los documentos no se anonimizan: son las políticas de la empresa, con sus datos de contacto. Los chats y tickets sí.

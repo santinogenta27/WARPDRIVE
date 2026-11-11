@@ -321,6 +321,17 @@ Arreglos:
 - **Pendiente:** activarlo en Render. Paso a paso en `docs/render.md`.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_mailer.py backend/tests/test_identity_verification.py`.
 
+### PDF en la ingesta del onboarding (rama `pdf-ingesta`, decisión 030)
+
+- **Qué hace:** la pantalla Onboarding acepta `.pdf` con texto. Se indexa en el RAG de la empresa, con el mismo flujo que DOCX.
+- **PDF escaneado:** no tiene texto. La pantalla avisa y pide otra versión; los demás archivos de la carga se guardan igual. Lo mismo con un PDF con contraseña, dañado o de más de 500 páginas.
+- **Dependencia nueva:** `pypdf` 7.0.1. Python puro, licencia BSD, sin dependencias propias.
+- **Datos personales:** los documentos no se anonimizan (ni PDF, ni DOCX, ni Markdown). Los chats y tickets sí. El motivo está en la decisión 030.
+- **Arreglo:** un Markdown o `.txt` con saltos de línea de Windows quedaba subido pero sin fragmentos para buscar.
+- **Tests:** `test_onboarding_ingest.py` y `test_empresas.py`, con dos PDF de Acme generados por `evals/fixtures/acme/onboarding/generate_pdf.py`.
+- **Pendiente:** OCR, tablas y decidir si se anonimizan tarjetas y DNI en documentos.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_onboarding_ingest.py`. En el panel: **Onboarding** → subí `evals/fixtures/acme/onboarding/garantia.pdf`.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
@@ -351,7 +362,7 @@ Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **tran
 - Activar el email real en Render: crear la cuenta de Resend, verificar `enterprisedataai.com` y cargar las variables (`docs/render.md`). El código ya está.
 - CSAT, alerta por caída de la resolución y un destino para las alertas (decisión 028).
 - Conteo para facturar por período (tarea 22): hoy hay un resumen del total (decisión 027).
-- PDF en la ingesta, almacenamiento de archivos y borrado de una empresa con un comando.
+- OCR para PDF escaneados, almacenamiento de archivos y borrado de una empresa con un comando.
 - Avisar por WhatsApp cuando se decide una aprobación o responde el equipo. En el chat web ya llega; WhatsApp está en pausa.
 - Anclar fuera de la base el último hash de auditoría de cada caso (decisión 010).
 - `fallbacks` del lado del servidor ante rechazos del modelo: hoy se deriva (decisión 007).

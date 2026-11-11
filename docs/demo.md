@@ -102,7 +102,7 @@ Es la parte que más vende con un cliente real: ve su propia empresa andando. Ne
 **Pedile antes de la reunión:**
 
 - Un export de sus chats de WhatsApp (.txt, o un .zip con varios) o de sus tickets (.csv o .json). Con 100 conversaciones alcanza para mostrarlo; para un reporte confiable, 300.
-- Dos o tres documentos de políticas: envíos, devoluciones, medios de pago. En .md, .txt o .docx.
+- Dos o tres documentos de políticas: envíos, devoluciones, medios de pago. En .md, .txt, .docx o .pdf con texto. Un PDF escaneado no sirve: la pantalla avisa y pide otra versión.
 - Si tiene, el OpenAPI de su sistema (.json o .yaml). Sin OpenAPI, el asistente solo informa.
 
 **En la reunión:**
