@@ -28,7 +28,7 @@ from app.onboarding.pipeline import STAGES, PipelineDeps, run_pipeline
 
 JOB_KIND = "onboarding_run"
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # spec: archivo subido, 50 MB como máximo
-ALLOWED_SUFFIXES = (".txt", ".zip", ".csv", ".json", ".md", ".docx")
+ALLOWED_SUFFIXES = (".txt", ".zip", ".csv", ".json", ".md", ".docx", ".pdf")
 STAGE_LABELS = {
     "ingesta": "Ingesta",
     "anonimizacion": "Anonimización",
@@ -82,7 +82,7 @@ def add_sources(
         if not upload.name.lower().endswith(ALLOWED_SUFFIXES):
             raise OnboardingError(
                 f"{upload.name}: formato no soportado. Subí .txt o .zip de WhatsApp, .csv o "
-                ".json de tickets, o documentos .md, .txt o .docx."
+                ".json de tickets, o documentos .md, .txt, .docx o .pdf."
             )
     try:
         return ingest(

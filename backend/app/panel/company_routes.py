@@ -94,13 +94,18 @@ def _notice(request: Request) -> str:
     ok, error = request.query_params.get("ok"), request.query_params.get("error")
     if error:
         return f'<div class="card alert">{esc(error[:400])}</div>'
-    return f'<div class="card okmsg">{esc(ok[:400])}</div>' if ok else ""
+    # `aviso`: algo que no se pudo hacer aunque el resto sí (un PDF escaneado en una carga).
+    warning = request.query_params.get("aviso")
+    shown = f'<div class="card okmsg">{esc(ok[:400])}</div>' if ok else ""
+    return shown + (f'<div class="card alert">{esc(warning[:1200])}</div>' if warning else "")
 
 
-def _back(path: str, *, ok: str = "", error: str = "") -> RedirectResponse:
+def _back(path: str, *, ok: str = "", error: str = "", warning: str = "") -> RedirectResponse:
     from urllib.parse import quote
 
     query = f"?error={quote(error)}" if error else f"?ok={quote(ok)}" if ok else ""
+    if warning and not error:
+        query += f"{'&' if query else '?'}aviso={quote(warning)}"
     return RedirectResponse(f"/panel/{path}{query}", status_code=303)
 
 
@@ -244,10 +249,11 @@ pruebas y te dice qué parte de la atención resolvería solo.</p>{_notice(reque
  style="margin-top:12px">{_csrf(ctx)}
 <label for="archivos">Historial de chats y documentos</label>
 <input id="archivos" name="archivos" type="file" multiple required
- accept=".txt,.zip,.csv,.json,.md,.docx">
+ accept=".txt,.zip,.csv,.json,.md,.docx,.pdf">
 <p class="muted small">Chats de WhatsApp exportados (.txt, o un .zip con varios), tickets de
-helpdesk (.csv o .json) y documentos de políticas (.md, .txt o .docx). Hasta 50 MB. Los datos
-personales se reemplazan por marcadores antes de guardar: el archivo original no se conserva.</p>
+helpdesk (.csv o .json) y documentos de políticas (.md, .txt, .docx o .pdf con texto). Hasta
+50 MB. En los chats y tickets, los datos personales se reemplazan por marcadores antes de
+guardar. El archivo original no se conserva.</p>
 <button class="primary" type="submit">Subir</button></form>
 <form method="post" action="/panel/onboarding/nombres" style="margin-top:16px">{_csrf(ctx)}
 <label for="nombres">Con qué nombre figura la empresa en los chats de WhatsApp</label>
@@ -293,7 +299,11 @@ async def upload_sources(request: Request, data: Files, deps: Deps) -> Response:
     )
     if result.skipped:
         summary += f" {result.skipped} ya estaban subidos."
-    return _back("onboarding", ok=summary)
+    # Un documento sin texto (PDF escaneado) se avisa acá: el resto de la carga ya quedó.
+    warning = " ".join(result.unreadable)
+    if not result.sources and not result.skipped:
+        return _back("onboarding", warning=warning) if warning else _back("onboarding", ok=summary)
+    return _back("onboarding", ok=summary, warning=warning)
 
 
 @router.post("/onboarding/nombres")

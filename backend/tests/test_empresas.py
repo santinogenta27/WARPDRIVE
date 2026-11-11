@@ -165,6 +165,50 @@ def upload_history(norte: TestClient) -> httpx.Response:
     )
 
 
+def test_la_empresa_sube_un_pdf_y_un_escaneado_se_avisa_en_la_pantalla(world: World) -> None:
+    norte = create_norte(world)
+    tenant_id = world.tenant("Tienda Norte")
+    assert ".pdf" in norte.get("/panel/onboarding").text  # el selector de archivos lo acepta
+
+    def upload(*names: str) -> httpx.Response:
+        return norte.post(
+            "/panel/onboarding/fuentes",
+            data={"csrf": csrf(norte, "/panel/onboarding")},
+            files=[
+                ("archivos", (name, (ACME / "onboarding" / name).read_bytes(), "application/pdf"))
+                for name in names
+            ],
+            follow_redirects=False,
+        )
+
+    # Un PDF con texto y uno escaneado en la misma carga: el primero queda, el segundo se avisa.
+    both = upload("garantia.pdf", "garantia_escaneada.pdf")
+    assert both.status_code == 303 and "ok=" in both.headers["location"]
+    page = norte.get(both.headers["location"]).text
+    assert "1 documentos" in page
+    assert "garantia_escaneada.pdf es un PDF escaneado" in page
+    with tenant_scope(world.conn, tenant_id):
+        stored = world.conn.execute(
+            "select (select count(*) from documents), (select count(*) from chunks),"
+            " (select string_agg(file_path, ',') from sources)"
+        ).fetchone()
+    with tenant_scope(world.conn, world.stack.seed.tenant_id):
+        leaked = world.conn.execute(
+            "select count(*) from documents where source = 'garantia'"
+        ).fetchone()
+    assert stored is not None and stored[0] == 1 and stored[1] >= 1
+    assert stored[2] == "garantia.pdf" and leaked == (0,)  # y solo en Tienda Norte
+
+    # Solo el escaneado: la pantalla lo explica, sin error del servidor y sin guardar nada.
+    alone = upload("garantia_escaneada.pdf")
+    assert alone.status_code == 303
+    page = norte.get(alone.headers["location"]).text
+    assert "es un PDF escaneado" in page and "Subiste" not in page
+    with tenant_scope(world.conn, tenant_id):
+        count = world.conn.execute("select count(*) from sources").fetchone()
+    assert count == (1,)
+
+
 # -- alta de la empresa y login --------------------------------------------------------------
 def test_el_operador_crea_una_empresa_con_su_propio_usuario(world: World) -> None:
     norte = create_norte(world)

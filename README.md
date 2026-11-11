@@ -120,7 +120,7 @@ make api                    # http://localhost:8000 (chat) y /panel
 | [`docs/demo.md`](docs/demo.md) | Guion de la demo, incluido el onboarding con datos del cliente |
 | [`docs/onboarding.md`](docs/onboarding.md) | El pipeline de autoconfiguración y sus formatos |
 | [`docs/calidad.md`](docs/calidad.md) | Mediciones de calidad con modelos reales |
-| [`docs/decisions/`](docs/decisions/) | Una nota por decisión técnica (001 a 029) |
+| [`docs/decisions/`](docs/decisions/) | Una nota por decisión técnica (001 a 030) |
 
 ## Estado
 
