@@ -92,3 +92,41 @@ Si el agente intenta consultar o modificar un pedido, el guardián lo niega igua
 Las 13 del subconjunto quedaron resueltas y me detuve: ya no había fallas para atacar. No hubo ninguna regresión en ninguna medición, y cero fallas críticas en todas: ni datos de otro cliente, ni inyecciones exitosas, ni respuestas inventadas.
 
 **Pendiente:** una corrida final de las 60 con los cuatro arreglos (`python evals/quality.py --restart`, con `LLM_PROVIDER=groq`). No entró en la cuota diaria. Con un día de cuota de Groq, o con Claude, se hace de una vez.
+
+## Hito 6: arreglos de comportamiento y estado de la medición (10 de noviembre de 2026)
+
+Decisión 027. Esta sección dice qué se arregló, qué quedó probado y qué falta medir con el modelo real.
+
+### Qué cambió
+
+| Cambio | Dónde vive | Cómo quedó probado |
+|---|---|---|
+| Una amenaza de denuncia o de acción legal deriva siempre | Código | `test_errores_del_reporte.py` y caso guionado 14 |
+| Si falta un dato que el cliente puede dar, pedirlo en lugar de derivar | Prompt `system_v4` e instrucciones del tipo | Caso guionado 12, con el modelo simulado |
+| Si los documentos cubren el tema, responder aunque no nombren lo puntual (Mercado Pago) | Prompt `system_v4` e instrucciones del tipo | Caso guionado 13, con el modelo simulado |
+| Llamada de Groq con el nombre de la herramienta roto: se recupera | Código (`GroqTransport`) | `test_groq.py` |
+| Reapertura a los 7 días y conteo para el cobro | Código | `test_reapertura.py` |
+
+Con el modelo simulado, los 14 casos guionados dan 14 de 14 (`python evals/runner.py --simulated`). Eso prueba el cableado y lo que vive en código. No mide a Groq.
+
+### Lo que se vio con Groq real
+
+- **`make evals`, a las 21:20:** corrieron 3 de los 14 casos y los 3 derivaron. `gpt-oss-20b` generó el nombre de la herramienta con un marcador pegado (`responder<|channel|>commentary`) tres veces seguidas en cada caso. Las respuestas eran correctas: el problema era solo el nombre.
+- Después de ese tercer caso, Groq cortó por cuota: pidió esperar 604 s.
+- Ese hallazgo dio origen al arreglo de `GroqTransport`. Todavía no se midió con Groq si alcanza.
+- **`RUN_GROQ_TESTS=1 GROQ_REPEAT=5`, a las 22:11:** 0 de 5, y ninguno llegó a medir el flujo.
+  - Tres intentos cortaron por cuota: Groq pidió esperar entre 747 y 830 s.
+  - Dos intentos esperaron la cuota con la transacción abierta y Neon cerró la conexión por inactividad. Una espera de más de 10 minutos no sirve dentro de un turno.
+- La cuota de `gpt-oss-20b` es la misma que usa el chat de Render. No insistí para no dejar la demo sin modelo.
+
+### Pendiente, con cuota disponible
+
+En este orden. La cuota se renueva a medianoche, hora del Pacífico.
+
+1. **Flujo de reembolso, 5 de 5:**
+   `RUN_GROQ_TESTS=1 GROQ_REPEAT=5 python -m pytest backend/tests/test_groq_real.py`
+   Sin `GROQ_MAX_WAIT`: con el valor por defecto, una espera larga corta enseguida en lugar de dejar la conexión colgada.
+2. **Los 14 casos guionados:** `python evals/runner.py --restart`. Mide los casos 12, 13 y 14 y deja la corrida en el historial de evals de la página Métricas.
+3. **Las 60 conversaciones de calidad:** `python evals/quality.py --restart`, con `LLM_PROVIDER=groq`. El resultado final va en esta sección.
+
+Si el flujo de reembolso no da 5 de 5, el primer lugar para mirar es el log de `app.llm.groq`: dice si el modelo sigue generando nombres rotos que no se pudieron recuperar.
