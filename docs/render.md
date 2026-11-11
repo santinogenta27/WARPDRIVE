@@ -69,9 +69,63 @@ Qué cambia al pasar:
 
 Para volver atrás, elegí otra vez la rama `hito-5`. Las columnas y tablas nuevas no molestan al código anterior.
 
+## Enviar el código de verificación por email (Resend)
+
+Sin estas variables, el chat no envía emails: el código aparece en **Logs**. Con ellas, le llega al cliente por email. Decisión 029.
+
+### 1. Crear la cuenta
+
+1. Entrá a https://resend.com → **Get Started** y creá la cuenta. El plan gratis alcanza: 3.000 emails por mes, 100 por día y un dominio.
+2. Confirmá tu email con el link que te mandan.
+
+### 2. Verificar el dominio `enterprisedataai.com`
+
+1. En Resend: **Domains** → **Add Domain**.
+   - **Name:** `enterprisedataai.com`.
+   - **Region:** `us-east-1` (la más cercana al servicio de Render, en Virginia).
+2. Resend muestra los registros DNS que hay que crear: uno `MX` y uno `TXT` (SPF) en el subdominio `send`, y uno `TXT` (DKIM) en `resend._domainkey`.
+3. Abrí el panel del proveedor donde compraste el dominio → **DNS** → agregá cada registro tal como lo muestra Resend: tipo, nombre, valor y prioridad.
+   - Copiá los valores con el botón de copiar. El de DKIM es largo.
+   - Si tu proveedor agrega solo el dominio al final del nombre, escribí `send` y `resend._domainkey`, sin `.enterprisedataai.com`.
+   - No toques los registros que ya tenga el dominio.
+4. Volvé a Resend → **Verify DNS Records**. Suele tardar unos minutos; puede tardar unas horas.
+5. Esperá a que el dominio diga **Verified**. Antes de eso, Resend rechaza los envíos.
+
+### 3. Crear la clave
+
+1. En Resend: **API Keys** → **Create API Key**.
+   - **Name:** `render-acme-chat-demo`.
+   - **Permission:** **Sending access**.
+   - **Domain:** `enterprisedataai.com`.
+2. Copiá la clave (empieza con `re_`). Resend la muestra una sola vez.
+
+### 4. Cargar las variables en Render
+
+En el servicio → **Environment** → **Add Environment Variable**:
+
+- `RESEND_API_KEY`: la clave del paso 3.
+- `MAIL_FROM`: el remitente, del dominio verificado. Por ejemplo: `Enterprise Data AI <codigos@enterprisedataai.com>`. La casilla no tiene que existir.
+
+Después, **Save Changes**. Render redespliega solo. Hacen falta las dos: con una sola, el código sigue saliendo en **Logs**.
+
+### 5. Probar
+
+1. Entrá al chat de una empresa cuyo sistema tenga un cliente con tu email real.
+2. Pedí algo de tu cuenta y, cuando lo pida, escribí tu email. El código llega en unos segundos. Si no lo ves, mirá en spam.
+3. En Resend → **Emails** se ve cada envío y su estado.
+
+Qué tener en cuenta:
+
+- **La demo de Acme no cambia.** Sus clientes tienen emails `@example.com`, que no existen. A esas direcciones no se les envía nada: el código sigue apareciendo en **Logs** (buscá `Mailer de consola`).
+- **Si el envío falla**, el cliente ve "No pudimos enviarte el código en este momento" y puede pedir otro escribiendo de nuevo su email. El fallo aparece en la página **Métricas** como `MailError` y en la auditoría del caso.
+  - `Resend respondió 403`: el dominio no está verificado o `MAIL_FROM` usa otro dominio.
+  - `Resend respondió 401`: la clave está mal copiada o fue borrada.
+  - `Resend respondió 429`: se pasó el límite del plan.
+- **Para volver atrás**, borrá `RESEND_API_KEY` en **Environment**.
+
 ## Después
 
-- **Código de verificación:** el chat sigue sin enviar emails. El código aparece en **Logs** del servicio. Buscá `Mailer de consola`.
+- **Código de verificación:** sin `RESEND_API_KEY` y `MAIL_FROM`, el chat no envía emails y el código aparece en **Logs** del servicio (buscá `Mailer de consola`). Ver "Enviar el código de verificación por email".
 - **El plan gratis se duerme** después de 15 minutos sin visitas. La primera visita después de eso tarda alrededor de un minuto en responder; las siguientes, lo normal.
 - **Cada push a la rama del servicio despliega solo** (`autoDeploy`). Hoy la rama es `hito-5`.
 - **Cambiar los límites:** servicio → **Environment** → editá la variable → **Save Changes**. Se redespliega solo.

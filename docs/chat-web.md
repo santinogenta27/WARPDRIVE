@@ -13,7 +13,7 @@ El chat web es la tarea 12b: el mismo agente, guardián y auditoría que por Wha
 - **Consultas generales:** horarios, cuotas, envíos, cambios. Responde con los documentos de Acme.
 - **Un pedido:** "¿Dónde está mi pedido 1001?". El agente pide el email de la compra.
   - Respondé `lucia@example.com`.
-  - **El código no llega por email:** todavía no hay proveedor de email, así que aparece en la terminal de `make api`, en una línea `[Mailer de consola, no se envió]`.
+  - **El código no llega por email:** sin `RESEND_API_KEY` y `MAIL_FROM` en el `.env`, o con un email de prueba como `@example.com`, aparece en la terminal de `make api`, en una línea `[Mailer de consola, no se envió]`.
   - Escribí el código en el chat. El agente confirma la verificación y responde la consulta del pedido.
   - Otros clientes de la demo: `martin@example.com` (pedidos 1003 y 1005) y `sofia@example.com` (pedido 1006).
 - **Límite:** cada sesión tiene 20 mensajes. "Cómo probarla" → "Empezar de nuevo" abre una sesión nueva.

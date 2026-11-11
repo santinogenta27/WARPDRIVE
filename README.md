@@ -120,10 +120,10 @@ make api                    # http://localhost:8000 (chat) y /panel
 | [`docs/demo.md`](docs/demo.md) | Guion de la demo, incluido el onboarding con datos del cliente |
 | [`docs/onboarding.md`](docs/onboarding.md) | El pipeline de autoconfiguración y sus formatos |
 | [`docs/calidad.md`](docs/calidad.md) | Mediciones de calidad con modelos reales |
-| [`docs/decisions/`](docs/decisions/) | Una nota por decisión técnica (001 a 028) |
+| [`docs/decisions/`](docs/decisions/) | Una nota por decisión técnica (001 a 029) |
 
 ## Estado
 
-Hitos 1 a 6 hechos: base, agente de punta a punta, canales, autoconfiguración, panel de demo, y onboarding de empresas con observabilidad. Lo que falta para producción está en [`docs/progreso.md`](docs/progreso.md): WhatsApp en pausa por la cuenta de Meta, email real para la verificación, panel en Next.js con magic link y backups.
+Hitos 1 a 6 hechos: base, agente de punta a punta, canales, autoconfiguración, panel de demo, y onboarding de empresas con observabilidad. Lo que falta para producción está en [`docs/progreso.md`](docs/progreso.md): WhatsApp en pausa por la cuenta de Meta, panel en Next.js con magic link y backups.
 
 Autor: Santino Genta.

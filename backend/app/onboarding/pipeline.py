@@ -23,6 +23,7 @@ from psycopg.types.json import Jsonb
 
 from app.db.connection import tenant_scope
 from app.llm.embedder import Embedder
+from app.mailer import ConsoleMailer
 from app.onboarding.discover import ClusterName, Summary, discover_case_types
 from app.onboarding.evalgen import generate_evals
 from app.onboarding.ingest import Upload, ingest
@@ -273,7 +274,8 @@ def main(argv: list[str] | None = None) -> int:
     from app.agent.loop import Agent
 
     def agent_factory(c: psycopg.Connection, runtime: Any) -> Agent:
-        return Agent(c, llm, embedder, Guardian(c, runtime))
+        # El replay de evals nunca envía emails reales (decisión 029).
+        return Agent(c, llm, embedder, Guardian(c, runtime), mailer=ConsoleMailer())
 
     uploads = [
         Upload(path.name, path.read_bytes())

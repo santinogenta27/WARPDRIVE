@@ -36,7 +36,7 @@ from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
-from app.mailer import ConsoleMailer, Email, Mailer
+from app.mailer import Email, Mailer, MailError, mailer_from_env
 from app.obs import alerts, timing, tracing
 from app.policy.guardian import (
     ALREADY_PENDING_REASON,
@@ -78,6 +78,10 @@ CODE_SENT_MESSAGE = (
     "Escribilo acá para confirmar que sos el titular. Vence en 10 minutos."
 )
 VERIFIED_PREFIX = "¡Listo, ya verifiqué tu identidad! "
+CODE_FAILED_MESSAGE = (
+    "No pudimos enviarte el código en este momento. Esperá un minuto y pasame de nuevo tu "
+    "email, así te mando otro."
+)
 CODE_EXPIRED_MESSAGE = "Ese código ya venció. Pasame de nuevo tu email y te mando uno nuevo."
 CODE_LOCKED_MESSAGE = (
     "Ese código tampoco es correcto y ya no quedan intentos. Si querés, pasame de nuevo tu "
@@ -248,7 +252,7 @@ class Agent:
         self._guardian = guardian
         self._model = model
         self._max_steps = max_steps
-        self._mailer = mailer or ConsoleMailer()
+        self._mailer = mailer or mailer_from_env()
 
     # -- entrada ---------------------------------------------------------------------------
     def handle_message(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
@@ -336,16 +340,19 @@ class Agent:
             phone = self._guardian.customer_phone(turn.tenant_id, email.group(0))
             code = email_code.send_code(self._conn, turn.tenant_id, pending, phone)
             if phone is not None:
-                self._mailer.send(
-                    Email(
-                        to=email.group(0),
-                        subject=f"Tu código de verificación de {company}",
-                        body=(
-                            f"Tu código para verificar tu identidad en {company} es {code}. "
-                            f"Vence en {email_code.CODE_TTL_MINUTES} minutos."
-                        ),
+                try:
+                    self._mailer.send(
+                        Email(
+                            to=email.group(0),
+                            subject=f"Tu código de verificación de {company}",
+                            body=(
+                                f"Tu código para verificar tu identidad en {company} es {code}. "
+                                f"Vence en {email_code.CODE_TTL_MINUTES} minutos."
+                            ),
+                        )
                     )
-                )
+                except MailError as error:
+                    return self._code_not_sent(turn, pending, str(error))
             self._audit(turn, "verification_code_sent", {"registered": phone is not None})
             return self._finish(turn, "responder", CODE_SENT_MESSAGE, verification=True)
         code_match = email_code.CODE.search(turn.text)
@@ -372,6 +379,23 @@ class Agent:
         )
         message = CODE_EXPIRED_MESSAGE if outcome == "expired" else CODE_LOCKED_MESSAGE
         return self._finish(turn, "responder", message, verification=True)
+
+    def _code_not_sent(
+        self, turn: _Turn, pending: email_code.Verification, detail: str
+    ) -> AgentResult:
+        """El proveedor de email falló (decisión 029): el cliente lo sabe y puede pedir otro
+        código. El que no llegó deja de valer, y la consulta pendiente se conserva."""
+        email_code.request_email(
+            self._conn, turn.tenant_id, turn.contact.id, turn.case_id, pending.question
+        )
+        self._audit(turn, "verification_code_failed", {"motivo": detail})
+        with tenant_scope(self._conn, turn.tenant_id):
+            self._conn.execute(
+                "insert into error_events (tenant_id, kind, detail) values (%s, %s, %s)",
+                (turn.tenant_id, "MailError", detail[:500]),
+            )
+        alerts.record_error(turn.tenant_id, "MailError")
+        return self._finish(turn, "responder", CODE_FAILED_MESSAGE, verification=True)
 
     def _pending_question(self, turn: _Turn) -> str:
         """La consulta a responder después de verificar: lo que acompaña al email en el mismo

@@ -12,7 +12,7 @@ import psycopg
 import pytest
 from simulated.stack import SimulatedStack, build_simulated_stack
 
-from app.agent.loop import VERIFICATION_MESSAGE
+from app.agent.loop import CODE_FAILED_MESSAGE, CODE_SENT_MESSAGE, VERIFICATION_MESSAGE
 from app.db.connection import tenant_scope
 
 QUESTION = "¿Dónde está mi pedido 1006?"
@@ -114,6 +114,39 @@ def test_el_codigo_vence_a_los_10_minutos(stack: SimulatedStack) -> None:
     stack.send("sofia", "sofia@example.com")
     stack.send("sofia", _code(stack))
     assert _verified(stack) and _consulted(stack) == ["1006"]
+
+
+def test_si_el_envio_falla_el_cliente_lo_sabe_y_puede_pedir_otro_codigo(
+    stack: SimulatedStack,
+) -> None:
+    stack.send("sofia", QUESTION)
+    stack.mailer.failing = True
+    failed = stack.send("sofia", "sofia@example.com")
+    assert failed.message == CODE_FAILED_MESSAGE and failed.verification_requested
+    assert failed.action == "responder" and stack.mailer.sent == []
+    with tenant_scope(stack.conn, stack.seed.tenant_id):
+        # No queda vivo un código que nadie recibió, y el fallo queda en la auditoría y en los
+        # errores de la página Métricas (sin el email del cliente).
+        statuses = stack.conn.execute(
+            "select status from identity_verifications order by created_at"
+        ).fetchall()
+        audited = stack.conn.execute(
+            "select count(*) from audit_events where kind = 'verification_code_failed'"
+        ).fetchone()
+        errors = stack.conn.execute(
+            "select kind, detail from error_events where kind = 'MailError'"
+        ).fetchall()
+    assert [s[0] for s in statuses] == ["failed", "awaiting_email"]
+    assert audited is not None and audited[0] == 1
+    assert len(errors) == 1 and "sofia" not in errors[0][1]
+
+    # Vuelve el proveedor: pide otro código con su email, y ese verifica.
+    stack.mailer.failing = False
+    again = stack.send("sofia", "sofia@example.com")
+    assert again.message == CODE_SENT_MESSAGE
+    ok = stack.send("sofia", _code(stack))
+    assert _verified(stack) and _consulted(stack) == ["1006"]
+    assert ok.message.startswith("¡Listo")
 
 
 def test_el_codigo_no_se_guarda_en_claro(stack: SimulatedStack) -> None:

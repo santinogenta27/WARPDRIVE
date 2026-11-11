@@ -533,6 +533,7 @@ ACTIONS = {
 }
 VERIFICATION = {
     "verification_code_sent": "Pidió el email de la compra y envió un código",
+    "verification_code_failed": "No se pudo enviar el código por email",
     "verified": "Código correcto: identidad verificada",
     "wrong": "Código incorrecto",
     "locked": "Demasiados intentos: verificación bloqueada",

@@ -35,6 +35,12 @@ services:
         sync: false
       - key: PANEL_PASSWORD
         sync: false
+      # Opcionales: envían el código de verificación por email con Resend (docs/render.md).
+      # Sin ellas, el código sale en los logs.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
       # El agente corre con Groq: gpt-oss-20b resolvió 10/10 casos de Acme (decisión 020).
       # Gemini hace los embeddings y queda de respaldo si Groq se queda sin cuota.
       - key: LLM_PROVIDER

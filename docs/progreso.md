@@ -82,7 +82,7 @@ Decisiones 014 a 018. Cómo probarlo desde el celular: `docs/whatsapp.md` (Whats
 
 **Chat web en Render (link fijo, plan gratis):** `render.yaml` y paso a paso en `docs/render.md`. Para no agotar Gemini, la demo pública tiene un límite de mensajes por IP por día (30) y uno total por día (300), además de los 20 por sesión (decisión 019). Test: `test_web_chat.py` y `test_deploy.py`.
 
-**Verificación por email en la demo: el código aparece en la consola del servidor** (en Render, en la pestaña **Logs** del servicio). Todavía no hay `Mailer` real (proveedor de email), así que `ConsoleMailer` escribe el código en la terminal de `make api` y no envía ningún email. Para probar: `lucia@example.com`, `martin@example.com` o `sofia@example.com`. Cómo probar el chat: `docs/chat-web.md`. Decisión 018.
+**Verificación por email en la demo: el código aparece en la consola del servidor** (en Render, en la pestaña **Logs** del servicio). Los clientes de Acme tienen emails `@example.com`, que no existen: `ConsoleMailer` escribe el código en la terminal de `make api` y no envía ningún email. A un email real se le envía por Resend si están `RESEND_API_KEY` y `MAIL_FROM` (decisión 029). Para probar: `lucia@example.com`, `martin@example.com` o `sofia@example.com`. Cómo probar el chat: `docs/chat-web.md`. Decisión 018.
 
 **Canal `twilio_whatsapp`** (decisión 017): la prueba de WhatsApp de Twilio, detrás de la interfaz `Channel` de la spec, con el mismo agente, guardián y auditoría. Test: `test_twilio.py`. Un mensaje firmado por Twilio recibe respuesta; una firma inválida se rechaza; un rechazo de Twilio no se reintenta.
 
@@ -309,6 +309,18 @@ Arreglos:
 - **027:** "mismo tema" es el mismo tipo de caso; una amenaza legal deriva siempre; se recuperan las llamadas de Groq con el nombre roto.
 - **028:** qué se registra de cada llamada al modelo; el id de la traza es el id del caso; umbrales de las alertas.
 
+## Después del hito 6
+
+### Email real para el código de verificación (rama `email-resend`, decisión 029)
+
+- **Qué hace:** con `RESEND_API_KEY` y `MAIL_FROM`, el código de verificación le llega al cliente por email, enviado por Resend. Sin esas variables sigue saliendo en los logs.
+- **Si el envío falla:** el cliente ve un mensaje claro y pide otro código escribiendo de nuevo su email. El código que no llegó deja de valer. El fallo queda en la auditoría y en la página Métricas.
+- **La demo de Acme no cambia:** a los emails `@example.com` no se les envía nada; su código sigue en los logs.
+- **Sin dependencias nuevas:** usa `httpx`.
+- **Tests:** `test_mailer.py` y `test_identity_verification.py`, con el envío simulado.
+- **Pendiente:** activarlo en Render. Paso a paso en `docs/render.md`.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_mailer.py backend/tests/test_identity_verification.py`.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
@@ -336,7 +348,7 @@ Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **tran
 - **Medir con Groq real** el flujo de reembolso, los 14 casos guionados y las 60 conversaciones de calidad (Hito 6, etapa 2).
 - Ver que el CI de GitHub Actions quede verde: el repositorio es privado y no lo pude consultar desde acá.
 - Panel de la spec en Next.js, con magic link y roles. Hoy el panel son páginas servidas por la API, con una clave por usuario y varias empresas (decisiones 022 y 026).
-- Email real para el código de verificación: sigue saliendo por la consola del servidor.
+- Activar el email real en Render: crear la cuenta de Resend, verificar `enterprisedataai.com` y cargar las variables (`docs/render.md`). El código ya está.
 - CSAT, alerta por caída de la resolución y un destino para las alertas (decisión 028).
 - Conteo para facturar por período (tarea 22): hoy hay un resumen del total (decisión 027).
 - PDF en la ingesta, almacenamiento de archivos y borrado de una empresa con un comando.
