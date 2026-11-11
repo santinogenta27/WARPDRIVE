@@ -28,7 +28,7 @@ from app.llm.embedder import VoyageEmbedder
 from app.llm.errors import QuotaExhausted
 from app.llm.factory import embedder_from_env, llm_backend, provider_from_env
 from app.llm.fallback import FallbackProvider
-from app.mailer import Email
+from app.mailer import Email, MailError
 from app.policy.guardian import Guardian
 from app.tools.runtime import ToolRuntime
 from simulated.claude import SimulatedClaude
@@ -40,8 +40,11 @@ class RecordingMailer:
     """Mailer de los tests y evals: guarda los emails en lugar de enviarlos."""
 
     sent: list[Email] = field(default_factory=list)
+    failing: bool = False  # simula al proveedor de email caído
 
     def send(self, email: Email) -> None:
+        if self.failing:
+            raise MailError("El proveedor de email respondió 503.")
         self.sent.append(email)
 
 
