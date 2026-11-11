@@ -263,7 +263,9 @@ def test_respeta_los_tokens_por_minuto_de_cada_modelo(monkeypatch: pytest.Monkey
     provider.create(model="claude-haiku-5-5", messages=[], max_tokens=10)  # otro modelo: no espera
     assert fake.sleeps == []
     provider.create(model="claude-sonnet-5-5", messages=[], max_tokens=10)
-    assert fake.sleeps == [7.5]
+    # La espera es lo que falta para que se renueven los tokens: entre un pedido y el otro pasa
+    # algo de tiempo real, así que da apenas menos de 7,5 s (7,4998 en el CI).
+    assert fake.sleeps == [pytest.approx(7.5, abs=0.1)]
 
 
 def test_la_espera_maxima_se_configura_para_corridas_largas(
