@@ -244,7 +244,8 @@ def read_document(data: bytes, name: str) -> Document:
         text = _pdf_text(data, PurePath(name).name)
         first = text.splitlines()[0]
         return Document(title=first if len(first) <= 120 else stem, source=stem, text=text)
-    text = data.decode("utf-8-sig")
+    # Saltos de línea de Windows: sin esto el texto no se parte en párrafos ni en fragmentos.
+    text = data.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
     return Document(title=_title(text, stem), source=stem, text=text)
 
 

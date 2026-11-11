@@ -265,3 +265,22 @@ def test_el_pdf_se_indexa_como_un_docx_y_el_escaneado_no_frena_la_carga(
     again = ingest(conn, tenant_id, uploads, business={"Acme Store"}, embedder=_embedder(conn))
     assert again.skipped == 2 and again.documents == 0 and len(again.unreadable) == 1
 
+
+def test_un_documento_con_saltos_de_linea_de_windows_se_parte_en_fragmentos(
+    conn: psycopg.Connection,
+) -> None:
+    """Un Markdown guardado en Windows (CRLF) quedaba sin fragmentos: no se podía buscar."""
+    text = "# Envíos\r\n\r\nHacemos envíos a todo el país.\r\n\r\nTardan de 3 a 5 días.\r\n"
+    document = read_document(text.encode(), "envios.md")
+    assert "\r" not in document.text and document.title == "Envíos"
+    tenant_id = _tenant(conn)
+    ingest(
+        conn,
+        tenant_id,
+        [Upload("envios.md", text.encode())],
+        business={"Acme Store"},
+        embedder=_embedder(conn),
+    )
+    with tenant_scope(conn, tenant_id):
+        chunks = conn.execute("select text from chunks").fetchall()
+    assert len(chunks) == 1 and "Tardan de 3 a 5 días." in chunks[0][0]
