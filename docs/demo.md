@@ -1,6 +1,6 @@
-# Guion de la demo (Hito 5)
+# Guion de la demo
 
-Unos 10 minutos. Mostrás cuatro cosas: qué parte de la atención resolvería solo el asistente, cómo atiende al cliente, cómo la empresa mantiene el control y cómo queda registrado cada paso. Acme Store es una tienda ficticia y todos los datos son de demo.
+Unos 10 minutos, más 10 si mostrás el onboarding con los datos del cliente (sección 6). Mostrás cuatro cosas: qué parte de la atención resolvería solo el asistente, cómo atiende al cliente, cómo la empresa mantiene el control y cómo queda registrado cada paso. Acme Store es una tienda ficticia y todos los datos son de demo.
 
 ## Antes de la reunión
 
@@ -58,7 +58,7 @@ Ventana del cliente:
 2. Escribí "Quiero el reembolso del pedido 1005". El asistente pide el email de la compra para mandarte un código.
 3. Respondé `martin@example.com` y escribí el código de los Logs.
 4. El asistente **no devuelve la plata solo**: avisa que el pedido pasa a revisión de una persona.
-5. Panel → **Aprobaciones**: aparece el pedido, `iniciar_reembolso` por pedido 1005 y $35.000, con el primer mensaje del cliente. Nunca se muestran el email ni el código.
+5. Panel → **Aprobaciones**: aparece "Reembolso · Pedido 1005 · $35.000", con el primer mensaje del cliente. Nunca se muestran el email ni el código.
 6. Tocá **Aprobar**. Se ejecuta en el sistema de Acme a través del guardián.
 7. En la ventana del cliente, en unos segundos, aparece el mensaje del **Equipo de Acme Store**: "¡Buenas noticias! Aprobamos el reembolso del pedido 1005 por $35.000…".
 
@@ -94,6 +94,45 @@ En el detalle del caso del reembolso, bajá a **Auditoría paso a paso**:
 - **Aprobó una persona del equipo.** Quién decidió y qué se le avisó al cliente.
 - **Costo.** Cada llamada al modelo con sus tokens y su costo en USD. En la demo es 0, porque se usa el modelo gratuito de Groq.
 - **"Cadena de auditoría íntegra".** Cada evento lleva el hash del anterior: si alguien modifica o borra un paso, la cadena se rompe y el panel lo marca.
+
+## 6. El onboarding con los datos del cliente (10 min, opcional)
+
+Es la parte que más vende con un cliente real: ve su propia empresa andando. Necesitás el servicio en la rama del hito 6 (`docs/render.md`, "Pasar al hito 6").
+
+**Pedile antes de la reunión:**
+
+- Un export de sus chats de WhatsApp (.txt, o un .zip con varios) o de sus tickets (.csv o .json). Con 100 conversaciones alcanza para mostrarlo; para un reporte confiable, 300.
+- Dos o tres documentos de políticas: envíos, devoluciones, medios de pago. En .md, .txt o .docx.
+- Si tiene, el OpenAPI de su sistema (.json o .yaml). Sin OpenAPI, el asistente solo informa.
+
+**En la reunión:**
+
+1. **Creá su empresa.** Panel → **Empresas** → nombre, email y una clave. Queda creada con su chat de prueba.
+2. **Salí e ingresá con su usuario.** El encabezado ya dice el nombre de su empresa. Está vacía: nada de Acme.
+3. **Configuración → Sistema de la empresa.** Si trajo el OpenAPI, subilo ahora: el análisis genera las herramientas desde ahí.
+4. **Onboarding → subí sus archivos.**
+   - Si son chats de WhatsApp, cargá primero con qué nombre figura la empresa en los chats.
+   - La página confirma cuántas conversaciones y documentos entraron.
+5. **Tocá "Analizar mi historial".** Las 6 etapas avanzan solas y la página se actualiza. Con 100 conversaciones tarda unos minutos.
+   - Mientras corre, mostrale la demo de Acme (secciones 2 a 5) con el usuario operador en otra ventana.
+6. **Reporte.** Sus tipos de caso, su volumen y qué porcentaje resolvería el asistente. "Qué falta" le dice qué conectar.
+7. **Configuración.** Activá dos o tres tipos de caso y aprobá las herramientas. Mostrale los límites: sobre qué monto pide aprobación.
+8. **Chat de prueba.** Abrí el enlace `/c/…` de Configuración y escribí una consulta de su historial. Responde con sus documentos. El caso aparece en **Casos**, con su auditoría.
+9. **Métricas.** Resolución, latencia y costo de lo que acaban de probar.
+
+**Qué remarcar:**
+
+- **Sus datos están aislados.** Cada empresa ve solo lo suyo; lo garantiza la base, no una pantalla.
+- **Los datos personales se reemplazan antes de guardarse.** El archivo original no se conserva.
+- **Nada queda activo sin su aprobación.** Ni un tipo de caso ni una herramienta.
+- **Su sistema no se toca hasta que lo active.** Hasta entonces las herramientas responden en modo simulado. Para pasar al sistema real: URL base, credenciales, prueba de conexión y activar.
+
+**Si algo falla:**
+
+- **Una etapa queda en "Falló".** Casi siempre es la cuota diaria del modelo gratuito. El análisis se reintenta solo; si no, tocá "Reintentar desde donde quedó". No repite lo hecho.
+- **"Todavía no hay conversaciones".** El archivo no era un export de chats o de tickets. Revisá el formato en `docs/onboarding.md`.
+- **Los chats figuran todos como del cliente.** Faltó cargar con qué nombre figura la empresa en WhatsApp.
+- **El código de verificación.** En el chat de una empresa también sale en los **Logs** de Render: todavía no se envían emails.
 
 ## Si algo falla durante la demo
 

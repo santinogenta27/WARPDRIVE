@@ -48,6 +48,27 @@ El reporte de preparación se lee de la base, porque la corrida del Hito 4 qued�
 
 La API simulada de Acme vive en memoria. Cuando el servicio se duerme o se redespliega, los pedidos vuelven a su estado inicial; los casos, mensajes, aprobaciones y auditoría quedan en la base.
 
+## Pasar al hito 6 (empresas, onboarding y métricas)
+
+La demo de Acme sigue andando en `hito-5` sin tocar nada. Para sumar lo del hito 6:
+
+1. **Cambiar la rama.** En el servicio → **Settings** → **Build & Deploy** → **Branch**, elegí `main` (después de aprobar el pull request de `hito-6`) o `hito-6` → **Save Changes**.
+2. **No hace falta ninguna variable nueva.** Al arrancar, el servicio aplica solo las migraciones 0014 a 0016. Son aditivas: columnas y tablas nuevas.
+3. **Opcional:**
+   - `OTEL_EXPORTER_OTLP_ENDPOINT` y `OTEL_EXPORTER_OTLP_HEADERS`: envían las trazas a un backend de OpenTelemetry.
+   - `OTEL_TRACES_CONSOLE=1`: escribe las trazas en **Logs**.
+   - `ALERT_LATENCY_MS`, `ALERT_COST_PER_CASE_USD` y `ALERT_ERRORS`: umbrales de las alertas (decisión 028).
+
+Qué cambia al pasar:
+
+- **El operador** entra con `PANEL_EMAIL` y `PANEL_PASSWORD`, como antes, y ve a Acme. Tiene una pantalla más, **Empresas**, para crear empresas.
+- **Las sesiones abiertas del panel se cierran** una vez: la cookie cambió de formato. Hay que volver a ingresar.
+- **El análisis del onboarding corre dentro del mismo servicio**, en un hilo. No hace falta un worker aparte.
+- **Las alertas** aparecen en **Logs**: buscá `ALERTA`.
+- **Acme no cambia.** Sus tipos de caso, herramientas, casos y reporte quedan como están. `make demo-setup` es opcional: regenera sus herramientas desde el OpenAPI por el flujo nuevo, con el mismo resultado.
+
+Para volver atrás, elegí otra vez la rama `hito-5`. Las columnas y tablas nuevas no molestan al código anterior.
+
 ## Después
 
 - **Código de verificación:** el chat sigue sin enviar emails. El código aparece en **Logs** del servicio. Buscá `Mailer de consola`.
