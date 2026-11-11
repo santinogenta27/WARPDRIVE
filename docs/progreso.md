@@ -1,6 +1,8 @@
 # Progreso
 
-Última actualización: 9 de noviembre de 2026. Ramas: `hito-1` (tareas 1 a 5), `hito-2` (tareas 6 a 11, sale de `hito-1`) y `gemini-gratis` (prueba con Gemini, sale de `hito-2`).
+Última actualización: 10 de noviembre de 2026. Lo más nuevo es el **Hito 6** (rama `hito-6`): está más abajo, con lo que quedó sin medir por la cuota de Groq.
+
+Ramas, cada una sale de la anterior: `hito-1` (tareas 1 a 5), `hito-2` (tareas 6 a 11), `gemini-gratis`, `hito-3`, `calidad`, `hito-4`, `hito-5` (la demo en Render) y `hito-6`.
 
 ## Hito 1 — Base (rama `hito-1`)
 
@@ -210,6 +212,103 @@ Arreglos:
 - Con la aprobación ya creada, el turno termina siempre en pedido de aprobación, con un mensaje fijo, aunque el modelo falle o quiera derivar. Lo prueban `test_flujo_reembolso.py`, también con el principal sin cuota y el respaldo respondiendo.
 - `PYTHONUNBUFFERED=1` en Render, y ConsoleMailer con handler propio y flush.
 
+## Hito 6 — Empresas, comportamiento y observabilidad (rama `hito-6`, sale de `hito-5`)
+
+10 de noviembre de 2026. Decisiones 025 a 028. Pull request de `hito-6` a `main`.
+
+**Estado:** `make lint` limpio; `make test` con 289 tests en verde y 1 omitido (el de Groq real, que corre a pedido); evals simulados 14 de 14, juez 1,00. **La medición con Groq real quedó sin hacer: la cuota del modelo de la demo estaba agotada** (detalle en la etapa 2).
+
+### Etapa 0 — Pendientes de la demo (decisión 025)
+
+| Pendiente | Estado | Test |
+|---|---|---|
+| No permitir dos reembolsos pendientes para el mismo pedido | Hecho | `test_guardian.py` |
+| Textos legibles en Aprobaciones ("Reembolso · Pedido 1005 · $35.000") | Hecho | `test_panel_textos.py`, `test_panel.py` |
+| Medir cada paso de una respuesta y reducir la latencia | Hecho | `test_latencia.py` |
+
+- **Aprobación única:** una sola pendiente por pedido, garantizada con un índice único en la base. En el mismo caso se reusa; desde otra conversación, el asistente avisa que ya está en revisión.
+- **Latencia:** el tiempo se iba en viajes a Postgres. Con el modelo simulado, desde la PC contra Neon:
+
+  | Mensaje | Antes | Después |
+  |---|---|---|
+  | "hola" | 4,0 s (91 viajes) | 1,0 s (21) |
+  | "¿Abren los domingos?" | 5,0 s (115) | 1,2 s (28) |
+  | "¿Dónde está mi pedido 1001?" | 6,3 s (144) | 1,7 s (35) |
+  | "Quiero el reembolso del pedido 1005" | 7,6 s (176) | 2,0 s (45) |
+
+- Cada turno deja en la auditoría cuánto tardó cada paso. El panel lo muestra como "Tiempo de la respuesta". `python evals/latency.py` repite la medición.
+- **Sin medir:** la latencia en Render con Groq real. Se ve en la auditoría de cualquier caso nuevo.
+
+### Etapa 1 — Onboarding de una empresa nueva, sin comandos (decisión 026)
+
+| Pedido | Estado | Test (`test_empresas.py`) |
+|---|---|---|
+| Crear una empresa desde el panel, con su usuario y aislada de Acme | Hecho | Alta, login y aislamiento en cada pantalla y cada endpoint, en los dos sentidos |
+| Subir historial y documentos, ver las 6 etapas y el reporte | Hecho | De los archivos subidos al reporte, con el job del pipeline |
+| Revisar y aprobar tipos de caso y herramientas, que pasan al agente en vivo | Hecho | Activar, aprobar, editar instrucciones y límites |
+| Que Acme salga de este flujo | Hecho, con un límite | `test_acme_api.py`, `test_demo_setup.py` |
+| Conectar el sistema real: OpenAPI, URL base y credenciales cifradas, con prueba antes de activar | Hecho | Cifrado por empresa, prueba, activación y direcciones internas rechazadas |
+| Chat web propio de cada empresa | Hecho | Página, sesiones y mensajes del equipo separados por empresa |
+
+- **Quién crea empresas:** el operador (el usuario de `PANEL_EMAIL`), en la pantalla **Empresas**. No hay registro público.
+- **El análisis corre como job** en un hilo de la misma API. No hace falta un worker aparte en Render.
+- **Hasta activar la conexión, las herramientas responden en modo simulado.** La API simulada de Acme queda solo para la demo.
+- **Acme:** sus herramientas se generan desde su OpenAPI y se aprueban con sus límites por el flujo de revisión. Se borraron los cuatro manifiestos escritos a mano.
+  - **Límite:** las instrucciones de sus 8 tipos de caso siguen curadas a mano, como lo que una empresa edita al revisar. Los nombres no salen de una corrida del descubrimiento, porque los evals guionados dependen de ellos.
+- **Sin probar con una empresa real ni con un sistema real:** los tests usan los archivos de Acme y un sistema simulado. El análisis desde el panel con Groq real tampoco se corrió, por la cuota.
+
+### Etapa 2 — Comportamiento del agente (decisión 027)
+
+| Pedido | Estado |
+|---|---|
+| Flujo de reembolso con Groq real, 5 de 5 | **Sin medir: cuota agotada.** 0 de 5, ninguno llegó a correr el flujo |
+| Cambio de dirección que deriva en vez de pedir la dirección | Arreglado en el prompt `system_v4` y en las instrucciones. **Sin medir con Groq** |
+| Consulta de Mercado Pago que deriva | Arreglado en el prompt `system_v4` y en las instrucciones. **Sin medir con Groq** |
+| Amenaza de denuncia que no frenó | Arreglado en código: deriva siempre. `test_errores_del_reporte.py` |
+| Regla de reapertura a los 7 días | Hecho. `test_reapertura.py` |
+| Aprobar un reembolso no cuenta como intervención humana | Hecho. `test_reapertura.py` |
+| Las 60 conversaciones de calidad completas | **Sin correr: cuota agotada** |
+
+- **Hallazgo con Groq real:** `gpt-oss-20b` empezó a devolver el nombre de la herramienta con un marcador pegado (`responder<|channel|>commentary`). En `make evals`, los 3 casos que llegaron a correr derivaron por eso. Ahora esas llamadas se recuperan (`test_groq.py`). **Falta confirmar con Groq que alcanza.**
+- **Esto puede estar pasando en la demo de Render**, que corre `hito-5` sin ese arreglo: si el chat deriva consultas simples, es esto.
+- **Para medir cuando se renueve la cuota** (medianoche, hora del Pacífico), en este orden:
+  1. `RUN_GROQ_TESTS=1 GROQ_REPEAT=5 python -m pytest backend/tests/test_groq_real.py`
+  2. `python evals/runner.py --restart`
+  3. `python evals/quality.py --restart`
+- El detalle y dónde anotar el resultado están en `docs/calidad.md`, sección "Hito 6".
+
+### Etapa 3 — Observabilidad (decisión 028)
+
+| Pedido | Estado | Test (`test_observabilidad.py`) |
+|---|---|---|
+| Página Métricas: resolución y derivación, latencia p50 y p95, errores y respaldos, tokens y costo por día, por modelo y por caso | Hecho | Números y página, y aislamiento entre empresas |
+| Historial de evals por versión de prompt y modelo | Hecho | Se guarda al correr los evals con un modelo real |
+| OpenTelemetry, una traza por caso | Hecho | El id de la traza es el id del caso; sin texto del cliente en los spans |
+| Alertas en los logs por latencia, costo por caso y errores | Hecho | Una línea `ALERTA …` al pasar cada umbral |
+
+- **Las trazas no se envían a ningún lado hasta configurar un destino** (`OTEL_EXPORTER_OTLP_ENDPOINT`). No probé el envío contra un backend real: el test usa un exportador en memoria.
+- **El historial de evals está vacío** hasta la primera corrida con un modelo real.
+- Dependencias nuevas: `opentelemetry-sdk` y `opentelemetry-exporter-otlp-proto-http`.
+
+### Etapa 4 — README y pull request
+
+- `README.md`: qué es, arquitectura con diagrama, evals, seguridad, cómo correrlo y link a la demo.
+- `docs/demo.md`, sección 6: cómo mostrarle a un cliente el onboarding con sus propios datos.
+- `docs/render.md`, "Pasar al hito 6": qué cambiar en Render.
+
+### Para pasar la demo de Render al hito 6
+
+- **La demo de Acme sigue andando en `hito-5`.** Las migraciones 0014 a 0016 ya están aplicadas en Neon (las aplican los tests) y son aditivas.
+- Cambiar la rama del servicio a `main` o `hito-6`. No hace falta ninguna variable nueva. Paso a paso en `docs/render.md`.
+- Las sesiones abiertas del panel se cierran una vez: hay que volver a ingresar.
+
+### Decisiones tomadas sin tu aprobación (revisalas)
+
+- **025:** qué es "el mismo pedido" para la aprobación única; qué se cambió para bajar la latencia.
+- **026:** solo el operador crea empresas; clave en lugar de magic link; el análisis corre en un hilo de la API; el archivo original no se guarda; qué de Acme sigue curado a mano.
+- **027:** "mismo tema" es el mismo tipo de caso; una amenaza legal deriva siempre; se recuperan las llamadas de Groq con el nombre roto.
+- **028:** qué se registra de cada llamada al modelo; el id de la traza es el id del caso; umbrales de las alertas.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
@@ -234,8 +333,13 @@ Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **tran
 
 ## Pendientes conocidos (fuera de las tareas hechas)
 
+- **Medir con Groq real** el flujo de reembolso, los 14 casos guionados y las 60 conversaciones de calidad (Hito 6, etapa 2).
 - Ver que el CI de GitHub Actions quede verde: el repositorio es privado y no lo pude consultar desde acá.
-- Panel completo de la spec (Next.js, magic link, roles, varias empresas). Hoy hay un panel mínimo de demo en `/panel` (decisión 022).
+- Panel de la spec en Next.js, con magic link y roles. Hoy el panel son páginas servidas por la API, con una clave por usuario y varias empresas (decisiones 022 y 026).
+- Email real para el código de verificación: sigue saliendo por la consola del servidor.
+- CSAT, alerta por caída de la resolución y un destino para las alertas (decisión 028).
+- Conteo para facturar por período (tarea 22): hoy hay un resumen del total (decisión 027).
+- PDF en la ingesta, almacenamiento de archivos y borrado de una empresa con un comando.
 - Avisar por WhatsApp cuando se decide una aprobación o responde el equipo. En el chat web ya llega; WhatsApp está en pausa.
 - Anclar fuera de la base el último hash de auditoría de cada caso (decisión 010).
 - `fallbacks` del lado del servidor ante rechazos del modelo: hoy se deriva (decisión 007).
@@ -247,9 +351,13 @@ Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **tran
 python -m venv .venv
 .venv\Scripts\python -m pip install -r backend/requirements-dev.txt
 make lint
-make test      # usa DATABASE_URL de .env (Neon); tarda unos 9 minutos por la latencia
-make evals     # simulado sin ANTHROPIC_API_KEY; real con la clave
+make test      # usa DATABASE_URL de .env (Neon); tarda unos 30 minutos por la latencia
+make evals     # con claves en .env usa el modelo real y gasta cuota
+python evals/runner.py --simulated   # los mismos evals con el modelo simulado, como en el CI
+python evals/latency.py              # cuánto tarda cada paso de una respuesta
 python evals/rag_recall.py
 ```
+
+Para probar el Hito 6 a mano: `make api`, entrá a `http://localhost:8000/panel` con `PANEL_EMAIL` y `PANEL_PASSWORD`, creá una empresa en **Empresas** y seguí `docs/demo.md`, sección 6.
 
 Para ver el agente en acción sin claves, `evals/simulated/stack.py` arma todo el sistema con Acme: `build_simulated_stack(conn).send("lucia", "¿Dónde está mi pedido 1001?")`.
