@@ -327,6 +327,65 @@ def test_si_el_modelo_sigue_generando_mal_es_un_rechazo_y_el_agente_deriva(
     assert "tool_use_failed" in logged and '{"name": "json"}' in logged
 
 
+FINALS = [
+    *TOOLS,
+    {
+        "name": "responder",
+        "description": "Responde al cliente",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "mensaje": {"type": "string"},
+                "fuentes": {"type": "array", "items": {"type": "string"}},
+                "factual": {"type": "boolean"},
+            },
+            "required": ["mensaje", "fuentes", "factual"],
+            "additionalProperties": False,
+        },
+    },
+]
+
+
+def _failed(generation: str) -> httpx.Response:
+    error = {
+        "message": "attempted to call tool which was not in request.tools",
+        "code": "tool_use_failed",
+        "failed_generation": generation,
+    }
+    return httpx.Response(400, json={"error": error})
+
+
+@pytest.mark.parametrize(
+    "name", ["responder<|channel|>commentary", "<|channel|>commentary", "responder"]
+)
+def test_recupera_una_llamada_con_el_nombre_de_la_herramienta_roto(name: str) -> None:
+    """Lo que hizo gpt-oss-20b el 10/11/2026: la llamada es correcta, pero el nombre trae pegado
+    un marcador interno del modelo (o es solo el marcador). Antes eran 3 reintentos y una
+    derivación; ahora la llamada se recupera sin volver a pedirla (decisión 027)."""
+    arguments = {"mensaje": "Tu pedido 1001 está despachado.", "fuentes": [], "factual": True}
+    fake = FakeGroq(_failed(json.dumps({"name": name, "arguments": arguments})))
+    response = GroqProvider(transport=fake.transport()).create(
+        model="claude-sonnet-5-5", messages=[], max_tokens=10, tools=FINALS
+    )
+    assert len(fake.requests) == 1 and response.stop_reason == "tool_use"
+    assert [(c.name, c.input) for c in response.tool_calls] == [("responder", arguments)]
+
+
+def test_no_recupera_una_llamada_que_no_cumple_el_esquema_de_ninguna_herramienta() -> None:
+    """Solo se recupera lo que es, sin dudas, una llamada válida: otra herramienta inexistente,
+    argumentos que no cumplen el esquema o que encajan en más de una se vuelven a pedir."""
+    bad = [
+        json.dumps({"name": "borrar_todo<|channel|>x", "arguments": {"order_id": "1"}}),
+        json.dumps({"name": "responder<|channel|>x", "arguments": {"mensaje": 5}}),
+        json.dumps({"name": "<|channel|>x", "arguments": {"otra": "cosa"}}),
+    ]
+    fake = FakeGroq(*(_failed(generation) for generation in bad))
+    response = GroqProvider(transport=fake.transport()).create(
+        model="claude-sonnet-5-5", messages=[], max_tokens=10, tools=FINALS
+    )
+    assert len(fake.requests) == 3 and response.stop_reason == "refusal"
+
+
 def test_reintenta_una_llamada_a_herramienta_mal_generada() -> None:
     failed = {
         "error": {

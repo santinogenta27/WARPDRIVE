@@ -16,6 +16,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
+from jsonschema import Draft202012Validator
 
 from app.llm.errors import QuotaExhausted
 from app.llm.pricing import PRICES
@@ -121,6 +122,12 @@ class GroqTransport:
                 data: dict[str, Any] = response.json()
                 return data
             if response.status_code == 400 and _tool_use_failed(response):
+                recovered = _recover_tool_call(response, body)
+                if recovered is not None:
+                    logger.info(
+                        "Groq: %s generó el nombre de la herramienta roto; recuperado", model
+                    )
+                    return recovered
                 bad_generations += 1
                 if bad_generations >= MAX_BAD_GENERATIONS:
                     raise GroqGenerationFailed(
@@ -178,6 +185,61 @@ def _generation_detail(response: httpx.Response) -> str:
     if not isinstance(generated, str):
         generated = json.dumps(generated, ensure_ascii=False)
     return f"{error.get('code')}: {error.get('message', '')} | generó: {generated[:400]}"
+
+
+# Marcador interno que gpt-oss a veces deja pegado al nombre de la herramienta
+# ("responder<|channel|>commentary") o en su lugar ("<|channel|>commentary").
+_MARKER = re.compile(r"<\|.*$", re.S)
+
+
+def _recover_tool_call(response: httpx.Response, body: dict[str, Any]) -> dict[str, Any] | None:
+    """Si la salida rechazada es una llamada válida a una herramienta pedida, salvo por el
+    nombre roto, la devuelve como una respuesta normal. Solo cuando no hay dudas: el nombre
+    limpio es una herramienta del pedido (o, si quedó vacío, los argumentos cumplen el esquema
+    de una sola) y los argumentos validan contra su esquema. Si no, None y se pide de nuevo.
+    Groq no informa tokens en un 400: el uso de esta llamada queda en cero."""
+    try:
+        generated = (response.json().get("error") or {}).get("failed_generation")
+        if isinstance(generated, str):
+            generated = json.loads(generated)
+        arguments = generated.get("arguments") if isinstance(generated, dict) else None
+        if isinstance(arguments, str):
+            arguments = json.loads(arguments)
+    except ValueError:
+        return None
+    if not isinstance(generated, dict) or not isinstance(arguments, dict):
+        return None
+    schemas = {
+        tool["function"]["name"]: tool["function"].get("parameters") or {}
+        for tool in body.get("tools") or []
+    }
+
+    def fits(tool: str) -> bool:
+        return Draft202012Validator(schemas[tool]).is_valid(arguments)
+
+    name = _MARKER.sub("", str(generated.get("name") or "")).strip()
+    if not name:
+        candidates = [tool for tool in schemas if fits(tool)]
+        if len(candidates) != 1:
+            return None
+        name = candidates[0]
+    if name not in schemas or not fits(name):
+        return None
+    call = {
+        "id": f"groq_{uuid.uuid4().hex}",
+        "type": "function",
+        "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)},
+    }
+    return {
+        "model": body["model"],
+        "choices": [
+            {
+                "finish_reason": "tool_calls",
+                "message": {"role": "assistant", "content": None, "tool_calls": [call]},
+            }
+        ],
+        "usage": {},
+    }
 
 
 def _tool_use_failed(response: httpx.Response) -> bool:
