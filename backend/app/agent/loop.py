@@ -29,6 +29,7 @@ from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
 from app.mailer import ConsoleMailer, Email, Mailer
+from app.obs import timing
 from app.policy.guardian import (
     ALREADY_PENDING_REASON,
     UNVERIFIED_REASON,
@@ -235,6 +236,16 @@ class Agent:
 
     # -- entrada ---------------------------------------------------------------------------
     def handle_message(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
+        # Un solo alcance de tenant para todo el turno: cada consulta de adentro lo reusa en
+        # lugar de fijar y restaurar el rol (4 viajes a la base menos por consulta).
+        with tenant_scope(self._conn, tenant_id):
+            with timing.turn() as timer:
+                result = self._handle(tenant_id, contact_id, text)
+            # Cuánto tardó cada paso (base, modelo, búsqueda, herramientas): decisión 025.
+            audit_log.record(self._conn, tenant_id, result.case_id, "turn_timing", timer.summary())
+        return result
+
+    def _handle(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
         company, tone = self._tenant(tenant_id)
         contact = self._contact(tenant_id, contact_id)
         case_id = self._open_case(tenant_id, contact_id)
@@ -348,7 +359,7 @@ class Agent:
         if label == NOT_ALLOWED:  # inyección o datos en masa: negativa fija, sin modelo ni derivar
             return self._finish(turn, "responder", REFUSAL_MESSAGE)
         if label == CHAT:  # charla: responde solo, sin documentos, herramientas ni derivación
-            return self._chat(turn, company, tone, case_types)
+            return self._chat(turn, company, tone, case_types, history)
         if label == GENERAL:  # consulta general: documentos, sin herramientas ni verificación
             instructions = GENERAL_INSTRUCTIONS
         elif label in case_types:
@@ -363,7 +374,8 @@ class Agent:
         turn.needs_identity = any(m.get("requires_verified_contact") for m in manifests)
         # La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el
         # guardián lo niega, ver _loop): una pregunta general se responde con los documentos.
-        turn.documents = hybrid_search(self._conn, tenant_id, self._embedder, text, k=5)
+        with timing.step(timing.SEARCH):
+            turn.documents = hybrid_search(self._conn, tenant_id, self._embedder, text, k=5)
         self._audit(
             turn,
             "rag_search",
@@ -377,20 +389,22 @@ class Agent:
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
-                "content": prompt.user_turn(
-                    turn.documents, contact.verified, self._history(tenant_id, case_id), text
-                ),
+                "content": prompt.user_turn(turn.documents, contact.verified, history, text),
             }
         ]
         return self._run_loop(turn, system, messages, manifests)
 
     def _chat(
-        self, turn: _Turn, company: str, tone: str, case_types: dict[str, tuple[str, str]]
+        self,
+        turn: _Turn,
+        company: str,
+        tone: str,
+        case_types: dict[str, tuple[str, str]],
+        history: list[tuple[str, str]],
     ) -> AgentResult:
         goals = "; ".join(goal for goal, _ in case_types.values()) or "consultas de la tienda"
         instructions = CHAT_INSTRUCTIONS.format(empresa=company, capacidades=goals)
         system = prompt.system_prompt(company, tone, instructions)
-        history = self._history(turn.tenant_id, turn.case_id)
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",

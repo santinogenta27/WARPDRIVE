@@ -486,6 +486,11 @@ TOOL_STATUS = {
 }
 
 
+def _seconds(milliseconds: Any) -> str:
+    """`1234` -> `1,2 s`."""
+    return f"{int(milliseconds or 0) / 1000:.1f} s".replace(".", ",")
+
+
 def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     """(título, detalle en HTML) de un evento de auditoría."""
     if kind == "message_received":
@@ -531,6 +536,17 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "case_resolved":
         who = RESOLVED_BY.get(str(p.get("resuelto_por")), "")
         return f"Caso resuelto {who}".strip(), esc(p.get("motivo"))
+    if kind == "turn_timing":
+        parts = " · ".join(
+            f"{label} {_seconds(p.get(key))}"
+            for key, label in (
+                ("modelo_ms", "modelo"),
+                ("base_ms", "base de datos"),
+                ("busqueda_ms", "búsqueda"),
+                ("herramientas_ms", "herramientas"),
+            )
+        )
+        return "Tiempo de la respuesta", f"{_seconds(p.get('total_ms'))} en total · {parts}"
     if kind == "approval_message_fixed":
         return "Dejó el pedido en revisión con el mensaje fijo", esc(p.get("reason"))
     if kind == "verification_requested":

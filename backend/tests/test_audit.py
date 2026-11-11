@@ -26,6 +26,7 @@ def test_un_caso_se_reconstruye_completo(stack: SimulatedStack) -> None:
         "tool_call",
         "model_call",  # agente: responde
         "final_action",
+        "turn_timing",  # cuánto tardó cada paso (decisión 025)
     ]
     assert [e.seq for e in events] == list(range(1, len(events) + 1))
     by_kind = {e.kind: e.payload for e in events}
@@ -76,7 +77,7 @@ def test_borrar_un_evento_rompe_la_cadena(stack: SimulatedStack) -> None:
 def test_una_derivacion_y_una_aprobacion_quedan_auditadas(stack: SimulatedStack) -> None:
     escalated = stack.send("lucia", "Quiero hablar con una persona")
     kinds = [e.kind for e in reconstruct_case(stack.conn, stack.seed.tenant_id, escalated.case_id)]
-    assert kinds[-2:] == ["escalated", "final_action"]
+    assert kinds[-3:] == ["escalated", "final_action", "turn_timing"]
     stack.close_open_cases()
 
     approval = stack.send("martin", "Quiero el reembolso del pedido 1005")

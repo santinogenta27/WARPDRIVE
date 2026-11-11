@@ -74,12 +74,14 @@ def record(
     created_at = datetime.now(UTC).isoformat()
     with tenant_scope(conn, tenant_id):
         # Bloquear el caso serializa los agregados: dos eventos no pueden tomar la misma secuencia.
-        conn.execute("select 1 from cases where id = %s for update", (case_id,))
+        # El bloqueo y el último evento salen en la misma consulta (un viaje menos por evento).
         last = conn.execute(
-            "select seq, hash from audit_events where case_id = %s order by seq desc limit 1",
+            "select e.seq, e.hash from cases c left join lateral (select seq, hash"
+            " from audit_events where case_id = c.id order by seq desc limit 1) e on true"
+            " where c.id = %s for update of c",
             (case_id,),
         ).fetchone()
-        seq = (last[0] + 1) if last else 1
+        seq = (last[0] + 1) if last and last[0] is not None else 1
         prev_hash = last[1] if last else None
         digest = _event_hash(tenant_id, case_id, seq, kind, normalized, created_at, prev_hash)
         conn.execute(

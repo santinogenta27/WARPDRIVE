@@ -31,7 +31,9 @@ def case_row(stack: SimulatedStack, case_id: uuid.UUID) -> tuple[str, str | None
 def last_audit(stack: SimulatedStack, case_id: uuid.UUID) -> str:
     with tenant_scope(stack.conn, stack.seed.tenant_id):
         row = stack.conn.execute(
-            "select kind from audit_events where case_id = %s order by seq desc limit 1",
+            # Sin la medición de tiempos, que cierra cada turno (decisión 025).
+            "select kind from audit_events where case_id = %s and kind <> 'turn_timing'"
+            " order by seq desc limit 1",
             (case_id,),
         ).fetchone()
     assert row is not None

@@ -9,10 +9,21 @@ import uuid
 import weakref
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import Any
 
 import psycopg
 
 from app.config import database_url
+from app.obs import timing
+
+
+class TimedConnection(psycopg.Connection[Any]):
+    """Conexión que le cuenta cada consulta al paso `base` del turno en curso (si lo hay)."""
+
+    def execute(self, *args: Any, **kwargs: Any) -> Any:
+        with timing.db_step():
+            return super().execute(*args, **kwargs)
+
 
 # Alcance activo por conexión: permite anidar `tenant_scope` sin que el bloque interno, al
 # salir, devuelva la conexión al rol dueño (que se saltea la RLS) mientras el externo sigue.
@@ -26,7 +37,7 @@ def connect(url: str | None = None) -> psycopg.Connection:
     target = url or database_url()
     if not target:
         raise RuntimeError("DATABASE_URL no está definida")
-    return psycopg.connect(target, prepare_threshold=None)
+    return TimedConnection.connect(target, prepare_threshold=None)
 
 
 @contextmanager
@@ -46,13 +57,17 @@ def tenant_scope(conn: psycopg.Connection, tenant_id: uuid.UUID) -> Iterator[psy
             _active_scopes[conn] = (tenant_id, active[1])
         return
 
-    conn.execute("set local role app_user")
-    conn.execute("select set_config('app.tenant_id', %s, true)", (str(tenant_id),))
+    # Rol y tenant en un solo viaje a la base (equivale a SET LOCAL de cada uno).
+    conn.execute(
+        "select set_config('role', 'app_user', true), set_config('app.tenant_id', %s, true)",
+        (str(tenant_id),),
+    )
     _active_scopes[conn] = (tenant_id, 1)
     try:
         yield conn
     finally:
         _active_scopes.pop(conn, None)
         if not conn.closed and conn.info.transaction_status == psycopg.pq.TransactionStatus.INTRANS:
-            conn.execute("reset role")
-            conn.execute("select set_config('app.tenant_id', '', true)")
+            conn.execute(
+                "select set_config('role', 'none', true), set_config('app.tenant_id', '', true)"
+            )

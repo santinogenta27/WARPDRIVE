@@ -13,6 +13,8 @@ from urllib.parse import quote
 import httpx
 import httpx2
 
+from app.obs import timing
+
 _PATH_FIELD = re.compile(r"{(\w+)}")
 # Se acepta httpx o httpx2 (misma API): el TestClient de Starlette usa httpx2.
 HttpClient = httpx.Client | httpx2.Client
@@ -58,14 +60,15 @@ class ToolRuntime:
         last_error: Exception | None = None
         for _ in range(attempts):
             try:
-                response = self._http.request(
-                    method,
-                    path,
-                    params=rest if is_query and rest else None,
-                    json=rest if not is_query and rest else None,
-                    headers=headers,
-                    timeout=10.0 if is_query else 15.0,
-                )
+                with timing.step(timing.TOOLS):
+                    response = self._http.request(
+                        method,
+                        path,
+                        params=rest if is_query and rest else None,
+                        json=rest if not is_query and rest else None,
+                        headers=headers,
+                        timeout=10.0 if is_query else 15.0,
+                    )
             except _TRANSPORT_ERRORS as exc:
                 last_error = exc
                 continue

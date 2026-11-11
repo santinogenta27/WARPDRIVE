@@ -10,6 +10,7 @@ import psycopg
 from app.db.connection import tenant_scope
 from app.llm.pricing import PRICES, cost_usd
 from app.llm.types import LLMResponse, TokenUsage, ToolCall, UsageKind, UsageRecorder
+from app.obs import timing
 
 
 class LLMProvider(Protocol):
@@ -120,9 +121,10 @@ class LLMClient:
     ) -> LLMResponse:
         if model not in PRICES:  # sin precio no hay costo: no se llama
             raise ValueError(f"Modelo sin precio configurado: {model}")
-        response = self._provider.create(
-            model=model, messages=messages, max_tokens=max_tokens, system=system, **options
-        )
+        with timing.step(timing.MODEL):
+            response = self._provider.create(
+                model=model, messages=messages, max_tokens=max_tokens, system=system, **options
+            )
         # Se registra el modelo que respondió: con Gemini no es el que pidió el agente.
         self._recorder.record(
             tenant_id=tenant_id,
