@@ -3,7 +3,8 @@
 * Exportaciones de chat de WhatsApp: .txt (formato Android o iOS) o un .zip con varios .txt.
 * Tickets de un helpdesk: CSV (una fila por mensaje) o JSON (un objeto por ticket, con
   comentarios), con nombres de columna habituales en inglés o castellano.
-* Documentos: Markdown o texto, DOCX y URLs (HTML). PDF todavía no (decisión 021).
+* Documentos: Markdown o texto, DOCX, PDF con texto y URLs (HTML). Un PDF escaneado no tiene
+  texto: se informa y el resto de la carga sigue (decisión 030).
 
 Todo se normaliza a conversaciones con mensajes `customer`/`agent` y fecha. Al guardar, el texto
 se anonimiza antes de tocar la base (los mensajes nunca quedan en claro) y los documentos se
@@ -27,6 +28,7 @@ from xml.etree import ElementTree
 
 import httpx
 import psycopg
+import pypdf
 
 from app.db.connection import tenant_scope
 from app.llm.embedder import Embedder
@@ -35,6 +37,7 @@ from app.rag.indexer import index_document
 
 Role = Literal["customer", "agent"]
 SourceKind = Literal["whatsapp_export", "helpdesk_export", "document", "url"]
+MAX_PDF_PAGES = 500  # extraer el texto es lento: un PDF más largo se sube en partes
 
 ANDROID = re.compile(
     r"^(\d{1,2})/(\d{1,2})/(\d{2,4}),? (\d{1,2}):(\d{2})(?::\d{2})?\s?(?:[ap]\.?\s?m\.?)? - "
@@ -89,6 +92,12 @@ class IngestResult:
     messages: int
     documents: int
     skipped: int
+    # Un aviso por documento que no se pudo leer (PDF escaneado, con contraseña o dañado).
+    unreadable: tuple[str, ...] = ()
+
+
+class UnreadableDocument(ValueError):
+    """El documento no tiene texto que se pueda leer. El mensaje se le muestra a quien lo subió."""
 
 
 # -- WhatsApp --------------------------------------------------------------------------------
@@ -232,9 +241,45 @@ def read_document(data: bytes, name: str) -> Document:
         text = "\n".join(p for p in paragraphs if p.strip())
         return Document(title=paragraphs[0].strip() if paragraphs else stem, source=stem, text=text)
     if suffix == ".pdf":
-        raise ValueError("PDF todavía no se soporta: subilo como DOCX o Markdown (decisión 021)")
+        text = _pdf_text(data, PurePath(name).name)
+        first = text.splitlines()[0]
+        return Document(title=first if len(first) <= 120 else stem, source=stem, text=text)
     text = data.decode("utf-8-sig")
     return Document(title=_title(text, stem), source=stem, text=text)
+
+
+def _pdf_text(data: bytes, name: str) -> str:
+    """El texto de un PDF: un párrafo por página. Si no se puede leer, `UnreadableDocument`."""
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(data))
+        locked = reader.is_encrypted and not reader.decrypt("")
+        count = 0 if locked else len(reader.pages)
+        skip = locked or count > MAX_PDF_PAGES
+        extracted = [] if skip else [page.extract_text() or "" for page in reader.pages]
+    except Exception as error:  # noqa: BLE001 — un PDF dañado puede fallar de muchas formas
+        raise UnreadableDocument(
+            f"{name}: no se pudo leer el PDF. Puede estar dañado. Probá exportarlo de nuevo, o "
+            "subilo como DOCX o Markdown."
+        ) from error
+    if locked:
+        raise UnreadableDocument(
+            f"{name} está protegido con contraseña. Subí una copia sin contraseña."
+        )
+    if count > MAX_PDF_PAGES:
+        raise UnreadableDocument(
+            f"{name} tiene {count} páginas y el máximo es {MAX_PDF_PAGES}. Subilo en partes."
+        )
+    pages = []
+    for page in extracted:
+        lines = [line.strip() for line in page.replace("\x00", "").splitlines()]
+        pages.append("\n".join(line for line in lines if line))
+    text = "\n\n".join(page for page in pages if page)
+    if not any(char.isalpha() for char in text):
+        raise UnreadableDocument(
+            f"{name} es un PDF escaneado: son imágenes, sin texto para leer. Subí una versión con "
+            "texto (exportada desde Word o Google Docs), o pasalo a DOCX o Markdown."
+        )
+    return text
 
 
 class _TextExtractor(HTMLParser):
@@ -331,10 +376,12 @@ def ingest(
 ) -> IngestResult:
     """Guarda cada archivo como fuente; los ya ingeridos (mismo hash) se saltean."""
     sources = conversations = messages = documents = skipped = 0
+    unreadable: list[str] = []
     for upload in uploads:
         kind = detect_kind(upload)
         content = upload.name.encode() if kind == "url" else upload.data
         digest = hashlib.sha256(content).hexdigest()
+        document: Document | None = None
         with tenant_scope(conn, tenant_id):
             exists = conn.execute(
                 "select 1 from sources where content_hash = %s", (digest,)
@@ -342,6 +389,14 @@ def ingest(
             if exists:
                 skipped += 1
                 continue
+            if kind == "document":
+                # Se lee antes de guardar la fuente: uno que no se puede leer no deja rastro,
+                # se informa y la carga sigue con los demás archivos.
+                try:
+                    document = read_document(upload.data, upload.name)
+                except UnreadableDocument as error:
+                    unreadable.append(str(error))
+                    continue
             row = conn.execute(
                 "insert into sources (tenant_id, kind, file_path, status, content_hash)"
                 " values (%s, %s, %s, 'done', %s) returning id",
@@ -354,11 +409,8 @@ def ingest(
                     messages += _save_conversation(conn, tenant_id, row[0], chat)
                     conversations += 1
                 continue
-        document = (
-            fetch_url(upload.name, http)
-            if kind == "url"
-            else read_document(upload.data, upload.name)
-        )
+        if document is None:
+            document = fetch_url(upload.name, http)
         index_document(
             conn,
             tenant_id,
@@ -368,4 +420,4 @@ def ingest(
             text=document.text,
         )
         documents += 1
-    return IngestResult(sources, conversations, messages, documents, skipped)
+    return IngestResult(sources, conversations, messages, documents, skipped, tuple(unreadable))

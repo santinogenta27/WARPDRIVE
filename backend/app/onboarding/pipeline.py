@@ -137,7 +137,7 @@ def run_pipeline(
     def ingest_stage() -> dict[str, int]:
         result = ingest(conn, tenant_id, uploads, business=deps.business, embedder=deps.embedder)
         if uploads:
-            return result.__dict__
+            return {k: v for k, v in result.__dict__.items() if isinstance(v, int)}
         # Desde el panel las fuentes se ingieren al subirlas: la etapa informa lo que ya hay.
         totals = ingested_totals(conn, tenant_id)
         if not totals["conversations"]:

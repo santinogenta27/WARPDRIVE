@@ -1,25 +1,30 @@
 """Tarea 14 — test de aceptación: 3 formatos de ejemplo producen el mismo esquema normalizado.
 
 La ingesta acepta exportaciones de WhatsApp (.txt o .zip), tickets de un helpdesk (CSV o JSON) y
-documentos (Markdown, DOCX, URL). Las conversaciones se normalizan a mensajes con rol y fecha y
+documentos (Markdown, DOCX, PDF, URL). Las conversaciones se normalizan a mensajes con rol y fecha y
 se guardan anonimizadas; los documentos van al RAG. Subir dos veces el mismo archivo no duplica.
 """
 
 import csv
+import importlib.util
 import io
 import json
+import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
 import httpx
 import psycopg
+import pypdf
+import pytest
 from simulated.voyage import voyage_transport
 
 from app.db.connection import tenant_scope
 from app.llm.client import PostgresUsageRecorder
 from app.llm.embedder import VoyageEmbedder
 from app.onboarding.ingest import (
+    UnreadableDocument,
     Upload,
     detect_kind,
     fetch_url,
@@ -128,6 +133,7 @@ def test_detecta_el_tipo_de_cada_archivo() -> None:
     assert detect_kind(Upload("tickets.csv", tickets_csv())) == "helpdesk_export"
     assert detect_kind(Upload("tickets.json", tickets_json())) == "helpdesk_export"
     assert detect_kind(Upload("politica.md", b"# x")) == "document"
+    assert detect_kind(Upload("Garantia.PDF", b"%PDF-1.4")) == "document"
     assert detect_kind(Upload("https://acme.example/faq", b"")) == "url"
 
 
@@ -161,3 +167,101 @@ def test_guarda_conversaciones_anonimizadas_e_indexa_documentos_sin_duplicar(
     assert kinds == ["document", "helpdesk_export", "helpdesk_export", "whatsapp_export"]
     stored = "\n".join(texts)
     assert [value for value in seeded if value in stored] == []  # nada en claro en la base
+
+
+# -- PDF (decisión 030) ----------------------------------------------------------------------
+PDF = (ONBOARDING / "garantia.pdf").read_bytes()
+SCANNED_PDF = (ONBOARDING / "garantia_escaneada.pdf").read_bytes()
+
+
+def _embedder(conn: psycopg.Connection) -> VoyageEmbedder:
+    return VoyageEmbedder(
+        recorder=PostgresUsageRecorder(conn),
+        api_key="sim",
+        http_client=httpx.Client(transport=voyage_transport()),
+    )
+
+
+def _tenant(conn: psycopg.Connection) -> uuid.UUID:
+    row = conn.execute("insert into tenants (name) values ('Con PDF') returning id").fetchone()
+    assert row is not None
+    tenant_id: uuid.UUID = row[0]
+    return tenant_id
+
+
+def test_los_pdf_de_acme_salen_del_generador() -> None:
+    """Los PDF de prueba se generan con `generate_pdf.py`: no son archivos de un cliente."""
+    spec = importlib.util.spec_from_file_location("generate_pdf", ONBOARDING / "generate_pdf.py")
+    assert spec is not None and spec.loader is not None
+    generator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(generator)
+    assert generator.text_pdf() == PDF and generator.scanned_pdf() == SCANNED_PDF
+
+
+def test_lee_un_pdf_con_texto() -> None:
+    document = read_document(PDF, "garantia.pdf")
+    assert document.title == "Garantía de productos" and document.source == "garantia"
+    assert "6 meses de garantía por fallas\nde fabricación" in document.text  # con tildes
+    assert "ayuda@acmestore.example" in document.text
+    # Cada página es un párrafo aparte: así se parte en fragmentos para la búsqueda.
+    first, second = document.text.split("\n\n")
+    assert first.startswith("Garantía de productos") and "3 meses de garantía" in second
+
+
+def test_un_pdf_escaneado_avisa_que_no_tiene_texto() -> None:
+    with pytest.raises(UnreadableDocument) as error:
+        read_document(SCANNED_PDF, "garantia_escaneada.pdf")
+    assert "garantia_escaneada.pdf" in str(error.value) and "escaneado" in str(error.value)
+
+
+def test_un_pdf_roto_o_con_clave_avisa_en_vez_de_fallar() -> None:
+    for broken in (b"%PDF-1.4 esto no es un PDF", b"", b"PK\x03\x04 un zip con otro nombre"):
+        with pytest.raises(UnreadableDocument) as error:
+            read_document(broken, "roto.pdf")
+        assert "roto.pdf" in str(error.value)
+
+    writer = pypdf.PdfWriter(clone_from=pypdf.PdfReader(io.BytesIO(PDF)))
+    writer.encrypt("clave-del-pdf")
+    locked = io.BytesIO()
+    writer.write(locked)
+    with pytest.raises(UnreadableDocument) as error:
+        read_document(locked.getvalue(), "con_clave.pdf")
+    assert "contraseña" in str(error.value)
+
+
+def test_un_pdf_con_demasiadas_paginas_avisa(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.onboarding.ingest.MAX_PDF_PAGES", 1)
+    with pytest.raises(UnreadableDocument) as error:
+        read_document(PDF, "garantia.pdf")
+    assert "2 páginas" in str(error.value)
+
+
+def test_el_pdf_se_indexa_como_un_docx_y_el_escaneado_no_frena_la_carga(
+    conn: psycopg.Connection,
+) -> None:
+    tenant_id = _tenant(conn)
+    uploads = [
+        Upload("garantia.pdf", PDF),
+        Upload("garantia_escaneada.pdf", SCANNED_PDF),
+        Upload("envios.md", "# Envíos\n\nHacemos envíos a todo el país.".encode()),
+    ]
+    result = ingest(conn, tenant_id, uploads, business={"Acme Store"}, embedder=_embedder(conn))
+    # El escaneado se informa; los otros dos archivos se guardan igual.
+    assert result.documents == 2 and result.sources == 2
+    assert len(result.unreadable) == 1 and "garantia_escaneada.pdf" in result.unreadable[0]
+    with tenant_scope(conn, tenant_id):
+        sources = conn.execute("select file_path, kind from sources order by file_path").fetchall()
+        chunks = conn.execute(
+            "select c.text from chunks c join documents d on d.id = c.document_id"
+            " where d.source = 'garantia' and c.embedding is not null order by c.text"
+        ).fetchall()
+    assert sources == [("envios.md", "document"), ("garantia.pdf", "document")]
+    # Las dos páginas quedan indexadas para la búsqueda, con el título del documento.
+    assert chunks and all(text.startswith("Garantía de productos\n\n") for (text,) in chunks)
+    indexed = "\n".join(text for (text,) in chunks)
+    assert "6 meses de garantía" in indexed and "3 meses de garantía" in indexed
+
+    # Subir de nuevo no duplica; el escaneado se vuelve a informar.
+    again = ingest(conn, tenant_id, uploads, business={"Acme Store"}, embedder=_embedder(conn))
+    assert again.skipped == 2 and again.documents == 0 and len(again.unreadable) == 1
+
