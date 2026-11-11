@@ -97,6 +97,8 @@ def _input_schema(op: Operation) -> dict[str, Any]:
         if param.get("in") not in ("path", "query"):
             continue  # los encabezados (p. ej. Idempotency-Key) los pone el runtime
         properties[param["name"]] = dict(param.get("schema") or {"type": "string"})
+        if param.get("description"):  # el modelo lee para qué sirve cada parámetro
+            properties[param["name"]].setdefault("description", param["description"])
         if param.get("required") or param.get("in") == "path":
             required.append(param["name"])
     if op.body_schema:
@@ -219,6 +221,46 @@ def contract_check(
     return ContractResult(True, f"{result.status_code} según contrato")
 
 
+REVIEWED_LIMITS = ("max_amount", "approval_over", "amount_from")
+
+
+def store_tools(
+    conn: psycopg.Connection, tenant_id: uuid.UUID, manifests: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Guarda las herramientas generadas, sin aprobar. Si una ya existía, se actualiza su
+    contrato y se conservan su aprobación y los límites que fijó la empresa al revisarla."""
+    stored = []
+    with tenant_scope(conn, tenant_id):
+        for generated in manifests:
+            row = conn.execute(
+                "select manifest from tools where name = %s for update", (generated["name"],)
+            ).fetchone()
+            m = dict(generated)
+            if row is not None:
+                for key in REVIEWED_LIMITS:
+                    if row[0].get(key) is not None:
+                        m[key] = row[0][key]
+                if m["risk"] == "high":
+                    m["approval_over"] = 0  # riesgo alto: siempre con aprobación
+            conn.execute(
+                "insert into tools (tenant_id, name, input_schema, manifest, risk, max_amount,"
+                " approved) values (%s, %s, %s, %s, %s, %s, false)"
+                " on conflict (tenant_id, name) do update set manifest = excluded.manifest,"
+                " input_schema = excluded.input_schema, risk = excluded.risk,"
+                " max_amount = excluded.max_amount",
+                (
+                    tenant_id,
+                    m["name"],
+                    Jsonb(m["input_schema"]),
+                    Jsonb(m),
+                    m["risk"],
+                    m["max_amount"],
+                ),
+            )
+            stored.append(m)
+    return stored
+
+
 def generate_tools(
     conn: psycopg.Connection,
     tenant_id: uuid.UUID,
@@ -237,24 +279,9 @@ def generate_tools(
     picked = model.pick_operations(
         goals, [(op.operation_id, f"{op.method} {op.path}: {op.summary}") for op in candidates]
     )
-    manifests = build_manifests(spec, picked)
+    manifests = store_tools(conn, tenant_id, build_manifests(spec, picked))
     names = {op.operation_id: _snake(op.operation_id) for op in candidates}
     with tenant_scope(conn, tenant_id):
-        for m in manifests:
-            conn.execute(
-                "insert into tools (tenant_id, name, input_schema, manifest, risk, max_amount,"
-                " approved) values (%s, %s, %s, %s, %s, %s, false)"
-                " on conflict (tenant_id, name) do update set manifest = excluded.manifest,"
-                " input_schema = excluded.input_schema, risk = excluded.risk",
-                (
-                    tenant_id,
-                    m["name"],
-                    Jsonb(m["input_schema"]),
-                    Jsonb(m),
-                    m["risk"],
-                    m["max_amount"],
-                ),
-            )
         valid = {m["name"] for m in manifests}
         for type_id, name, instructions in types:
             parsed = yaml.safe_load(instructions or "") or {}

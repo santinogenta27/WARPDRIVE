@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
@@ -118,26 +119,37 @@ def test_reembolso_con_la_misma_clave_no_se_duplica() -> None:
     assert first == second
 
 
-TOOLS_DIR = Path(__file__).resolve().parents[2] / "evals" / "fixtures" / "acme" / "tools"
+def test_herramientas_de_acme_salen_del_flujo_y_cumplen_el_manifiesto(
+    conn: psycopg.Connection,
+) -> None:
+    """Hito 6: las herramientas de Acme se generan desde su OpenAPI y se aprueban con sus
+    límites en la revisión, como las de cualquier empresa (decisión 026)."""
+    from simulated.stack import build_simulated_stack
 
-
-def test_herramientas_de_acme_cumplen_el_manifiesto_y_apuntan_a_la_api() -> None:
+    from app.db.connection import tenant_scope
     from app.tools.manifest import MANIFEST_SCHEMA
 
-    manifests = {
-        p.stem: json.loads(p.read_text(encoding="utf-8")) for p in TOOLS_DIR.glob("*.json")
-    }
+    stack = build_simulated_stack(conn)
+    with tenant_scope(conn, stack.seed.tenant_id):
+        rows = conn.execute("select name, manifest, approved from tools").fetchall()
+        lookup = conn.execute(
+            "select settings -> 'identity_lookup' from tenants where id = %s",
+            (stack.seed.tenant_id,),
+        ).fetchone()
+    manifests = {name: manifest for name, manifest, _ in rows}
     assert set(manifests) == {
         "consultar_pedido",
         "actualizar_direccion",
         "cancelar_pedido",
         "iniciar_reembolso",
     }
+    assert all(approved for _, _, approved in rows)
     for name, manifest in manifests.items():
         Draft202012Validator(MANIFEST_SCHEMA).validate(manifest)
         assert manifest["name"] == name
         upstream = manifest["upstream"]
         assert upstream["method"].lower() in SPEC["paths"][upstream["path"]], name
+        assert manifest["requires_verified_contact"] and manifest["owner_check"], name
     risks = {name: m["risk"] for name, m in manifests.items()}
     assert risks == {
         "consultar_pedido": "low",
@@ -145,6 +157,12 @@ def test_herramientas_de_acme_cumplen_el_manifiesto_y_apuntan_a_la_api() -> None
         "cancelar_pedido": "medium",
         "iniciar_reembolso": "high",
     }
+    # Los límites que fijó la empresa al revisar.
+    refund, cancel = manifests["iniciar_reembolso"], manifests["cancelar_pedido"]
+    assert (refund["max_amount"], refund["approval_over"]) == (50000, 0)
+    assert (cancel["approval_over"], cancel["amount_from"]) == (100000, "order.total")
+    # La búsqueda de clientes por email (verificación por código) sale del OpenAPI.
+    assert lookup is not None and lookup[0]["path"] == "/customers"
 
 
 def test_busca_clientes_por_email_sin_distinguir_mayusculas() -> None:

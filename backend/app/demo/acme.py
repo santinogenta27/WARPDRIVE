@@ -37,12 +37,87 @@ def _company() -> dict[str, Any]:
 
 
 def _settings(company: dict[str, Any]) -> dict[str, Any]:
-    """Tono y búsqueda del cliente por email (verificación por código) del tenant."""
-    return {"tone": company["tone"], "identity_lookup": company["identity_lookup"]}
+    return {"tone": company["tone"]}
+
+
+def acme_openapi() -> dict[str, Any]:
+    path = REPO_ROOT / "mocks" / "acme-api" / "openapi.json"
+    spec: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return spec
+
+
+def configure_acme(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
+    """Configura Acme por el mismo camino que cualquier empresa (decisión 026), sin insertar
+    nada ya activo ni aprobado:
+
+    1. Conecta su sistema: la API simulada de la demo, con su OpenAPI. De ahí sale también cómo
+       buscar un cliente por email para verificar su identidad.
+    2. Las herramientas se generan desde el OpenAPI con el generador del onboarding y quedan
+       sin aprobar.
+    3. Los tipos de caso quedan cargados e inactivos, como después del descubrimiento.
+    4. La revisión de la empresa: aprueba cada herramienta con sus límites y activa cada tipo
+       con sus instrucciones.
+
+    Lo curado a mano es lo que una empresa edita al revisar: las instrucciones de cada tipo
+    (`case_types/*.yaml`) y los límites (`tool_limits` de `company.json`). Idempotente: sobre
+    una base que ya tenía la demo, lleva los cambios de los fixtures."""
+    from app.companies import connection as system
+    from app.companies import review
+    from app.onboarding.toolgen import _snake, build_manifests, operations, store_tools
+
+    company = _company()
+    spec = acme_openapi()
+    system.connect_demo(conn, tenant_id, spec)
+
+    instructions = {
+        kind["name"]: (ACME_DIR / "case_types" / f"{kind['name']}.yaml").read_text(encoding="utf-8")
+        for kind in company["case_types"]
+    }
+    by_tool = {_snake(op.operation_id): op.operation_id for op in operations(spec)}
+    picked = {
+        name: [
+            by_tool[tool]
+            for tool in review.parse_instructions(text).get("herramientas") or []
+            if tool in by_tool
+        ]
+        for name, text in instructions.items()
+    }
+    store_tools(conn, tenant_id, build_manifests(spec, picked))
+    with tenant_scope(conn, tenant_id):
+        for name, text in instructions.items():
+            conn.execute(
+                "insert into case_types (tenant_id, name, instructions, active)"
+                " values (%s, %s, %s, false) on conflict (tenant_id, name) do nothing",
+                (tenant_id, name, text),
+            )
+
+    limits: dict[str, dict[str, Any]] = company.get("tool_limits") or {}
+    for tool in review.tools(conn, tenant_id):
+        mine = limits.get(tool.name, {})
+        review.set_tool(
+            conn,
+            tenant_id,
+            tool.id,
+            approved=True,
+            max_amount=mine.get("max_amount"),
+            approval_over=mine.get("approval_over"),
+            amount_from=mine.get("amount_from"),
+        )
+    active = {kind["name"]: bool(kind["active"]) for kind in company["case_types"]}
+    for kind in review.case_types(conn, tenant_id):
+        if kind.name in instructions:
+            review.set_case_type(
+                conn,
+                tenant_id,
+                kind.id,
+                active=active[kind.name],
+                instructions=instructions[kind.name],
+            )
 
 
 def seed_acme(conn: psycopg.Connection, embedder: Embedder) -> AcmeSeed:
-    """Crea el tenant Acme con sus tipos de caso, herramientas aprobadas, contactos y documentos."""
+    """Crea el tenant Acme, lo configura por el flujo de revisión (`configure_acme`) y carga
+    sus contactos de prueba y sus documentos."""
     company = _company()
     row = conn.execute(
         "insert into tenants (name, settings) values (%s, %s) returning id",
@@ -50,34 +125,9 @@ def seed_acme(conn: psycopg.Connection, embedder: Embedder) -> AcmeSeed:
     ).fetchone()
     assert row is not None
     tenant_id: uuid.UUID = row[0]
+    configure_acme(conn, tenant_id)
     contacts: dict[str, uuid.UUID] = {}
     with tenant_scope(conn, tenant_id):
-        for case_type in company["case_types"]:
-            path = ACME_DIR / "case_types" / f"{case_type['name']}.yaml"
-            conn.execute(
-                "insert into case_types (tenant_id, name, instructions, active)"
-                " values (%s, %s, %s, %s)",
-                (
-                    tenant_id,
-                    case_type["name"],
-                    path.read_text(encoding="utf-8"),
-                    case_type["active"],
-                ),
-            )
-        for path in sorted((ACME_DIR / "tools").glob("*.json")):
-            manifest = json.loads(path.read_text(encoding="utf-8"))
-            conn.execute(
-                "insert into tools (tenant_id, name, input_schema, manifest, risk, max_amount,"
-                " approved) values (%s, %s, %s, %s, %s, %s, true)",
-                (
-                    tenant_id,
-                    manifest["name"],
-                    Jsonb(manifest["input_schema"]),
-                    Jsonb(manifest),
-                    manifest["risk"],
-                    manifest["max_amount"],
-                ),
-            )
         for contact in company["contacts"]:
             found = conn.execute(
                 "insert into contacts (tenant_id, phone_hash, verified_until) values"
@@ -98,8 +148,8 @@ def find_demo_tenant(conn: psycopg.Connection) -> uuid.UUID | None:
 
 
 def ensure_demo_tenant(conn: psycopg.Connection, embedder: Embedder) -> uuid.UUID:
-    """Crea una sola vez el tenant Acme permanente de la demo. Si ya existe, actualiza su
-    configuración (tono y búsqueda por email) desde el fixture."""
+    """Crea una sola vez el tenant Acme permanente de la demo. Si ya existe, lleva su
+    configuración al estado de los fixtures por el mismo flujo."""
     tenant_id = find_demo_tenant(conn)
     if tenant_id is None:
         tenant_id = seed_acme(conn, embedder).tenant_id
@@ -112,27 +162,9 @@ def ensure_demo_tenant(conn: psycopg.Connection, embedder: Embedder) -> uuid.UUI
 
 
 def sync_demo_config(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
-    """Instrucciones de los tipos de caso y manifiestos de las herramientas desde los fixtures,
-    para que un cambio llegue a una base que ya tenía la demo cargada."""
-    with tenant_scope(conn, tenant_id):
-        for path in sorted((ACME_DIR / "case_types").glob("*.yaml")):
-            conn.execute(
-                "update case_types set instructions = %s where name = %s",
-                (path.read_text(encoding="utf-8"), path.stem),
-            )
-        for path in sorted((ACME_DIR / "tools").glob("*.json")):
-            manifest = json.loads(path.read_text(encoding="utf-8"))
-            conn.execute(
-                "update tools set manifest = %s, input_schema = %s, risk = %s, max_amount = %s"
-                " where name = %s",
-                (
-                    Jsonb(manifest),
-                    Jsonb(manifest["input_schema"]),
-                    manifest["risk"],
-                    manifest["max_amount"],
-                    manifest["name"],
-                ),
-            )
+    """Lleva a una base que ya tenía la demo los cambios de los fixtures (instrucciones de los
+    tipos de caso, contrato y límites de las herramientas)."""
+    configure_acme(conn, tenant_id)
 
 
 def acme_sandbox_client() -> TestClient:
