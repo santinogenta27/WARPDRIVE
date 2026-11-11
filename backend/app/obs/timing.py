@@ -27,7 +27,12 @@ class Timer:
         self._clock = clock
         self._started = clock()
         self._finished: float | None = None
-        self._stack: list[list[Any]] = []  # [paso, desde cuándo corre]
+        self._wall_ns = time.time_ns()  # para ubicar cada paso en el reloj real (trazas)
+        self._stack: list[list[Any]] = []  # [paso, desde cuándo corre, registro del paso]
+        # Un registro por llamada al modelo, búsqueda o herramienta: de acá salen los spans de
+        # la traza del caso (app/obs/tracing.py). Las consultas a la base no se registran una
+        # por una: son decenas por turno.
+        self.records: list[dict[str, Any]] = []
         self.seconds: dict[str, float] = dict.fromkeys(STEPS, 0.0)
         self.calls: dict[str, int] = dict.fromkeys(STEPS, 0)
 
@@ -35,19 +40,39 @@ class Timer:
     def current(self) -> str | None:
         return self._stack[-1][0] if self._stack else None
 
-    def enter(self, kind: str) -> None:
+    def _ns(self, moment: float) -> int:
+        return self._wall_ns + int((moment - self._started) * 1e9)
+
+    @property
+    def started_ns(self) -> int:
+        return self._wall_ns
+
+    @property
+    def finished_ns(self) -> int:
+        return self._ns(self._finished if self._finished is not None else self._clock())
+
+    def enter(self, kind: str, name: str = "") -> dict[str, Any]:
+        """Abre un paso. Devuelve sus atributos, para completarlos mientras corre (modelo,
+        tokens, estado): salen en el span de la traza."""
         now = self._clock()
         if self._stack:  # el paso de afuera deja de correr mientras dura el de adentro
             outer = self._stack[-1]
             self.seconds[outer[0]] += now - outer[1]
-        self._stack.append([kind, now])
+        record: dict[str, Any] = {"kind": kind, "name": name or kind, "start_ns": self._ns(now)}
+        record["attrs"] = {}
+        self._stack.append([kind, now, record])
         self.calls[kind] = self.calls.get(kind, 0) + 1
         self.seconds.setdefault(kind, 0.0)
+        attrs: dict[str, Any] = record["attrs"]
+        return attrs
 
     def leave(self) -> None:
         now = self._clock()
-        kind, since = self._stack.pop()
+        kind, since, record = self._stack.pop()
         self.seconds[kind] += now - since
+        if kind != BASE:
+            record["end_ns"] = self._ns(now)
+            self.records.append(record)
         if self._stack:
             self._stack[-1][1] = now
 
@@ -94,14 +119,16 @@ def turn(clock: Callable[[], float] = time.perf_counter) -> Iterator[Timer]:
 
 
 @contextmanager
-def step(kind: str) -> Iterator[None]:
+def step(kind: str, name: str = "") -> Iterator[dict[str, Any]]:
+    """Un paso del turno. Entrega un diccionario de atributos para el span de la traza (sin
+    datos personales: nombres de modelos y herramientas, cantidades y estados)."""
     timer = _current.get()
     if timer is None:
-        yield
+        yield {}
         return
-    timer.enter(kind)
+    attrs = timer.enter(kind, name)
     try:
-        yield
+        yield attrs
     finally:
         timer.leave()
 

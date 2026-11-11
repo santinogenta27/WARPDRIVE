@@ -31,6 +31,9 @@ class LLMResponse:
     content: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[ToolCall] = field(default_factory=list)
     raw: Any = None  # respuesta original del proveedor
+    # Lo que pasó al conseguir la respuesta, para las métricas: "respaldo" (respondió el
+    # proveedor de respaldo), "recuperada" (llamada con el nombre roto, reparada) o "rechazo".
+    events: tuple[str, ...] = ()
 
 
 class UsageRecorder(Protocol):
@@ -43,4 +46,5 @@ class UsageRecorder(Protocol):
         model: str,
         usage: TokenUsage,
         cost_usd: Decimal,
+        events: list[str] | None = None,
     ) -> None: ...

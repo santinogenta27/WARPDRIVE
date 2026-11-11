@@ -10,6 +10,7 @@ import json
 import re
 import uuid
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any, Literal
 
 import psycopg
@@ -36,7 +37,7 @@ from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
 from app.mailer import ConsoleMailer, Email, Mailer
-from app.obs import timing
+from app.obs import alerts, timing, tracing
 from app.policy.guardian import (
     ALREADY_PENDING_REASON,
     UNVERIFIED_REASON,
@@ -257,8 +258,41 @@ class Agent:
             with timing.turn() as timer:
                 result = self._handle(tenant_id, contact_id, text)
             # Cuánto tardó cada paso (base, modelo, búsqueda, herramientas): decisión 025.
-            audit_log.record(self._conn, tenant_id, result.case_id, "turn_timing", timer.summary())
+            summary = timer.summary()
+            audit_log.record(self._conn, tenant_id, result.case_id, "turn_timing", summary)
+            self._observe(tenant_id, result, timer, summary)
         return result
+
+    def _observe(
+        self,
+        tenant_id: uuid.UUID,
+        result: AgentResult,
+        timer: timing.Timer,
+        summary: dict[str, Any],
+    ) -> None:
+        """Observabilidad del turno (decisión 028): la traza del caso y las alertas de latencia
+        y de costo por caso."""
+        tracing.export_turn(
+            tenant_id,
+            result.case_id,
+            timer,
+            action=result.action,
+            case_type=result.case_type,
+            tools=[(t.name, t.status) for t in result.tool_calls],
+        )
+        row = self._conn.execute(
+            "select coalesce(sum(cost_usd), 0) from usage where case_id = %s", (result.case_id,)
+        ).fetchone()
+        turn_cost = sum(
+            (Decimal(str(r["attrs"].get("llm.cost_usd") or 0)) for r in timer.records), Decimal(0)
+        )
+        alerts.check_turn(
+            tenant_id,
+            result.case_id,
+            summary,
+            case_cost=Decimal(row[0]) if row else Decimal(0),
+            turn_cost=turn_cost,
+        )
 
     def _handle(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
         company, tone = self._tenant(tenant_id)
@@ -396,7 +430,7 @@ class Agent:
         turn.needs_identity = any(m.get("requires_verified_contact") for m in manifests)
         # La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el
         # guardián lo niega, ver _loop): una pregunta general se responde con los documentos.
-        with timing.step(timing.SEARCH):
+        with timing.step(timing.SEARCH, "busqueda"):
             turn.documents = hybrid_search(self._conn, tenant_id, self._embedder, text, k=5)
         self._audit(
             turn,

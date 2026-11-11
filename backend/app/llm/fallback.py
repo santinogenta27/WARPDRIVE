@@ -9,6 +9,7 @@ si fue la por minuto) antes de volver a probarlo.
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from app.llm.client import LLMProvider
@@ -45,4 +46,5 @@ class FallbackProvider:
                     exhausted,
                     rest,
                 )
-        return self.secondary.create(**kwargs)
+        response = self.secondary.create(**kwargs)
+        return replace(response, events=(*response.events, "respaldo"))

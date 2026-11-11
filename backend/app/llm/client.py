@@ -83,12 +83,13 @@ class PostgresUsageRecorder:
         model: str,
         usage: TokenUsage,
         cost_usd: Decimal,
+        events: list[str] | None = None,
     ) -> None:
         with tenant_scope(self._conn, tenant_id):
             self._conn.execute(
                 "insert into usage (tenant_id, case_id, kind, model, input_tokens, output_tokens,"
-                " cache_creation_input_tokens, cache_read_input_tokens, cost_usd)"
-                " values (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " cache_creation_input_tokens, cache_read_input_tokens, cost_usd, events)"
+                " values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     tenant_id,
                     case_id,
@@ -99,6 +100,7 @@ class PostgresUsageRecorder:
                     usage.cache_creation_input_tokens,
                     usage.cache_read_input_tokens,
                     cost_usd,
+                    events or [],
                 ),
             )
 
@@ -121,17 +123,32 @@ class LLMClient:
     ) -> LLMResponse:
         if model not in PRICES:  # sin precio no hay costo: no se llama
             raise ValueError(f"Modelo sin precio configurado: {model}")
-        with timing.step(timing.MODEL):
+        with timing.step(timing.MODEL, "modelo") as span:
             response = self._provider.create(
                 model=model, messages=messages, max_tokens=max_tokens, system=system, **options
             )
-        # Se registra el modelo que respondió: con Gemini no es el que pidió el agente.
+            cost = cost_usd(response.model, response.usage)
+            span.update(
+                {
+                    "llm.requested_model": model,
+                    "llm.model": response.model,
+                    "llm.input_tokens": response.usage.input_tokens,
+                    "llm.output_tokens": response.usage.output_tokens,
+                    "llm.cost_usd": float(cost),
+                    "llm.stop_reason": str(response.stop_reason),
+                    "llm.events": ",".join(response.events),
+                }
+            )
+        # Se registra el modelo que respondió: con Gemini no es el que pidió el agente. Los
+        # eventos (respaldo, llamada recuperada, rechazo) van solo si los hubo.
+        extra: dict[str, Any] = {"events": list(response.events)} if response.events else {}
         self._recorder.record(
             tenant_id=tenant_id,
             case_id=case_id,
             kind="llm",
             model=response.model,
             usage=response.usage,
-            cost_usd=cost_usd(response.model, response.usage),
+            cost_usd=cost,
+            **extra,
         )
         return response

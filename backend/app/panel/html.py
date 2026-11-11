@@ -86,6 +86,7 @@ NAV = [
     ("onboarding", "Onboarding"),
     ("reporte", "Reporte"),
     ("configuracion", "Configuración"),
+    ("metricas", "Métricas"),
 ]
 ADMIN_NAV = [("empresas", "Empresas")]  # solo el operador de la plataforma
 

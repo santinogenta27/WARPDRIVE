@@ -60,7 +60,8 @@ class ToolRuntime:
         last_error: Exception | None = None
         for _ in range(attempts):
             try:
-                with timing.step(timing.TOOLS):
+                with timing.step(timing.TOOLS, "herramienta") as span:
+                    span.update({"http.method": method, "http.route": path_template})
                     response = self._http.request(
                         method,
                         path,

@@ -50,6 +50,8 @@ from app.channels.whatsapp.routing import channel_for_number
 from app.config import load_dotenv
 from app.contacts import WEB_PREFIX, hash_address
 from app.db.connection import connect, tenant_scope
+from app.llm.errors import QuotaExhausted
+from app.obs import alerts
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -83,6 +85,8 @@ class WebDeps:
     # El agente de la empresa de la sesión (cada empresa tiene su chat en /c/<enlace>). Sin
     # esto, todas las sesiones usan `agent`.
     agent_for: Callable[[psycopg.Connection, uuid.UUID], Agent] | None = None
+    # Dónde se guarda un error que cortó una respuesta (la transacción del turno se revierte).
+    record_error: Callable[[uuid.UUID, str, str], None] | None = None
     ip_daily_limit: int = 30  # mensajes por IP en 24 h
     daily_limit: int = 300  # mensajes en total en 24 h (cuida la cuota diaria del modelo)
     client_ip: str = "direct"  # de dónde sale la IP del cliente (ver client_ip)
@@ -135,6 +139,7 @@ def _production_deps() -> WebDeps:
         # Cada sesión usa el agente de su empresa: Acme con la API simulada, las demás con su
         # sistema (o en modo simulado hasta que activen la conexión).
         agent_for=build_agent,
+        record_error=alerts.persist_error,
         ip_daily_limit=int(os.environ.get("WEB_CHAT_IP_DAILY_LIMIT") or 30),
         daily_limit=int(os.environ.get("WEB_CHAT_DAILY_LIMIT") or 300),
         client_ip=os.environ.get("WEB_CHAT_CLIENT_IP") or "direct",
@@ -294,11 +299,13 @@ def create_session(deps: Deps, canal: str = "") -> dict[str, Any]:
     return {"session": token, "limit": MESSAGE_LIMIT, "remaining": MESSAGE_LIMIT}
 
 
-def _precheck(deps: WebDeps, token: str, ip_hash: str) -> tuple[str | None, str]:
-    """(límite alcanzado antes de abrir el stream, o None; dirección del chat de la sesión)."""
+def _precheck(deps: WebDeps, token: str, ip_hash: str) -> tuple[str | None, str, uuid.UUID]:
+    """(límite alcanzado antes de abrir el stream, o None; dirección del chat de la sesión; su
+    empresa)."""
     with deps.connection() as conn:
         tenant_id, address = _route(conn, token)
-        return _exceeded(deps, _usage(conn, tenant_id, token, ip_hash, lock=False)), address
+        scope = _exceeded(deps, _usage(conn, tenant_id, token, ip_hash, lock=False))
+        return scope, address, tenant_id
 
 
 def _process(
@@ -359,6 +366,7 @@ async def _stream(
     messages: list[InboundMessage],
     token: str,
     ip_hash: str,
+    tenant_id: uuid.UUID,
 ) -> AsyncIterator[str]:
     yield _event("typing", {})
     try:
@@ -366,8 +374,17 @@ async def _stream(
     except LimitReached as limit:
         yield _limit_event(limit.scope)
         return
-    except Exception:
+    except Exception as error:
         logger.exception("El chat web no pudo responder")
+        # Para las métricas y la alerta de errores: el tipo de error, sin texto del cliente.
+        kind = "cuota" if isinstance(error, QuotaExhausted) else "chat_web"
+        await run_in_threadpool(
+            alerts.record_error,
+            tenant_id,
+            kind,
+            persist=deps.record_error,
+            detail=type(error).__name__,
+        )
         yield _event("error", {"message": ERROR_MESSAGE})
         return
     for text in channel.outbox:
@@ -418,7 +435,7 @@ async def post_message(request: Request, deps: Deps) -> StreamingResponse:
     ip_hash = _ip_hash(client_ip(deps.client_ip, request.headers, peer))
     try:
         token = session_token(body)
-        scope, address = await run_in_threadpool(_precheck, deps, token, ip_hash)
+        scope, address, tenant_id = await run_in_threadpool(_precheck, deps, token, ip_hash)
         channel = WebChannel(address)  # el chat de la empresa de la sesión
         messages = channel.receive(str(request.url), body, request.headers)
     except (InvalidSignature, UnknownSession) as error:
@@ -427,5 +444,5 @@ async def post_message(request: Request, deps: Deps) -> StreamingResponse:
     if scope is not None:  # sin correr el agente
         stream = _only(_limit_event(scope))
     else:
-        stream = _stream(deps, channel, messages, token, ip_hash)
+        stream = _stream(deps, channel, messages, token, ip_hash, tenant_id)
     return StreamingResponse(stream, media_type="text/event-stream", headers=headers)

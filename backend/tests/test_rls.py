@@ -141,3 +141,23 @@ def test_alcances_anidados_no_pierden_la_rls(conn: psycopg.Connection) -> None:
 
 def test_las_migraciones_son_idempotentes(migrated: str) -> None:
     assert migrate(migrated) == []
+
+
+def test_toda_tabla_con_tenant_tiene_rls_forzada(conn: psycopg.Connection) -> None:
+    """También las tablas nuevas (hito 6: system_connections, error_events): ninguna tabla con
+    `tenant_id` puede quedar sin Row-Level Security habilitada y forzada, con su política."""
+    rows = conn.execute(
+        "select c.relname, c.relrowsecurity, c.relforcerowsecurity,"
+        " exists (select 1 from pg_policies p where p.schemaname = 'public'"
+        "  and p.tablename = c.relname)"
+        " from pg_class c join pg_namespace n on n.oid = c.relnamespace"
+        " join pg_attribute a on a.attrelid = c.oid and a.attname = 'tenant_id'"
+        " and not a.attisdropped"
+        " where n.nspname = 'public' and c.relkind = 'r' order by c.relname"
+    ).fetchall()
+    names = {r[0] for r in rows}
+    assert {"system_connections", "error_events", "onboarding_runs", "channels"} <= names
+    unprotected = [
+        name for name, enabled, forced, policy in rows if not (enabled and forced and policy)
+    ]
+    assert unprotected == []

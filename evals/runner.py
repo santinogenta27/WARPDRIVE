@@ -41,7 +41,7 @@ for _path in (ROOT / "backend", ROOT / "mocks" / "acme-api", HERE):
         sys.path.insert(0, str(_path))
 
 import psycopg  # noqa: E402
-from simulated.stack import SimulatedStack  # noqa: E402
+from simulated.stack import SimulatedStack, model_profile  # noqa: E402
 
 from app.agent.loop import AgentResult  # noqa: E402
 from app.audit.log import reconstruct_case  # noqa: E402
@@ -325,6 +325,48 @@ def _print_quota_stop(error: QuotaExhausted, progress: Path | None) -> None:
     print(f"La cuota se renueva {when}. Volvé a correr make evals para seguir desde ahí.")
 
 
+def record_history(
+    mode: str, report: Report, model: str, conn: psycopg.Connection | None = None
+) -> bool:
+    """Guarda la corrida en el historial de evals de la empresa de demo, con la versión del
+    prompt y el modelo: la página Métricas del panel lo muestra (decisión 028). Los evals corren
+    en una transacción que se revierte, así que esto usa una conexión propia. Sin empresa de
+    demo en la base (el CI), no guarda nada."""
+    from app.agent.prompt import SYSTEM_PROMPT_VERSION
+    from app.db.connection import connect
+    from app.demo.acme import find_demo_tenant
+    from app.obs.metrics import record_eval_run
+
+    own = conn is None
+    target = conn if conn is not None else connect()
+    try:
+        tenant_id = find_demo_tenant(target)
+        if tenant_id is None:
+            return False
+        record_eval_run(
+            target,
+            tenant_id,
+            mode=mode,
+            prompt_version=SYSTEM_PROMPT_VERSION,
+            model=model,
+            scores={
+                **report.scores(),
+                "critical_failures": len(report.critical_failures),
+                "cases": len(report.cases),
+            },
+            results=[
+                {"id": c.id, "resolved": c.resolved, "action": c.action, "judge": c.judge}
+                for c in report.cases
+            ],
+        )
+        if own:
+            target.commit()
+        return True
+    finally:
+        if own:
+            target.close()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evals de Acme")
     parser.add_argument("--real", action="store_true", help="usar modelos y embeddings reales")
@@ -338,6 +380,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report", type=Path, default=HERE / "last_report.json")
     parser.add_argument("--update-baseline", action="store_true")
     parser.add_argument("--restart", action="store_true", help="descarta el avance guardado")
+    parser.add_argument(
+        "--record",
+        action="store_true",
+        help="guarda la corrida en el historial de evals aunque sea simulada",
+    )
     args = parser.parse_args(argv)
 
     load_dotenv()
@@ -381,6 +428,8 @@ def main(argv: list[str] | None = None) -> int:
     }
     args.report.write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    if mode != "simulated" or args.record:
+        record_history(mode, report, model_profile(backend) if real else "simulado")
     print(f"evals ({mode}): resolución {report.resolution_rate:.0%}, juez {report.judge_mean:.2f}")
     for case in report.cases:
         flag = "ok " if case.resolved else "MAL"

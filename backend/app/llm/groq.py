@@ -239,6 +239,7 @@ def _recover_tool_call(response: httpx.Response, body: dict[str, Any]) -> dict[s
             }
         ],
         "usage": {},
+        "recovered": True,
     }
 
 
@@ -306,6 +307,7 @@ class GroqProvider:
                 model=target,
                 stop_reason="refusal",
                 usage=TokenUsage(input_tokens=0, output_tokens=0),
+                events=("rechazo",),
             )
 
 
@@ -431,6 +433,7 @@ def _response(data: dict[str, Any]) -> LLMResponse:
         content=content,
         tool_calls=calls,
         raw=data,
+        events=("recuperada",) if data.get("recovered") else (),
     )
 
 
