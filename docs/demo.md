@@ -8,7 +8,7 @@ Unos 10 minutos, más 10 si mostrás el onboarding con los datos del cliente (se
 - **Abrí dos ventanas**, una al lado de la otra:
   - **Cliente:** el chat, `https://<tu-servicio>.onrender.com/`.
   - **Empresa:** el panel, `https://<tu-servicio>.onrender.com/panel`. Entrá con `PANEL_EMAIL` y `PANEL_PASSWORD`.
-- **Dejá abiertos los Logs de Render** en otra pestaña. Ahí aparece el código de verificación: buscá `Mailer de consola`. El chat no envía emails todavía.
+- **Dejá abiertos los Logs de Render** en otra pestaña. Ahí aparece el código de verificación: buscá `Mailer de consola`. Los emails `@example.com` de Acme no existen, así que a ellos no se les envía nada.
 - **Panel → Casos → "Reiniciar demo"**, para arrancar con el panel limpio:
   - archiva las conversaciones de prueba (la auditoría queda guardada);
   - rechaza las aprobaciones pendientes;
@@ -132,7 +132,7 @@ Es la parte que más vende con un cliente real: ve su propia empresa andando. Ne
 - **Una etapa queda en "Falló".** Casi siempre es la cuota diaria del modelo gratuito. El análisis se reintenta solo; si no, tocá "Reintentar desde donde quedó". No repite lo hecho.
 - **"Todavía no hay conversaciones".** El archivo no era un export de chats o de tickets. Revisá el formato en `docs/onboarding.md`.
 - **Los chats figuran todos como del cliente.** Faltó cargar con qué nombre figura la empresa en WhatsApp.
-- **El código de verificación.** En el chat de una empresa también sale en los **Logs** de Render: todavía no se envían emails.
+- **El código de verificación.** Con `RESEND_API_KEY` y `MAIL_FROM` cargadas en Render, le llega al cliente por email (`docs/render.md`). Sin ellas, sale en los **Logs** de Render.
 
 ## Si algo falla durante la demo
 

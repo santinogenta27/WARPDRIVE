@@ -10,7 +10,7 @@ Dos formas de entrar:
 La sesión es una cookie firmada con HMAC (PANEL_SECRET o, si no está, ENCRYPTION_KEY) que vence a
 las 12 horas y lleva la empresa del usuario: toda pantalla y todo endpoint del panel leen la
 empresa de la sesión, nunca de la URL ni del formulario. Cada formulario lleva un token anti-CSRF
-derivado de la sesión. La spec pide magic link por email: llega cuando haya un `Mailer` real.
+derivado de la sesión. La spec pide magic link por email: queda pendiente (decisión 029).
 """
 
 import base64
