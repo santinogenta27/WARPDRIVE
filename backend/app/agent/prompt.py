@@ -9,7 +9,9 @@ from app.rag.search import SearchResult
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 # v2: cuándo derivar y cuándo explicar (docs/calidad.md). v3: sin verificar, usar la herramienta
 # (dispara la verificación por código) y nunca pedir datos personales en texto (decisión 024).
-SYSTEM_PROMPT_VERSION = "system_v3"
+# v4: pedir el dato que falta en lugar de derivar, y responder con lo que los documentos dicen
+# del tema aunque no nombren lo puntual (decisión 027).
+SYSTEM_PROMPT_VERSION = "system_v4"
 
 TONES = {
     "rioplatense": (

@@ -196,7 +196,8 @@ class SimulatedClaude:
         if name == "consultar_pedido":
             status = data.get("status")
             if "direcci" in low and "actualizar_direccion" in tool_names:
-                address = re.search(r"pedido\s+\d+\s+a\s+(.+)$", message)
+                # Una dirección trae un número de calle: "a otra dirección" no lo es.
+                address = re.search(r"pedido\s+\d+\s+a\s+(.*\d.*)$", message)
                 if status == "paid" and address:
                     return [
                         self._tool_use(
@@ -204,6 +205,11 @@ class SimulatedClaude:
                             {"order_id": order_id, "address": address.group(1).strip()},
                         )
                     ]
+                if status == "paid":  # falta el dato: se lo pide en lugar de derivar
+                    return reply(
+                        f"Sí, el pedido {order_id} todavía no fue despachado. ¿A qué dirección "
+                        "querés que lo mandemos? Pasame calle, número y ciudad.",
+                    )
                 return reply(
                     f"El pedido {order_id} ya fue despachado, así que no puedo cambiar la "
                     "dirección. Si querés, te paso con una persona del equipo para ver "

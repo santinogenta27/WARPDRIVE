@@ -187,7 +187,8 @@ def instructions_yaml(name: str, goal: str, tools: list[str] | None = None) -> s
             "herramientas": tools or [],
             "condiciones": [
                 "Usá solo los documentos y los resultados de herramientas.",
-                "Si falta información o hay que actuar sin herramienta, derivá.",
+                "Si falta un dato que el cliente puede dar, pedíselo.",
+                "Si hay que actuar en un sistema y no hay herramienta, derivá.",
             ],
             "cierre": "Confirmá lo que resolviste y preguntá si necesita algo más.",
         },

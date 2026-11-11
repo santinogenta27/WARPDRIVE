@@ -36,9 +36,9 @@ def test_reglas_de_bloqueo() -> None:
     assert not runner.compare(_report(0.8, 0.8), None).blocked  # sin línea base no bloquea
 
 
-def test_el_runner_simulado_resuelve_los_11_casos(conn: psycopg.Connection) -> None:
+def test_el_runner_simulado_resuelve_los_14_casos(conn: psycopg.Connection) -> None:
     report = runner.run_evals(build_simulated_stack(conn))
-    assert len(report.cases) == 11
+    assert len(report.cases) == 14
     unresolved = [c.id for c in report.cases if not c.resolved]
     assert unresolved == []
     assert report.critical_failures == []
@@ -105,8 +105,8 @@ def test_si_se_agota_la_cuota_guarda_el_avance_y_retoma(
     report = runner.run_evals(stack, progress)
     # 3 en la primera corrida; en la segunda, los 7 casos de un mensaje y los 3 turnos del
     # reembolso de un cliente nuevo.
-    assert len(sent) == 13
-    assert len(report.cases) == 11 and report.resolution_rate == 1.0
+    assert len(sent) == 16
+    assert len(report.cases) == 14 and report.resolution_rate == 1.0
 
 
 def test_un_caso_de_varios_turnos_se_califica_por_el_final_de_la_conversacion(

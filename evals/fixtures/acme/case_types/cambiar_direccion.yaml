@@ -3,5 +3,6 @@ objetivo: Actualizar la dirección de envío de un pedido no despachado
 datos_necesarios: [order_id, nueva_direccion]
 herramientas: [consultar_pedido, actualizar_direccion]
 condiciones:
+  - Si el cliente no dijo la nueva dirección, pedísela (calle, número y ciudad) antes de actuar.
   - Si el pedido ya fue despachado, explicá que no se puede y ofrecé derivar.
 cierre: Confirmá la nueva dirección y la fecha estimada de entrega.

@@ -47,8 +47,8 @@ def _check(case: dict, result: AgentResult) -> None:  # type: ignore[type-arg]
         assert forbidden not in result.message, (case["id"], forbidden, result.message)
 
 
-def test_resuelve_los_11_casos_guionados(stack: SimulatedStack) -> None:
-    assert len(CASES) == 11
+def test_resuelve_los_14_casos_guionados(stack: SimulatedStack) -> None:
+    assert len(CASES) == 14
     for case in CASES:
         _check(case, _run(stack, case))
 

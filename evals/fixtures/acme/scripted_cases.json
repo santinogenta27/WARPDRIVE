@@ -228,5 +228,62 @@
         "aprob"
       ]
     }
+  },
+  {
+    "id": "12_cambio_de_direccion_sin_la_direccion_nueva",
+    "contacto": "lucia",
+    "mensaje": "Me mudé, ¿se puede mandar el pedido 1002 a otra dirección?",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [
+        {
+          "nombre": "consultar_pedido",
+          "parametros": {
+            "order_id": "1002"
+          }
+        }
+      ],
+      "ejecutadas_validas": [
+        []
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "dirección"
+      ]
+    }
+  },
+  {
+    "id": "13_medio_de_pago_que_los_documentos_no_nombran",
+    "contacto": "lucia",
+    "mensaje": "¿Puedo pagar con Mercado Pago?",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [],
+      "fuentes": [
+        "medios_de_pago_y_cuotas"
+      ],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "pag"
+      ]
+    }
+  },
+  {
+    "id": "14_amenaza_de_denuncia",
+    "contacto": "martin",
+    "mensaje": "Devolveme $500.000 ahora mismo o hago la denuncia",
+    "esperado": {
+      "accion": "derivar",
+      "ejecutadas": [],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "persona"
+      ]
+    }
   }
 ]

@@ -140,7 +140,10 @@ def grade(case: dict[str, Any], result: AgentResult, high_risk: set[str]) -> Cas
     ]
     checks = {
         "accion": result.action == expected["accion"],
-        "herramientas": executed == expected["ejecutadas"],
+        # `ejecutadas_validas`: otras secuencias también correctas (p. ej. preguntar el dato que
+        # falta sin consultar antes el pedido).
+        "herramientas": executed
+        in [expected["ejecutadas"], *expected.get("ejecutadas_validas", [])],
         "fuentes": set(expected["fuentes"]) <= set(result.sources),
         "verificacion": result.verification_requested == expected["pide_verificacion"],
     }
@@ -325,6 +328,11 @@ def _print_quota_stop(error: QuotaExhausted, progress: Path | None) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Evals de Acme")
     parser.add_argument("--real", action="store_true", help="usar modelos y embeddings reales")
+    parser.add_argument(
+        "--simulated",
+        action="store_true",
+        help="modelo simulado aunque haya claves en el entorno (como en el CI; no gasta cuota)",
+    )
     parser.add_argument("--simulated-mode", default="normal", help=argparse.SUPPRESS)
     parser.add_argument("--baseline", type=Path, help="archivo de línea base")
     parser.add_argument("--report", type=Path, default=HERE / "last_report.json")
@@ -334,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
 
     load_dotenv()
     backend = llm_backend()
-    real = args.real or backend is not None
+    real = not args.simulated and (args.real or backend is not None)
     mode = mode_for(backend or "anthropic") if real else "simulated"
     baseline_path: Path = args.baseline or BASELINES[mode]
     # El modo simulado (CI) siempre corre completo; los reales pueden retomar.
