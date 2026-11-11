@@ -121,14 +121,16 @@ Con el modelo simulado, los 14 casos guionados dan 14 de 14 (`python evals/runne
   - Los 3 que corrieron hicieron el flujo completo: verificación por código, pedido de aprobación y voseo.
   - Los 2 restantes cortaron por cuota: Groq pidió esperar 532 y 704 s.
   - A los 15 minutos repetí esos 2: cortaron otra vez por cuota (530 y 917 s), sin correr.
-  - **Es 3 de 3 entre los que midieron, no un 5 de 5.** No hubo ninguna falla de comportamiento, pero faltan 2 intentos para cumplir el pedido.
+  - A las 05:05, pasada la medianoche del Pacífico, repetí los 5: **1 pasó y 4 cortaron por cuota** (241 a 795 s).
+  - **En total, 4 de 4 entre los que midieron, no un 5 de 5 seguido.** No hubo ninguna falla de comportamiento.
+- **La cuota no se renueva de golpe a medianoche.** Es una ventana móvil: se liberó cerca de un intento del flujo cada hora y media. Cinco intentos seguidos necesitan varias horas sin que nadie use el modelo, tampoco el chat de Render.
 - La cuota de `gpt-oss-20b` es la misma que usa el chat de Render. No insistí más para no dejar la demo sin modelo.
 
 ### Pendiente, con cuota disponible
 
-En este orden. La cuota se renueva a medianoche, hora del Pacífico.
+En este orden. Conviene correrlos después de varias horas sin uso del chat de Render, o con otra clave de Groq.
 
-1. **Flujo de reembolso, 5 de 5 en una sola corrida** (hoy hay 3 de 3):
+1. **Flujo de reembolso, 5 de 5 en una sola corrida** (hoy hay 4 de 4, en tres corridas):
    `RUN_GROQ_TESTS=1 GROQ_REPEAT=5 python -m pytest backend/tests/test_groq_real.py`
    Sin `GROQ_MAX_WAIT`: con el valor por defecto, una espera larga corta enseguida en lugar de dejar la conexión colgada.
 2. **Los 14 casos guionados:** `python evals/runner.py --restart`. Mide los casos 12, 13 y 14 y deja la corrida en el historial de evals de la página Métricas.
