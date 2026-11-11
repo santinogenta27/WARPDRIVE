@@ -117,13 +117,18 @@ Con el modelo simulado, los 14 casos guionados dan 14 de 14 (`python evals/runne
 - **`RUN_GROQ_TESTS=1 GROQ_REPEAT=5`, a las 22:11:** 0 de 5, y ninguno llegó a medir el flujo.
   - Tres intentos cortaron por cuota: Groq pidió esperar entre 747 y 830 s.
   - Dos intentos esperaron la cuota con la transacción abierta y Neon cerró la conexión por inactividad. Una espera de más de 10 minutos no sirve dentro de un turno.
-- La cuota de `gpt-oss-20b` es la misma que usa el chat de Render. No insistí para no dejar la demo sin modelo.
+- **`RUN_GROQ_TESTS=1 GROQ_REPEAT=5`, el 11 de noviembre a las 03:03, ya con todos los arreglos:** **3 de 5 pasaron y los otros 2 no llegaron a correr.**
+  - Los 3 que corrieron hicieron el flujo completo: verificación por código, pedido de aprobación y voseo.
+  - Los 2 restantes cortaron por cuota: Groq pidió esperar 532 y 704 s.
+  - A los 15 minutos repetí esos 2: cortaron otra vez por cuota (530 y 917 s), sin correr.
+  - **Es 3 de 3 entre los que midieron, no un 5 de 5.** No hubo ninguna falla de comportamiento, pero faltan 2 intentos para cumplir el pedido.
+- La cuota de `gpt-oss-20b` es la misma que usa el chat de Render. No insistí más para no dejar la demo sin modelo.
 
 ### Pendiente, con cuota disponible
 
 En este orden. La cuota se renueva a medianoche, hora del Pacífico.
 
-1. **Flujo de reembolso, 5 de 5:**
+1. **Flujo de reembolso, 5 de 5 en una sola corrida** (hoy hay 3 de 3):
    `RUN_GROQ_TESTS=1 GROQ_REPEAT=5 python -m pytest backend/tests/test_groq_real.py`
    Sin `GROQ_MAX_WAIT`: con el valor por defecto, una espera larga corta enseguida en lugar de dejar la conexión colgada.
 2. **Los 14 casos guionados:** `python evals/runner.py --restart`. Mide los casos 12, 13 y 14 y deja la corrida en el historial de evals de la página Métricas.

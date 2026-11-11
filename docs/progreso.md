@@ -216,7 +216,7 @@ Arreglos:
 
 10 de noviembre de 2026. Decisiones 025 a 028. Pull request de `hito-6` a `main`.
 
-**Estado:** `make lint` limpio; `make test` con 289 tests en verde y 1 omitido (el de Groq real, que corre a pedido); evals simulados 14 de 14, juez 1,00. **La medición con Groq real quedó sin hacer: la cuota del modelo de la demo estaba agotada** (detalle en la etapa 2).
+**Estado:** `make lint` limpio; `make test` con 289 tests en verde y 1 omitido (el de Groq real, que corre a pedido); evals simulados 14 de 14, juez 1,00. **La medición con Groq real quedó incompleta por la cuota del modelo de la demo**: el flujo de reembolso pasó 3 de 3 intentos y faltan 2; los 14 casos y las 60 conversaciones no se corrieron (detalle en la etapa 2).
 
 ### Etapa 0 — Pendientes de la demo (decisión 025)
 
@@ -261,7 +261,7 @@ Arreglos:
 
 | Pedido | Estado |
 |---|---|
-| Flujo de reembolso con Groq real, 5 de 5 | **Sin medir: cuota agotada.** 0 de 5, ninguno llegó a correr el flujo |
+| Flujo de reembolso con Groq real, 5 de 5 | **Incompleto: 3 de 3 pasaron y 2 no corrieron por cuota.** Falta la corrida de 5 seguidos |
 | Cambio de dirección que deriva en vez de pedir la dirección | Arreglado en el prompt `system_v4` y en las instrucciones. **Sin medir con Groq** |
 | Consulta de Mercado Pago que deriva | Arreglado en el prompt `system_v4` y en las instrucciones. **Sin medir con Groq** |
 | Amenaza de denuncia que no frenó | Arreglado en código: deriva siempre. `test_errores_del_reporte.py` |
@@ -269,7 +269,7 @@ Arreglos:
 | Aprobar un reembolso no cuenta como intervención humana | Hecho. `test_reapertura.py` |
 | Las 60 conversaciones de calidad completas | **Sin correr: cuota agotada** |
 
-- **Hallazgo con Groq real:** `gpt-oss-20b` empezó a devolver el nombre de la herramienta con un marcador pegado (`responder<|channel|>commentary`). En `make evals`, los 3 casos que llegaron a correr derivaron por eso. Ahora esas llamadas se recuperan (`test_groq.py`). **Falta confirmar con Groq que alcanza.**
+- **Hallazgo con Groq real:** `gpt-oss-20b` empezó a devolver el nombre de la herramienta con un marcador pegado (`responder<|channel|>commentary`). En `make evals`, los 3 casos que llegaron a correr derivaron por eso. Ahora esas llamadas se recuperan (`test_groq.py`). Con el arreglo, el flujo de reembolso pasó 3 de 3 con Groq real; los evals completos todavía no se midieron.
 - **Esto puede estar pasando en la demo de Render**, que corre `hito-5` sin ese arreglo: si el chat deriva consultas simples, es esto.
 - **Para medir cuando se renueve la cuota** (medianoche, hora del Pacífico), en este orden:
   1. `RUN_GROQ_TESTS=1 GROQ_REPEAT=5 python -m pytest backend/tests/test_groq_real.py`
