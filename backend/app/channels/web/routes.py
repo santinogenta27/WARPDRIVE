@@ -10,6 +10,10 @@ recibe un mensaje y responde con un stream `text/event-stream`:
 - `limit`: se llegó a un límite (`scope`: `session`, `ip` o `daily`); el agente no corre.
 - `error`: no se pudo responder; no se descuenta el mensaje.
 
+La página del chat (`/`, `/c/<enlace>`) y el widget que un cliente instala en su sitio
+(`/widget.js`, decisión 031) usan estas mismas rutas. Desde otro sitio, el chat solo responde
+si su dominio está en la lista de la empresa.
+
 Límites (la demo es pública y el modelo gratuito tiene cuota diaria): 20 mensajes por sesión,
 un máximo por IP por día y un máximo total por día. El agente corre dentro del pedido, en una
 transacción: si falla, se revierte todo y no se descuenta nada.
@@ -34,11 +38,12 @@ from typing import Annotated, Any
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from app.agent.loop import Agent
 from app.channels.base import InboundMessage, InvalidSignature
 from app.channels.inbound import handle_inbound
+from app.channels.web import widget
 from app.channels.web.channel import (
     _TOKEN,
     DEMO_ADDRESS,
@@ -64,7 +69,15 @@ LIMIT_MESSAGES = {
     "Volvé a probar mañana. ¡Gracias!",
     "daily": "La demo llegó a su límite de uso por hoy. Volvé a probar mañana. ¡Gracias!",
 }
+# En el chat de una empresa (su página o el widget en su sitio) no se habla de "la demo".
+COMPANY_LIMIT_MESSAGES = {
+    "session": f"Llegaste al límite de {MESSAGE_LIMIT} mensajes de esta conversación. "
+    "Podés empezar una nueva.",
+    "ip": "Llegaste al límite de mensajes por hoy desde tu conexión. Volvé a escribirnos mañana.",
+    "daily": "El chat llegó a su límite de mensajes por hoy. Volvé a escribirnos mañana.",
+}
 ERROR_MESSAGE = "Tuvimos un problema para responderte. Probá de nuevo en un rato."
+FORBIDDEN = "Este sitio no está habilitado para usar el chat."
 
 
 class LimitReached(Exception):
@@ -75,6 +88,10 @@ class LimitReached(Exception):
 
 class UnknownSession(Exception):
     pass
+
+
+class OriginNotAllowed(Exception):
+    """El pedido viene de un sitio que no está en la lista de dominios de la empresa."""
 
 
 @dataclass
@@ -213,77 +230,169 @@ def _exceeded(deps: WebDeps, usage: _Usage) -> str | None:
     return None
 
 
-PAGE = Path(__file__).resolve().parent / "static" / "index.html"
+STATIC = Path(__file__).resolve().parent / "static"
+_SLUG = re.compile(r"^[a-z0-9-]{3,60}$")
+# Preguntas sugeridas de la demo, si nadie cargó otras en el panel.
+DEMO_SUGGESTIONS = [
+    "¿Dónde está mi pedido 1001?",
+    "¿Tienen cuotas sin interés?",
+    "¿Abren los domingos?",
+    "Quiero hablar con una persona",
+]
+DEMO_NOTE = (
+    "Demo · Acme Store es una tienda ficticia. Para ver un pedido, verificate con "
+    "lucia@example.com."
+)
+
+
+def _shell(name: str, slug: str, note: str, accent: str) -> HTMLResponse:
+    """La página del chat: un marco que carga `/widget.js` en modo página. Es el mismo widget
+    que se instala en el sitio de un cliente, así las dos se ven iguales."""
+    text = (STATIC / "page.html").read_text(encoding="utf-8")
+    values = {
+        "title": f"{name} · Atención al cliente",
+        "slug": slug,
+        "note": note,
+        "accent": accent.lstrip("#"),
+    }
+    for key, value in values.items():
+        text = text.replace("{{" + key + "}}", html.escape(value, quote=True))
+    return HTMLResponse(text, headers={"Cache-Control": "no-cache"})
+
+
+def _channel_tenant(conn: psycopg.Connection, slug: str) -> uuid.UUID | None:
+    if not _SLUG.match(slug):
+        return None
+    channel = channel_for_number(conn, f"{WEB_PREFIX}{slug}", kind="web")
+    return channel.tenant_id if channel else None
+
+
+def _slug(deps: WebDeps, canal: str) -> str:
+    """El enlace pedido o, sin él, el del chat de la demo."""
+    return canal or deps.address.removeprefix(WEB_PREFIX)
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
 @router.get("/chat", response_class=HTMLResponse, include_in_schema=False)
-def page() -> HTMLResponse:
-    """Página del chat de Acme Store (un solo archivo, sin recursos externos)."""
-    return HTMLResponse(PAGE.read_text(encoding="utf-8"), headers={"Cache-Control": "no-cache"})
-
-
-def _js(value: str) -> str:
-    """Cadena de JavaScript segura dentro de <script> (no puede cerrar la etiqueta)."""
-    return json.dumps(value).replace("<", "\\u003c").replace(">", "\\u003e")
-
-
-def company_page(name: str, slug: str) -> str:
-    """La página del chat para una empresa: la misma de la demo, con su nombre, su enlace y
-    sin los ejemplos de Acme."""
-    safe = html.escape(name)
-    text = PAGE.read_text(encoding="utf-8")
-    start, end = text.index(HOW_START), text.index(HOW_END)
-    text = text[:start] + COMPANY_FOOTER + text[end:]
-    text = HELP.sub(COMPANY_HELP, text, count=1)
-    text = SUGGESTIONS.sub("var SUGGESTIONS = [];", text, count=1)
-    text = text.replace('var KEY = "acme-chat";', f"var KEY = {_js('chat-' + slug)};")
-    text = text.replace(
-        'fetch("/chat/session", { method: "POST" })',
-        f'fetch("/chat/session?canal=" + encodeURIComponent({_js(slug)}),'
-        ' { method: "POST" })',
-    )
-    greeting = f"¡Hola! Soy el asistente virtual de {name}. ¿En qué te puedo ayudar?"
-    text = GREETING.sub(lambda _: f"var GREETING = {_js(greeting)};", text, count=1)
-    text = text.replace('"Equipo de Acme Store"', _js(f"Equipo de {name}"))
-    return text.replace("Acme Store", safe)
-
-
-HOW_START = "Demo de Enterprise Data AI"
-HOW_END = '<button type="button" id="how">'
-COMPANY_FOOTER = "Chat de prueba · "
-# El cuadro "Cómo probarla" de la demo trae ejemplos de Acme: cada empresa tiene el suyo.
-HELP = re.compile(r'<h2 id="help-title">.*?</ul>', re.S)
-COMPANY_HELP = (
-    '<h2 id="help-title">Chat de prueba</h2><p class="lead">Este chat usa el asistente de '
-    "Acme Store con sus tipos de caso activos, sus herramientas aprobadas y sus documentos."
-    "</p><ul><li>Escribí como lo haría un cliente. Las conversaciones aparecen en el panel, "
-    "en Casos.</li><li>Cada conversación tiene hasta 20 mensajes.</li></ul>"
-)
-SUGGESTIONS = re.compile(r"var SUGGESTIONS = \[.*?\];")
-GREETING = re.compile(r'var GREETING = ".*?";')
-_SLUG = re.compile(r"^[a-z0-9-]{3,60}$")
+def page(deps: Deps) -> HTMLResponse:
+    """Página del chat de la demo (Acme Store)."""
+    slug = _slug(deps, "")
+    with deps.connection() as conn:
+        tenant_id = _channel_tenant(conn, slug)
+        found = widget.load(conn, tenant_id) if tenant_id else None
+    if found is None:  # sin `make demo-setup`: el widget explica que el chat no está disponible
+        return _shell("Atención al cliente", slug, DEMO_NOTE, widget.DEFAULT_ACCENT)
+    return _shell(found.name, slug, DEMO_NOTE, found.accent)
 
 
 @router.get("/c/{slug}", response_class=HTMLResponse, include_in_schema=False)
 def company_chat(slug: str, deps: Deps) -> HTMLResponse:
-    """El chat de prueba de una empresa. El enlace lleva una parte al azar: no se adivina."""
-    if not _SLUG.match(slug):
-        raise HTTPException(status_code=404, detail="Chat inexistente")
+    """El chat de una empresa en una página propia. El enlace lleva una parte al azar: no se
+    adivina."""
     with deps.connection() as conn:
-        channel = channel_for_number(conn, f"{WEB_PREFIX}{slug}", kind="web")
-        if channel is None:
+        tenant_id = _channel_tenant(conn, slug)
+        if tenant_id is None:
             raise HTTPException(status_code=404, detail="Chat inexistente")
-        with tenant_scope(conn, channel.tenant_id):
-            row = conn.execute(
-                "select name from tenants where id = %s", (channel.tenant_id,)
-            ).fetchone()
-    assert row is not None
-    return HTMLResponse(company_page(str(row[0]), slug), headers={"Cache-Control": "no-cache"})
+        found = widget.load(conn, tenant_id)
+    return _shell(found.name, slug, f"Chat de {found.name}", found.accent)
+
+
+# -- widget instalable (decisión 031) --------------------------------------------------------
+@router.get("/widget.js", include_in_schema=False)
+def widget_script() -> Response:
+    """El widget: un solo archivo, sin dependencias. El cliente lo carga con una línea de
+    `<script>` desde su sitio."""
+    return Response(
+        (STATIC / "widget.js").read_text(encoding="utf-8"),
+        media_type="application/javascript; charset=utf-8",
+        headers={
+            "Cache-Control": "public, max-age=300",
+            "Access-Control-Allow-Origin": "*",
+            "Cross-Origin-Resource-Policy": "cross-origin",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+def _cors(request: Request, domains: tuple[str, ...]) -> dict[str, str]:
+    """Encabezados CORS para un pedido al chat. `OriginNotAllowed` si viene de un sitio que la
+    empresa no habilitó."""
+    origin = request.headers.get("origin")
+    if not widget.origin_allowed(origin, request.headers.get("host", ""), domains):
+        raise OriginNotAllowed
+    return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"} if origin else {}
+
+
+@router.options("/chat/session", include_in_schema=False)
+@router.options("/chat/messages", include_in_schema=False)
+@router.options("/chat/updates", include_in_schema=False)
+def preflight(request: Request) -> Response:
+    """Antes de mandar JSON a otro servidor, el navegador pregunta. Acá se le dice que sí: el
+    dominio se controla en el pedido real, que es el que trae la empresa."""
+    return Response(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin") or "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Max-Age": "600",
+            "Vary": "Origin",
+        },
+    )
+
+
+@router.get("/chat/widget/config")
+def widget_config(request: Request, deps: Deps, canal: str = "") -> JSONResponse:
+    """Lo que el widget necesita para dibujarse: la marca de la empresa. Si el sitio no está
+    habilitado responde `allowed: false`, y el widget no se muestra."""
+    slug = _slug(deps, canal)
+    with deps.connection() as conn:
+        tenant_id = _channel_tenant(conn, slug)
+        if tenant_id is None:
+            raise HTTPException(status_code=404, detail="Chat inexistente")
+        found = widget.load(conn, tenant_id)
+    headers = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
+    origin, host = request.headers.get("origin"), request.headers.get("host", "")
+    if not widget.origin_allowed(origin, host, found.domains):
+        return JSONResponse({"allowed": False}, headers=headers)
+    version = int(found.updated_at.timestamp()) if found.updated_at else 0
+    return JSONResponse(
+        {
+            "allowed": True,
+            "name": found.name,
+            "accent": found.accent,
+            "logo": f"/chat/widget/logo/{slug}?v={version}" if found.has_logo else None,
+            "greeting": widget.greeting(found.name),
+            "suggestions": list(found.suggestions)
+            or (DEMO_SUGGESTIONS if slug == _slug(deps, "") else []),
+            "limit": MESSAGE_LIMIT,
+        },
+        headers=headers,
+    )
+
+
+@router.get("/chat/widget/logo/{slug}", include_in_schema=False)
+def widget_logo(slug: str, deps: Deps) -> Response:
+    with deps.connection() as conn:
+        tenant_id = _channel_tenant(conn, slug)
+        found = widget.logo(conn, tenant_id) if tenant_id else None
+    if found is None:
+        raise HTTPException(status_code=404, detail="Sin logo")
+    return Response(
+        found[0],
+        media_type=found[1],
+        headers={
+            "Cache-Control": "public, max-age=300",
+            "Cross-Origin-Resource-Policy": "cross-origin",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/chat/session", status_code=201)
-def create_session(deps: Deps, canal: str = "") -> dict[str, Any]:
+def create_session(
+    request: Request, response: Response, deps: Deps, canal: str = ""
+) -> dict[str, Any]:
     """Sesión nueva en el chat de la demo o, con `canal`, en el de una empresa."""
     if canal and not _SLUG.match(canal):
         raise HTTPException(status_code=404, detail="Chat inexistente")
@@ -291,6 +400,10 @@ def create_session(deps: Deps, canal: str = "") -> dict[str, Any]:
     token = secrets.token_urlsafe(32)
     with deps.connection() as conn:
         tenant_id = _tenant(conn, address)
+        try:
+            response.headers.update(_cors(request, widget.load(conn, tenant_id).domains))
+        except OriginNotAllowed as error:
+            raise HTTPException(status_code=403, detail=FORBIDDEN) from error
         with tenant_scope(conn, tenant_id):
             conn.execute(
                 "insert into web_sessions (tenant_id, token_hash) values (%s, %s)",
@@ -299,13 +412,16 @@ def create_session(deps: Deps, canal: str = "") -> dict[str, Any]:
     return {"session": token, "limit": MESSAGE_LIMIT, "remaining": MESSAGE_LIMIT}
 
 
-def _precheck(deps: WebDeps, token: str, ip_hash: str) -> tuple[str | None, str, uuid.UUID]:
+def _precheck(
+    deps: WebDeps, token: str, ip_hash: str, request: Request
+) -> tuple[str | None, str, uuid.UUID, dict[str, str]]:
     """(límite alcanzado antes de abrir el stream, o None; dirección del chat de la sesión; su
-    empresa)."""
+    empresa; encabezados CORS). `OriginNotAllowed` si el sitio no está habilitado."""
     with deps.connection() as conn:
         tenant_id, address = _route(conn, token)
+        cors = _cors(request, widget.load(conn, tenant_id).domains)
         scope = _exceeded(deps, _usage(conn, tenant_id, token, ip_hash, lock=False))
-        return scope, address, tenant_id
+        return scope, address, tenant_id, cors
 
 
 def _process(
@@ -356,8 +472,9 @@ def _event(name: str, data: dict[str, Any]) -> str:
     return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _limit_event(scope: str) -> str:
-    return _event("limit", {"scope": scope, "message": LIMIT_MESSAGES[scope]})
+def _limit_event(scope: str, demo: bool = True) -> str:
+    messages = LIMIT_MESSAGES if demo else COMPANY_LIMIT_MESSAGES
+    return _event("limit", {"scope": scope, "message": messages[scope]})
 
 
 async def _stream(
@@ -372,7 +489,7 @@ async def _stream(
     try:
         remaining = await run_in_threadpool(_process, deps, channel, messages, token, ip_hash)
     except LimitReached as limit:
-        yield _limit_event(limit.scope)
+        yield _limit_event(limit.scope, channel.address == deps.address)
         return
     except Exception as error:
         logger.exception("El chat web no pudo responder")
@@ -397,7 +514,9 @@ async def _only(chunk: str) -> AsyncIterator[str]:
 
 
 @router.get("/chat/updates")
-def updates(deps: Deps, session: str = "", after: str = "") -> dict[str, Any]:
+def updates(
+    request: Request, response: Response, deps: Deps, session: str = "", after: str = ""
+) -> dict[str, Any]:
     """Mensajes de una persona del equipo para esta sesión (respuestas o avisos desde el panel),
     posteriores a `after`. La página lo consulta cada pocos segundos."""
     if not _TOKEN.match(session):
@@ -409,8 +528,11 @@ def updates(deps: Deps, session: str = "", after: str = "") -> dict[str, Any]:
     with deps.connection() as conn:
         try:
             tenant_id, _ = _route(conn, session)
+            response.headers.update(_cors(request, widget.load(conn, tenant_id).domains))
         except UnknownSession as error:
             raise HTTPException(status_code=401, detail="Sesión inválida") from error
+        except OriginNotAllowed as error:
+            raise HTTPException(status_code=403, detail=FORBIDDEN) from error
         with tenant_scope(conn, tenant_id):
             rows = conn.execute(
                 "select m.id, m.text, m.created_at from case_messages m"
@@ -435,14 +557,18 @@ async def post_message(request: Request, deps: Deps) -> StreamingResponse:
     ip_hash = _ip_hash(client_ip(deps.client_ip, request.headers, peer))
     try:
         token = session_token(body)
-        scope, address, tenant_id = await run_in_threadpool(_precheck, deps, token, ip_hash)
+        scope, address, tenant_id, cors = await run_in_threadpool(
+            _precheck, deps, token, ip_hash, request
+        )
         channel = WebChannel(address)  # el chat de la empresa de la sesión
         messages = channel.receive(str(request.url), body, request.headers)
     except (InvalidSignature, UnknownSession) as error:
         raise HTTPException(status_code=401, detail="Sesión inválida") from error
-    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    except OriginNotAllowed as error:
+        raise HTTPException(status_code=403, detail=FORBIDDEN) from error
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no", **cors}
     if scope is not None:  # sin correr el agente
-        stream = _only(_limit_event(scope))
+        stream = _only(_limit_event(scope, address == deps.address))
     else:
         stream = _stream(deps, channel, messages, token, ip_hash, tenant_id)
     return StreamingResponse(stream, media_type="text/event-stream", headers=headers)

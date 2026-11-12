@@ -80,8 +80,8 @@ Una línea `ALERTA <tipo> clave=valor…` de nivel WARNING. Cualquier recolector
 
 ## Pendiente
 
-- CSAT.
+- ~~CSAT.~~ Hecho en la decisión 033.
 - Alerta por caída de la tasa de resolución (spec).
 - Errores del worker de WhatsApp en `error_events`: hoy solo se registran los del chat web.
-- Un destino para las alertas (email o chat). Hoy quedan en los logs.
+- ~~Un destino para las alertas.~~ Se envían por email al operador (decisión 033).
 - Gráficos en la página Métricas.

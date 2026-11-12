@@ -177,7 +177,17 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
         return _forbidden()
     if session.tenant_id is None:
         return _no_tenant()
+    if not session.admin and not _company_exists(deps, session.tenant_id):
+        return _to_login()  # la empresa fue borrada: su sesión deja de servir
     return Ctx(session, session.tenant_id, auth.csrf_token(session.token))
+
+
+def _company_exists(deps: PanelDeps, tenant_id: uuid.UUID) -> bool:
+    with deps.connection() as conn, tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "select 1 from tenants where id = %s and status = 'active'", (tenant_id,)
+        ).fetchone()
+    return row is not None
 
 
 def _money(value: Any) -> str:
@@ -597,6 +607,10 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "case_resolved":
         who = RESOLVED_BY.get(str(p.get("resuelto_por")), "")
         return f"Caso resuelto {who}".strip(), esc(p.get("motivo"))
+    if kind == "csat_answered":
+        said = "se resolvió" if p.get("resuelto") else "no se resolvió"
+        extra = " (dejó un comentario)" if p.get("con_comentario") else ""
+        return "Satisfacción", f"El cliente dijo que su consulta {said}{extra}"
     if kind == "case_reopened":
         return "Caso reabierto", esc(p.get("motivo"))
     if kind == "turn_timing":

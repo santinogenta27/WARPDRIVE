@@ -14,7 +14,9 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from app.channels.web import widget
 from app.companies import connection as system
+from app.companies import delete as removal
 from app.companies import onboarding, review
 from app.companies.create import CompanyError, chat_slug, create_company
 from app.onboarding import ingest as ingestion
@@ -115,11 +117,33 @@ def _csrf(ctx: Ctx) -> str:
 
 
 # -- empresas (solo el operador de la plataforma) --------------------------------------------
+OPERATOR_ACTIONS = {"company_created": "Creó la empresa", "company_deleted": "Borró la empresa"}
+TABLE_LABELS = {
+    "cases": "casos",
+    "case_messages": "mensajes de casos",
+    "conversations": "conversaciones del historial",
+    "messages": "mensajes del historial",
+    "documents": "documentos",
+    "users": "usuarios",
+    "contacts": "contactos",
+    "audit_events": "eventos de auditoría",
+    "tools": "herramientas",
+    "case_types": "tipos de caso",
+}
+
+
+def _deleted_note(detail: Any) -> str:
+    rows = (detail or {}).get("filas") if isinstance(detail, dict) else None
+    if not rows:
+        return ""
+    return f' <span class="muted small">· {sum(rows.values())} filas en {len(rows)} tablas</span>'
+
+
 def _companies(deps: PanelDeps) -> list[tuple[Any, ...]]:
     # Lista de empresas: consulta fuera de un tenant, solo para el operador de la plataforma.
     with deps.connection() as conn:
         return conn.execute(
-            "select t.name, t.created_at, (select string_agg(u.email, ', ') from users u"
+            "select t.id, t.name, t.created_at, (select string_agg(u.email, ', ') from users u"
             " where u.tenant_id = t.id and u.password_hash is not null),"
             " (select c.phone_number_id from channels c where c.tenant_id = t.id"
             "  and c.kind = 'web' and c.status = 'active' order by c.created_at limit 1)"
@@ -133,14 +157,28 @@ def _companies_page(ctx: Ctx, deps: PanelDeps, notice: str, created: str = "") -
     rows = "".join(
         f"<tr><td><b>{esc(name)}</b></td><td>{esc(users)}</td>"
         f'<td class="mono">/c/{esc(str(address or "")[4:])}</td>'
-        f"<td>{local_time(created_at, '%d/%m/%Y')}</td></tr>"
-        for name, created_at, users, address in _companies(deps)
+        f"<td>{local_time(created_at, '%d/%m/%Y')}</td>"
+        f'<td><a href="/panel/empresas/{tenant_id}/borrar">Borrar…</a></td></tr>'
+        for tenant_id, name, created_at, users, address in _companies(deps)
     )
     table = (
-        f"<table><tr><th>Empresa</th><th>Usuario</th><th>Chat de prueba</th><th>Alta</th></tr>"
-        f"{rows}</table>"
+        f"<table><tr><th>Empresa</th><th>Usuario</th><th>Chat de prueba</th><th>Alta</th>"
+        f"<th></th></tr>{rows}</table>"
         if rows
         else '<p class="muted">Todavía no creaste ninguna empresa.</p>'
+    )
+    with deps.connection() as conn:
+        actions = removal.recent(conn)
+    log_rows = "".join(
+        f"<tr><td>{local_time(at, '%d/%m/%Y %H:%M')}</td><td>{esc(operator)}</td>"
+        f"<td>{esc(OPERATOR_ACTIONS.get(action, action))} {esc(company_name)}"
+        f"{_deleted_note(detail)}</td></tr>"
+        for at, operator, action, company_name, detail in actions
+    )
+    log = (
+        f"<table><tr><th>Fecha</th><th>Operador</th><th>Acción</th></tr>{log_rows}</table>"
+        if log_rows
+        else '<p class="muted">Todavía no hay acciones registradas.</p>'
     )
     body = f"""<h1>Empresas</h1><p class="lead">Cada empresa tiene su usuario, sus datos y su
 agente, aislados de las demás. Nace vacía: todo lo que su agente sabe sale de su propio
@@ -155,7 +193,9 @@ onboarding.</p>{notice}{created}
 <input id="clave" name="clave" type="password" required minlength="{auth.MIN_PASSWORD}"
  autocomplete="new-password">
 <p><button class="primary" type="submit">Crear empresa</button></p></form></div>
-<div class="card"><h2 style="margin-top:0">Empresas creadas</h2>{table}</div>"""
+<div class="card"><h2 style="margin-top:0">Empresas creadas</h2>{table}</div>
+<div class="card"><h2 style="margin-top:0">Registro del operador</h2>{log}
+<p class="muted small">Altas y borrados de empresas. No se puede modificar ni borrar.</p></div>"""
     return HTMLResponse(page("Empresas", body, active="empresas", session=ctx.session))
 
 
@@ -180,6 +220,9 @@ def create_company_route(request: Request, form: Form, deps: Deps) -> Response:
         with deps.connection() as conn:
             company = create_company(
                 conn, form.get("nombre", ""), form.get("email", ""), form.get("clave", "")
+            )
+            removal.record(
+                conn, ctx.session.email, "company_created", company.tenant_id, company.name
             )
     except CompanyError as error:
         return _back("empresas", error=str(error))
@@ -389,6 +432,65 @@ def start_onboarding(request: Request, form: Form, deps: Deps) -> Response:
     return _back("onboarding", ok="El análisis empezó.")
 
 
+ONLY_OPERATOR_DELETES = "Solo el operador de la plataforma puede borrar una empresa."
+
+
+@router.get("/empresas/{tenant_id}/borrar", response_class=HTMLResponse)
+def delete_company_page(tenant_id: uuid.UUID, request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    if not ctx.session.admin:
+        return _forbidden(ONLY_OPERATOR_DELETES)
+    with deps.connection() as conn:
+        found = removal.company(conn, tenant_id)
+        rows = removal.counts(conn, tenant_id) if found else {}
+    if found is None:
+        return _not_found("Esa empresa", ctx.session)
+    name = found[0]
+    known = [(TABLE_LABELS[t], rows[t]) for t in TABLE_LABELS if rows.get(t)]
+    other = sum(count for table, count in rows.items() if table not in TABLE_LABELS)
+    items = "".join(f"<li><b>{count}</b> {esc(label)}</li>" for label, count in known)
+    if other:
+        items += f"<li><b>{other}</b> filas más (configuración, uso, sesiones del chat…)</li>"
+    body = f"""<p><a href="/panel/empresas">← Empresas</a></p>
+<div class="card alert" style="max-width:640px;color:var(--ink)">
+<h1 style="color:var(--bad)">Borrar {esc(name)}</h1>
+<p><b>Esto no se puede deshacer.</b> Se borran todos los datos de la empresa:</p>
+<ul>{items or "<li>La empresa todavía no tiene datos.</li>"}</ul>
+<p>También se borran sus usuarios, su chat, la conexión con su sistema y sus credenciales. Sus
+usuarios no van a poder entrar más. En el registro del operador queda quién la borró y cuándo,
+sin datos de la empresa.</p>
+<form method="post" action="/panel/empresas/{tenant_id}/borrar">{_csrf(ctx)}
+<label for="nombre">Para confirmar, escribí el nombre de la empresa: {esc(name)}</label>
+<input id="nombre" name="nombre" required autocomplete="off">
+<p class="row"><button class="danger" type="submit">Borrar la empresa y todos sus datos</button>
+<a class="btn" href="/panel/empresas">Cancelar</a></p></form></div>"""
+    return HTMLResponse(page("Borrar empresa", body, active="empresas", session=ctx.session))
+
+
+@router.post("/empresas/{tenant_id}/borrar")
+def delete_company_route(
+    tenant_id: uuid.UUID, request: Request, form: Form, deps: Deps
+) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    if not ctx.session.admin:
+        return _forbidden(ONLY_OPERATOR_DELETES)
+    try:
+        with deps.connection() as conn:
+            deleted = removal.delete_company(
+                conn, tenant_id, operator=ctx.session.email, confirm_name=form.get("nombre", "")
+            )
+    except removal.DeleteError as error:
+        return _back("empresas", error=str(error))
+    total = sum(deleted.values())
+    return _back(
+        "empresas", ok=f"La empresa quedó borrada: {total} filas en {len(deleted)} tablas."
+    )
+
+
 # -- configuración: tipos de caso, herramientas, sistema y chat ------------------------------
 MODES = {
     "demo": ("resolved", "Sistema de demo (API simulada de Acme)"),
@@ -568,6 +670,107 @@ a tu sistema con tus credenciales. Hasta que actives, el asistente usa respuesta
 <div class="row">{probe}{activate}</div>{test}</div>"""
 
 
+def _public_url(request: Request) -> str:
+    """La dirección pública del servicio. Detrás de un proxy (Render), el protocolo real llega
+    en X-Forwarded-Proto."""
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme).split(",")[0].strip()
+    return f"{proto}://{request.headers.get('host') or request.url.netloc}"
+
+
+# Vista previa: cada cambio del formulario se ve en el widget antes de guardar.
+WIDGET_PREVIEW_JS = """(function(){var f=document.getElementById("widget-form");if(!f)return;
+var logo=null;function v(n){return f.elements[n].value}
+function push(){if(!window.EnterpriseChat)return;var c={name:v("nombre").trim(),accent:v("color"),
+suggestions:v("sugerencias").split("\\n").map(function(s){return s.trim()}).filter(Boolean)
+.slice(0,4)};
+if(logo!==null)c.logo=logo;window.EnterpriseChat.setBrand(c)}
+f.elements.pick.addEventListener("input",function(){f.elements.color.value=this.value;push()});
+f.elements.color.addEventListener("input",function(){if(/^#[0-9a-fA-F]{6}$/.test(this.value))
+f.elements.pick.value=this.value;push()});
+f.elements.nombre.addEventListener("input",push);f.elements.sugerencias.addEventListener("input",push);
+f.elements.logo.addEventListener("change",function(){var file=this.files[0];if(!file)return;
+var r=new FileReader();r.onload=function(){logo=r.result;push()};r.readAsDataURL(file)});
+var copy=document.getElementById("copy-snippet");if(copy)copy.addEventListener("click",function(){
+var text=document.getElementById("snippet").textContent;
+(navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(function(){
+copy.textContent="Copiado"},function(){var r=document.createRange();
+r.selectNodeContents(document.getElementById("snippet"));var s=getSelection();s.removeAllRanges();
+s.addRange(r)})})})();"""
+
+
+def _widget_html(ctx: Ctx, request: Request, slug: str, found: widget.WidgetSettings) -> str:
+    """Tarjeta "Widget para tu sitio": el código para copiar, los dominios, la marca y la
+    vista previa (el widget real, dentro de la página)."""
+    code = widget.snippet(_public_url(request), slug)
+    logo_note = (
+        '<label style="font-weight:400"><input type="checkbox" name="quitar_logo" value="si"> '
+        "Quitar el logo actual</label>"
+        if found.has_logo
+        else ""
+    )
+    return f"""<div class="card"><h3 style="margin-top:0">1. Pegá este código en tu sitio</h3>
+<p class="muted small">Va antes de <span class="mono">&lt;/body&gt;</span>, en todas las páginas
+donde quieras el chat. Aparece una burbuja abajo a la derecha.</p>
+<pre id="snippet">{esc(code)}</pre>
+<button type="button" id="copy-snippet">Copiar código</button>
+<form method="post" action="/panel/configuracion/widget" enctype="multipart/form-data"
+ id="widget-form">{_csrf(ctx)}
+<h3>2. Dominios permitidos</h3>
+<label for="dominios">Sitios donde se puede usar el chat (uno por línea)</label>
+<textarea id="dominios" name="dominios" class="mono" style="min-height:70px"
+ placeholder="www.tutienda.com&#10;*.tutienda.com">{esc(chr(10).join(found.domains))}</textarea>
+<p class="muted small">El chat solo funciona en estos sitios. Sin ninguno, el widget no se
+muestra en sitios ajenos. Usá <span class="mono">*.tutienda.com</span> para todos los
+subdominios y <span class="mono">localhost</span> para probar en tu computadora.</p>
+<h3>3. Marca</h3>
+<div class="row" style="align-items:flex-start"><div class="grow" style="min-width:260px">
+<label for="nombre">Nombre que ve el cliente</label>
+<input id="nombre" name="nombre" maxlength="60" required value="{esc(found.name)}">
+<label for="color">Color de acento</label>
+<div class="row"><input type="color" name="pick" aria-label="Elegir color"
+ value="{esc(found.accent)}" style="width:54px;height:44px;padding:4px">
+<input id="color" name="color" class="mono grow" maxlength="7" required
+ pattern="#[0-9a-fA-F]{{6}}" value="{esc(found.accent)}"></div>
+<label for="logo">Logo (PNG, JPG o WebP, cuadrado, hasta 200 KB)</label>
+<input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">{logo_note}
+<label for="sugerencias">Preguntas sugeridas (hasta 4, una por línea)</label>
+<textarea id="sugerencias" name="sugerencias" style="min-height:96px"
+ placeholder="¿Hacen envíos?">{esc(chr(10).join(found.suggestions))}</textarea>
+<p class="muted small">Se muestran cuando la conversación está vacía.</p>
+<button class="primary" type="submit">Guardar widget</button></div>
+<div><label>Vista previa</label>
+<div id="widget-preview" style="width:min(372px,calc(100vw - 66px));height:560px"></div>
+<p class="muted small">Es el chat real de {esc(ctx.session.company)}: lo que escribas acá
+aparece en Casos.</p></div></div></form></div>
+<script src="/widget.js" data-chat="{esc(slug)}" data-mode="inline"
+ data-target="#widget-preview"></script><script>{WIDGET_PREVIEW_JS}</script>"""
+
+
+@router.post("/configuracion/widget")
+async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
+    if data.too_big:
+        return _back("configuracion", error="El logo es demasiado grande.")
+    ctx = enter(request, deps, data.fields)
+    if isinstance(ctx, Response):
+        return ctx
+    fields = data.fields
+    try:
+        with deps.connection() as conn:
+            widget.save(
+                conn,
+                ctx.tenant_id,
+                name=fields.get("nombre", ""),
+                accent=fields.get("color", ""),
+                domains=fields.get("dominios", ""),
+                suggestions=fields.get("sugerencias", ""),
+                logo=data.files[0].data if data.files else None,
+                remove_logo=fields.get("quitar_logo") == "si",
+            )
+    except widget.WidgetError as error:
+        return _back("configuracion", error=str(error))
+    return _back("configuracion", ok="Widget guardado.")
+
+
 @router.get("/configuracion", response_class=HTMLResponse)
 def settings_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
@@ -579,6 +782,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
         found = system.load(conn, ctx.tenant_id)
         mode = system.mode_for(conn, ctx.tenant_id)
         slug = chat_slug(conn, ctx.tenant_id)
+        brand = widget.load(conn, ctx.tenant_id)
     approved = {t.name for t in tools if t.approved}
     chat = (
         f"<p>Probá el asistente de {esc(ctx.session.company)} en su propio chat: "
@@ -597,7 +801,12 @@ queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
 <h2>Herramientas</h2>{_tools_html(ctx, tools)}
 <h2>Sistema de la empresa</h2>{_system_html(ctx, found, mode)}
-<h2>Chat de prueba</h2><div class="card">{chat}</div>"""
+<h2>Chat de prueba</h2><div class="card">{chat}</div>
+<h2>Widget para tu sitio</h2>{
+        _widget_html(ctx, request, slug, brand)
+        if slug
+        else '<p class="muted">Esta empresa no tiene un chat web.</p>'
+    }"""
     return HTMLResponse(page("Configuración", body, active="configuracion", session=ctx.session))
 
 
