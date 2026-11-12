@@ -47,10 +47,11 @@ def test_un_caso_se_reconstruye_completo(stack: SimulatedStack) -> None:
 
 
 def _tamper(stack: SimulatedStack, sql: str, params: tuple) -> None:  # type: ignore[type-arg]
-    """Simula a alguien con acceso de dueño a la base que salta el trigger de solo inserción."""
-    stack.conn.execute("alter table audit_events disable trigger audit_events_no_update_delete")
+    """Simula a alguien con acceso de dueño a la base que salta los triggers de solo inserción
+    (todos: `user` vale también para los que agregue una migración nueva)."""
+    stack.conn.execute("alter table audit_events disable trigger user")
     stack.conn.execute(sql, params)
-    stack.conn.execute("alter table audit_events enable trigger audit_events_no_update_delete")
+    stack.conn.execute("alter table audit_events enable trigger user")
 
 
 def test_alterar_un_evento_rompe_la_cadena(stack: SimulatedStack) -> None:
