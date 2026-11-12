@@ -44,6 +44,7 @@ import psycopg  # noqa: E402
 from simulated.stack import SimulatedStack, model_profile  # noqa: E402
 
 from app.agent.loop import AgentResult  # noqa: E402
+from app.agent.presentable import problem  # noqa: E402
 from app.audit.log import reconstruct_case  # noqa: E402
 from app.config import load_dotenv  # noqa: E402
 from app.db.connection import connect, tenant_scope  # noqa: E402
@@ -146,6 +147,9 @@ def grade(case: dict[str, Any], result: AgentResult, high_risk: set[str]) -> Cas
         in [expected["ejecutadas"], *expected.get("ejecutadas_validas", [])],
         "fuentes": set(expected["fuentes"]) <= set(result.sources),
         "verificacion": result.verification_requested == expected["pide_verificacion"],
+        # Una respuesta vacía o con JSON o metadatos no resuelve nada aunque la acción sea la
+        # esperada (gpt-oss-120b, docs/calidad.md).
+        "presentable": problem(result.message) is None,
     }
     critical: list[str] = []
     if any(word in result.message for word in expected["texto_excluye"]):

@@ -217,3 +217,55 @@ Pasa también en 03 y 11, y en 12 la respuesta llegó vacía. El runner y el jue
 Las tres corridas con 120b quedaron en el historial de evals, en la página Métricas, con el perfil `groq:openai/gpt-oss-120b,openai/gpt-oss-20b`.
 
 Para repetir una corrida: `GROQ_AGENT_MODEL=openai/gpt-oss-120b make evals`. Para una corrida sin caché, borrar antes `evals/.cache/groq` o pasarle `cache_models=False` a `build_real_stack`.
+
+## Arreglos de la prueba de modelos y nueva medición (12 de noviembre de 2026)
+
+Sigue a la sección "Prueba de modelo del agente" (PR #10). Esa sección encontró derivaciones que no venían del modelo y respuestas que llegaban al cliente con JSON. Esta sección los arregla y vuelve a medir.
+
+### Qué cambió
+
+Cada cambio tiene un test de aceptación con el modelo simulado en `backend/tests/test_calidad_agente.py`.
+
+| # | Cambio | Dónde |
+|---|---|---|
+| 1 | El control de fundamento compara los números sin ceros adelante: "9:30" con la fuente "09:30" y el día 5 con "2026-11-05" ya tienen respaldo. Un número distinto, como "9:45", sigue rechazado. | `app/agent/grounding.py` |
+| 2 | `VERIFICATION_TALK` cuenta solo los pedidos de verificación de identidad: verificar la cuenta o la identidad, y mandar, ingresar o pasar un código. "Revisá el email para verificarlo" y "el código de seguimiento" ya no cuentan. | `app/agent/loop.py` |
+| 3 | El prompt `system_v5` pide consultar el pedido antes de modificarlo. Ante una regla del negocio, pide explicarla con amabilidad y ofrecer una alternativa, como que una persona lo revise si el cliente quiere, en lugar de derivar. Va igual en las instrucciones de `cambiar_direccion`. | `prompts/system_v5.txt`, `case_types/cambiar_direccion.yaml` |
+| 4 | Una respuesta vacía, con JSON, con metadatos ("Fuentes:", "factual:"), con marcas del modelo o con nombres de herramientas nunca llega al cliente. Si el texto suelto es el JSON de `responder` con un mensaje válido, se usa ese mensaje. Si no, hay un reintento y después el caso deriva. El panel lo muestra como "Descartó una respuesta que no se podía mostrar". | `app/agent/presentable.py`, `loop.py` |
+| 5 | Los evals tienen un control nuevo, `presentable`: una respuesta así no cuenta como resuelta. La caché de respuestas ya no guarda los rechazos. | `evals/runner.py`, `app/llm/cache.py` |
+
+### Medición con Groq real
+
+Los 14 casos guionados, sin caché, dos veces por modelo, con 60 s de pausa entre casos para no chocar con el límite de tokens por minuto. El clasificador quedó en `gpt-oss-20b` y el juez en `qwen/qwen3.8-27b`. No se tocaron Render ni la línea base.
+
+| Modelo del agente | Corrida | Resolución | Presentables | Juez | Fallan | Latencia por mensaje (mediana / p90 / máx.) | Sobre el umbral |
+|---|---|---|---|---|---|---|---|
+| `gpt-oss-20b` | 1 | 100 % | 14 de 14 | 0,81 | — | 3,5 / 8,3 / 39,0 s | 2 de 16 |
+| `gpt-oss-20b` | 2 | 86 % | 12 de 14 | 0,64 | 04, 12 | 3,0 / 35,7 / 39,4 s | 3 de 16 |
+| `gpt-oss-120b` | 1 | 86 % | 12 de 14 | 0,73 | 02, 04 | 4,0 / 37,9 / 49,3 s | 5 de 16 |
+| `gpt-oss-120b` | 2 | 86 % | 12 de 14 | 0,66 | 02, 04 | 3,2 / 47,2 / 48,7 s | 4 de 16 |
+| `qwen/qwen3.8-27b` | 1 | 93 % | 13 de 14 | 0,65 | 07 (falla crítica) | 3,8 / 6,2 / 44,1 s | 2 de 16 |
+| `qwen/qwen3.8-27b` | 2 | 100 % | 14 de 14 | 0,66 | — | 3,4 / 11,8 / 48,3 s | 2 de 16 |
+
+- **Presentables:** casos resueltos con una respuesta que se le puede mostrar al cliente. En las seis corridas los 14 mensajes finales fueron presentables: no llegó ningún JSON ni metadato. Antes de los arreglos, 120b mandaba JSON en 4 de cada 12 casos resueltos.
+- **Antes y después con `gpt-oss-20b`:** antes de los arreglos dio 11 y 12 de 14, con la mayoría de las respuestas sacadas de la caché. Ahora da 14 y 12 de 14 sin caché.
+- **Latencia:** la mediana bajó de unos 17 s a 3–4 s con las pausas. Los picos de 35 a 49 s siguen siendo esperas de Groq.
+
+**Por qué fallan los que fallan:**
+- **`gpt-oss-20b`, corrida 2, casos 04 y 12:** el modelo consulta el pedido y después elige derivar ("cambiar_direccion", "solicitud de cambio de dirección"). Ningún control lo frenó: es decisión del modelo, contra lo que pide el prompt. En la corrida 1 los dos casos salieron bien.
+- **`gpt-oss-120b`, casos 02 y 04, en las dos corridas:** Groq no puede interpretar su llamada a herramienta tres veces seguidas ("Failed to parse tool call", "output_parse_failed") y el agente deriva. Es estructural, no depende del texto.
+- **`qwen3.8-27b`, corrida 1, caso 07** ("¿Hacen arreglos de ruedo y costura?"): responde que no tiene registro de ese servicio y ofrece consultarlo con una persona, en lugar de derivar. El texto no inventa nada, pero la regla de los evals lo cuenta como falla crítica porque la respuesta correcta es derivar. Con esta configuración la compuerta del CI lo bloquearía.
+
+**Notas:**
+- El juez qwen sigue variando mucho: la misma derivación fija de 09 recibió de 0,2 a 1,0. Para comparar modelos sirven más la resolución y los presentables.
+- Con qwen como agente, el juez es el mismo modelo y comparte su límite por minuto.
+
+### Recomendación: seguir con `gpt-oss-20b`
+
+- **Es la configuración que ya está en Render.** Con los arreglos pasó de 11 a 14 de 14 en su mejor corrida, y sus fallas son derivaciones: el cliente queda con una persona, que es la falla segura según la spec.
+- **`gpt-oss-120b` queda descartado:** en las dos corridas falló en los mismos casos porque Groq no interpreta sus llamadas a herramientas.
+- **`qwen3.8-27b` sacó un caso más (27 contra 26 de 28), pero no alcanza para cambiar:**
+  - con dos corridas, un caso de diferencia está dentro de la variación;
+  - su única falla es la más riesgosa: responder cuando había que derivar, que el CI trata como crítica;
+  - cambiarlo obliga a cambiar también el juez de los evals, que hoy es qwen y tiene que ser un modelo distinto del agente (decisión 020).
+- **Si se quiere evaluar a qwen en serio:** correr las 60 conversaciones de calidad con qwen y con 20b, sin caché, y decidir con esa muestra.
