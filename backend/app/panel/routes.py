@@ -597,6 +597,10 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "case_resolved":
         who = RESOLVED_BY.get(str(p.get("resuelto_por")), "")
         return f"Caso resuelto {who}".strip(), esc(p.get("motivo"))
+    if kind == "csat_answered":
+        said = "se resolvió" if p.get("resuelto") else "no se resolvió"
+        extra = " (dejó un comentario)" if p.get("con_comentario") else ""
+        return "Satisfacción", f"El cliente dijo que su consulta {said}{extra}"
     if kind == "case_reopened":
         return "Caso reabierto", esc(p.get("motivo"))
     if kind == "turn_timing":
