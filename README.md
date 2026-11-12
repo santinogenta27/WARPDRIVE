@@ -122,7 +122,7 @@ make api                    # http://localhost:8000 (chat) y /panel
 | [`docs/widget.md`](docs/widget.md) | Cómo instalar el chat en el sitio de un cliente |
 | [`docs/onboarding.md`](docs/onboarding.md) | El pipeline de autoconfiguración y sus formatos |
 | [`docs/calidad.md`](docs/calidad.md) | Mediciones de calidad con modelos reales |
-| [`docs/decisions/`](docs/decisions/) | Una nota por decisión técnica (001 a 031) |
+| [`docs/decisions/`](docs/decisions/) | Una nota por decisión técnica |
 
 ## Estado
 
