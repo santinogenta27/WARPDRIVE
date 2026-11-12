@@ -85,6 +85,7 @@ La página propia del chat acepta `?tema=claro` y `?tema=oscuro`.
 
 - **Mismo flujo que el chat de siempre:** verificación por código, aprobaciones, respuestas del equipo y límites.
 - **No rompe el sitio ni el sitio lo rompe:** vive en un Shadow DOM.
-- **Liviano:** un archivo de unos 30 KB, sin dependencias, cargado con `async`.
+- **Liviano:** un archivo de unos 35 KB, sin dependencias, cargado con `async`.
+- **Discreto:** panel de vidrio esmerilado que deja ver el sitio de fondo, encabezado translúcido sobre los mensajes y sin la barra de scroll del navegador: una fina aparece solo mientras se desplaza. El botón de enviar queda gris hasta que hay algo escrito.
 - **La conversación queda en el navegador del visitante.** Si cambia de página dentro del sitio, sigue donde estaba.
 - **Los dominios permitidos son un control de navegador.** Los límites de uso por sesión, por conexión y por día siguen valiendo.
