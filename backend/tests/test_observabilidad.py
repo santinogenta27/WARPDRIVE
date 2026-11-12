@@ -330,5 +330,5 @@ def test_los_evals_guardan_su_corrida_en_el_historial(
     assert runner.record_history("groq", report, "groq:modelo", conn) is True
     saved = metrics.collect(conn, stack.seed.tenant_id)["evals"]
     assert [(e["modo"], e["prompt"], e["modelo"], e["resolucion"]) for e in saved] == [
-        ("groq", "system_v4", "groq:modelo", 0.93)
+        ("groq", "system_v5", "groq:modelo", 0.93)
     ]
