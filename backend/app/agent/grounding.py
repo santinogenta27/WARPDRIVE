@@ -27,6 +27,11 @@ def _numbers(text: str) -> list[str]:
 _ON_THE_HOUR = re.compile(r"\b(\d{1,2}):00\b")
 
 
+def _plain(number: str) -> str:
+    """Sin ceros adelante: "9:30" y "09:30", o el día 5 y "2026-11-05", son el mismo dato."""
+    return number.lstrip("0") or "0"
+
+
 @dataclass(frozen=True)
 class GroundingVerdict:
     ok: bool
@@ -55,9 +60,9 @@ def check_grounding(
     if factual and not sources and not tool_backed:
         return GroundingVerdict(False, "afirmación factual sin fuente ni herramienta")
     sources_text = " ".join([*documents.values(), *evidence])
-    known = set(_NUMBER.findall(sources_text)) | set(_numbers(sources_text))
+    known = {_plain(n) for n in [*_NUMBER.findall(sources_text), *_numbers(sources_text)]}
     numbers = _numbers(_ON_THE_HOUR.sub(r"\1", message))
-    unsupported = sorted({n for n in numbers if n not in known})
+    unsupported = sorted({n for n in numbers if _plain(n) not in known})
     if unsupported:
         return GroundingVerdict(False, f"datos sin respaldo en las fuentes: {unsupported}")
     return GroundingVerdict(True)

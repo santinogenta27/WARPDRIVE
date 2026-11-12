@@ -38,6 +38,12 @@ class SimulatedClaude:
     # "tuteo" (responde con "tú" en lugar de voseo), "reverify" (ya verificado, vuelve a pedir
     # la verificación en texto hasta que se lo corrige), "approval_ungrounded" y
     # "approval_derive" (con la aprobación creada, inventa un monto o deriva).
+    # Lo que se vio con Groq real el 12/11/2026 (docs/calidad.md): "hora_sin_cero" (da la hora de
+    # despacho como "9:30"), "verificarlo" (explica un pedido ajeno con "para verificarlo"),
+    # "modifica_sin_consultar" (como gpt-oss-20b: cambia la dirección sin consultar el pedido y,
+    # ante la regla del negocio, deriva; sigue el prompt si este lo indica), "json_suelto" (escribe
+    # como texto el JSON de responder), "metadatos" y "vacio" (texto con "Fuentes: ... factual:"
+    # o vacío; con "_una_vez", corregido responde bien).
     mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
@@ -100,6 +106,9 @@ class SimulatedClaude:
             if self.mode == "tuteo":  # se escapa del voseo, como a veces el modelo real
                 text = f"{text} Dime si necesitas algo más."
             data = {"mensaje": text, "fuentes": sources or [], "factual": factual}
+            loose = _loose_text(self.mode, data, corrected)
+            if loose is not None:
+                return [{"type": "text", "text": loose}]
             return [self._tool_use("responder", data)]
 
         def escalate(reason: str) -> list[Any]:
@@ -135,9 +144,27 @@ class SimulatedClaude:
                 "de 6 dígitos a tu email.",
                 factual=False,
             )
+        system = json.dumps(body.get("system"), ensure_ascii=False)
         if order_id and results:
             name, call_input, result = results[-1]
+            if self.mode == "modifica_sin_consultar" and "error" in result:
+                if "regla del negocio" not in system:
+                    return escalate(f"No se pudo: {result['error']}")
             return self._after_tool(name, call_input, result, low, message, tool_names, reply)
+        address = re.search(r"pedido\s+\d+\s+a\s+(.*\d.*)$", message)
+        if (
+            self.mode == "modifica_sin_consultar"
+            and "Antes de modificar un pedido, consultalo" not in system
+            and order_id
+            and address
+            and "actualizar_direccion" in tool_names
+        ):
+            return [
+                self._tool_use(
+                    "actualizar_direccion",
+                    {"order_id": order_id, "address": address.group(1).strip()},
+                )
+            ]
         if order_id and "consultar_pedido" in tool_names:
             return [self._tool_use("consultar_pedido", {"order_id": order_id})]
 
@@ -165,6 +192,12 @@ class SimulatedClaude:
     ) -> list[Any]:
         order_id = call_input.get("order_id")
         if "error" in result:
+            if name == "consultar_pedido" and self.mode == "verificarlo":
+                return reply(
+                    f"No encontré el pedido {order_id} entre los tuyos. Revisá el email de "
+                    "confirmación para verificarlo.",
+                    factual=False,
+                )
             if name == "consultar_pedido":
                 return reply(
                     f"No encuentro el pedido {order_id} entre los pedidos asociados a tu número. "
@@ -224,6 +257,9 @@ class SimulatedClaude:
             if "cancel" in low and "cancelar_pedido" in tool_names:
                 return [self._tool_use("cancelar_pedido", {"order_id": order_id})]
             text = f"Tu pedido {order_id} está {_STATUS.get(str(status), status)}."
+            shipped = str(data.get("shipped_at") or "")
+            if self.mode == "hora_sin_cero" and len(shipped) >= 16:  # "09:30" → "9:30"
+                text += f" Salió a las {int(shipped[11:13])}:{shipped[14:16]}."
             if data.get("estimated_delivery"):
                 text += f" La fecha estimada de entrega es el {_date(data['estimated_delivery'])}."
             return reply(text)
@@ -233,6 +269,17 @@ class SimulatedClaude:
 
 
 # -- utilidades --------------------------------------------------------------------------
+def _loose_text(mode: str, data: dict[str, Any], corrected: bool) -> str | None:
+    """Texto suelto en lugar de la herramienta responder, como gpt-oss-120b."""
+    if mode == "json_suelto":
+        return json.dumps({"accion": "responder", **data}, ensure_ascii=False, indent=2)
+    if mode == "metadatos" or (mode == "metadatos_una_vez" and not corrected):
+        return f"{data['mensaje']}\n\nFuentes: {data['fuentes']}  factual: true"
+    if mode == "vacio" or (mode == "vacio_una_vez" and not corrected):
+        return ""
+    return None
+
+
 def _tag(text: str, name: str) -> str:
     found = re.search(rf"<{name}>(.*?)</{name}>", text, re.S)
     return found.group(1) if found else text

@@ -59,6 +59,10 @@ class CachingProvider:
         response = self._inner.create(
             model=model, messages=messages, max_tokens=max_tokens, system=system, **options
         )
+        if response.stop_reason == "refusal":
+            # Un rechazo (p. ej. Groq sin una salida válida) no se guarda: si no, se repetía en
+            # cada corrida siguiente sin volver a preguntarle al modelo.
+            return response
         payload = {
             "text": response.text,
             "model": response.model,

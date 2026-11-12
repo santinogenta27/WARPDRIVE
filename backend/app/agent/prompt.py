@@ -11,7 +11,9 @@ PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 # (dispara la verificación por código) y nunca pedir datos personales en texto (decisión 024).
 # v4: pedir el dato que falta en lugar de derivar, y responder con lo que los documentos dicen
 # del tema aunque no nombren lo puntual (decisión 027).
-SYSTEM_PROMPT_VERSION = "system_v4"
+# v5: consultar el pedido antes de modificarlo, explicar las reglas del negocio con una
+# alternativa en lugar de derivar, y un mensaje sin JSON ni metadatos (docs/calidad.md).
+SYSTEM_PROMPT_VERSION = "system_v5"
 
 TONES = {
     "rioplatense": (

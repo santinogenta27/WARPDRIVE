@@ -592,6 +592,8 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
         )
     if kind == "grounding_rejected":
         return "Descartó una respuesta sin respaldo", esc(p.get("reason"))
+    if kind == "format_rejected":
+        return "Descartó una respuesta que no se podía mostrar", esc(p.get("reason"))
     if kind == "final_action":
         named = ", ".join(esc(s) for s in p.get("sources") or [])
         cited = f"<br><span class=muted>Fuentes citadas: {named}</span>" if named else ""
