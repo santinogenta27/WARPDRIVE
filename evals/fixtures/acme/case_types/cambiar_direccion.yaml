@@ -4,5 +4,7 @@ datos_necesarios: [order_id, nueva_direccion]
 herramientas: [consultar_pedido, actualizar_direccion]
 condiciones:
   - Si el cliente no dijo la nueva dirección, pedísela (calle, número y ciudad) antes de actuar.
-  - Si el pedido ya fue despachado, explicá que no se puede y ofrecé derivar.
+  - Consultá el pedido antes de actualizarlo.
+  - Si el pedido ya fue despachado, explicá con amabilidad que no se puede y ofrecé que una
+    persona del equipo lo revise si el cliente quiere. No derives por eso.
 cierre: Confirmá la nueva dirección y la fecha estimada de entrega.

@@ -67,7 +67,7 @@ def test_una_consulta_comun_no_se_toma_por_amenaza(text: str) -> None:
 
 def test_el_prompt_y_las_instrucciones_piden_el_dato_que_falta() -> None:
     system = prompt.system_prompt("Acme Store", "rioplatense", "nombre: x")
-    assert prompt.SYSTEM_PROMPT_VERSION == "system_v4"
+    assert prompt.SYSTEM_PROMPT_VERSION == "system_v5"
     assert "No derives por un dato que falta" in system
     assert "no derives por eso" in system
     # Los tipos que descubre el onboarding ya no nacen con "si falta información, derivá".

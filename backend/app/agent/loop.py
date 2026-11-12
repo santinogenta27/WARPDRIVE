@@ -16,7 +16,7 @@ from typing import Any, Literal
 import psycopg
 import yaml
 
-from app.agent import prompt
+from app.agent import presentable, prompt
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
     CHAT,
@@ -138,8 +138,21 @@ LEGAL_THREAT = re.compile(
     r"(?i)\b(?:denunci\w+|demand(?:a|o|ar|arlos|arlas)\b|abogad\w+|carta\s+documento|juicio"
     r"|defensa\s+(?:del?|al)\s+consumidor|acci[oó]n\s+legal|acciones\s+legales)"
 )
-# Ya verificado, el modelo vuelve a hablar de códigos o de verificar (lo hizo Groq).
-VERIFICATION_TALK = re.compile(r"(?i)c[oó]digo|verific")
+# Ya verificado, el modelo vuelve a pedir la verificación de identidad o un código (lo hizo
+# Groq). Verificar otra cosa ("revisá el email de confirmación para verificarlo", "el código de
+# seguimiento") no cuenta: lo hizo gpt-oss-20b con un pedido ajeno y el caso terminaba derivado.
+VERIFICATION_TALK = re.compile(
+    r"(?i)verific\w*\s+(?:tu|su)\s+(?:identidad|cuenta|titularidad)"
+    r"|verificarte\b|verificar\s+que\s+sos"
+    r"|verificaci[oó]n\s+(?:de\s+(?:tu\s+)?(?:identidad|cuenta)|por\s+c[oó]digo)"
+    r"|c[oó]digo\s+(?:de\s+(?:verificaci[oó]n|seguridad|acceso|\d+\s+d[ií]gitos)|que\s+te)"
+    r"|\b(?:env[ií]\w*|mand\w*|ingres\w*|pas[aáeo]\w*)\s+(?:\w+\s+){0,2}c[oó]digo"
+    r"(?!\s+(?:de\s+)?(?:seguimiento|postal))"
+)
+FORMAT_CORRECTION = (
+    "Respuesta rechazada: llegó vacía o con JSON, metadatos o nombres de herramientas. Terminá "
+    "usando la herramienta responder (o derivar), con el texto para el cliente solo en mensaje."
+)
 VERIFIED_CORRECTION = (
     "El cliente ya está verificado (contacto verificado=sí): no le pidas verificación, códigos "
     "ni datos personales. Usá las herramientas para resolver su consulta."
@@ -201,6 +214,7 @@ class _Turn:
     decisions: list[GuardDecision] = field(default_factory=list)
     documents: list[SearchResult] = field(default_factory=list)
     grounding_retries: int = 0
+    format_retries: int = 0  # respuestas vacías o con JSON o metadatos (presentable.py)
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
@@ -578,10 +592,31 @@ class Agent:
                     {"mensaje": response.text, "fuentes": [], "factual": chat is None},
                     None,
                 )
+                # El JSON de la herramienta final escrito como texto (lo hizo gpt-oss-120b): si
+                # trae una respuesta válida, se usa esa en lugar de mandar el JSON.
+                loose = presentable.parse_loose(response.text)
+                if loose is not None and loose.get("accion") == "derivar":
+                    final_name, final_input = "derivar", {"motivo": loose["motivo"]}
+                elif loose is not None:
+                    final_input = {**loose, "factual": loose["factual"] and chat is None}
             elif final is not None and not business:
                 final_name, final_input, final_id = final.name, final.input, final.id
             else:
                 final_name = ""
+            if final_name == "responder":
+                # Vacío, JSON o metadatos nunca llegan al cliente: un reintento y después deriva.
+                issue = presentable.problem(str(final_input.get("mensaje") or ""))
+                if issue is not None:
+                    self._audit(
+                        turn, "format_rejected", {"reason": issue, "rejected_message": final_input}
+                    )
+                    if turn.format_retries >= 1:
+                        return self._give_up(turn, f"Respuesta impresentable: {issue}.", chat)
+                    turn.format_retries += 1
+                    if response.tool_calls or response.text.strip():  # sin bloques vacíos
+                        messages.append({"role": "assistant", "content": response.content})
+                    messages.append(_correction(final_id, FORMAT_CORRECTION))
+                    continue
             if final_name:
                 if final_name == "responder" and self._asks_personal_data(turn, final_input):
                     return self._request_verification(turn, str(final_input.get("mensaje")))
