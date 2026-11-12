@@ -134,6 +134,17 @@ Es la parte que más vende con un cliente real: ve su propia empresa andando. Ne
 - **Los chats figuran todos como del cliente.** Faltó cargar con qué nombre figura la empresa en WhatsApp.
 - **El código de verificación.** Con `RESEND_API_KEY` y `MAIL_FROM` cargadas en Render, le llega al cliente por email (`docs/render.md`). Sin ellas, sale en los **Logs** de Render.
 
+## 7. La facturación (1 min, opcional): "pagás solo por lo que resolvió"
+
+Solo con la sesión del operador.
+
+1. Panel → **Facturación**. Una fila por empresa, con los casos del mes.
+2. Mostrá las columnas: **A cobrar**, **Dentro de los 7 días**, **Con una persona** y **Reabiertos**. Solo la primera se cobra.
+3. Entrá a una empresa: un renglón por caso, con quién lo resolvió.
+4. **Exportar CSV** baja el mismo detalle, sin datos personales.
+
+Qué decir: "Si intervino una persona de tu equipo, o el cliente volvió por lo mismo en 7 días, ese caso no se cobra."
+
 ## Si algo falla durante la demo
 
 - **"Tuvimos un problema para responderte".** Se agotó la cuota diaria gratuita del modelo, o Groq tardó demasiado. Esperá un minuto y reintentá. Si no responde, mostrá el reporte y la auditoría de un caso anterior: no dependen del modelo.
