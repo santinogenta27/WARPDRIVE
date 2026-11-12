@@ -13,7 +13,7 @@ Unos 10 minutos, más 10 si mostrás el onboarding con los datos del cliente (se
   - archiva las conversaciones de prueba (la auditoría queda guardada);
   - rechaza las aprobaciones pendientes;
   - devuelve los pedidos de Acme a su estado inicial.
-- **En el chat, "Cómo probarla" → "Empezar de nuevo"**, para arrancar con una conversación limpia.
+- **En el chat, tocá el botón de las dos flechas, arriba a la derecha del chat ("Empezar una conversación nueva")**, para arrancar con una conversación limpia.
 
 ## 1. El reporte de preparación (2 min): "esto es lo que el asistente resolvería en tu empresa"
 
@@ -54,7 +54,7 @@ Ventana del cliente:
 
 ## 3. Un reembolso: decide una persona (3 min)
 
-1. Arrancá una conversación nueva: "Cómo probarla" → "Empezar de nuevo".
+1. Arrancá una conversación nueva, con el botón de las dos flechas.
 2. Escribí "Quiero el reembolso del pedido 1005". El asistente pide el email de la compra para mandarte un código.
 3. Respondé `martin@example.com` y escribí el código de los Logs.
 4. El asistente **no devuelve la plata solo**: avisa que el pedido pasa a revisión de una persona.
@@ -134,6 +134,17 @@ Es la parte que más vende con un cliente real: ve su propia empresa andando. Ne
 - **Los chats figuran todos como del cliente.** Faltó cargar con qué nombre figura la empresa en WhatsApp.
 - **El código de verificación.** Con `RESEND_API_KEY` y `MAIL_FROM` cargadas en Render, le llega al cliente por email (`docs/render.md`). Sin ellas, sale en los **Logs** de Render.
 
+## 7. La facturación (1 min, opcional): "pagás solo por lo que resolvió"
+
+Solo con la sesión del operador.
+
+1. Panel → **Facturación**. Una fila por empresa, con los casos del mes.
+2. Mostrá las columnas: **A cobrar**, **Dentro de los 7 días**, **Con una persona** y **Reabiertos**. Solo la primera se cobra.
+3. Entrá a una empresa: un renglón por caso, con quién lo resolvió.
+4. **Exportar CSV** baja el mismo detalle, sin datos personales.
+
+Qué decir: "Si intervino una persona de tu equipo, o el cliente volvió por lo mismo en 7 días, ese caso no se cobra."
+
 ## Si algo falla durante la demo
 
 - **"Tuvimos un problema para responderte".** Se agotó la cuota diaria gratuita del modelo, o Groq tardó demasiado. Esperá un minuto y reintentá. Si no responde, mostrá el reporte y la auditoría de un caso anterior: no dependen del modelo.
@@ -143,4 +154,4 @@ Es la parte que más vende con un cliente real: ve su propia empresa andando. Ne
 
 ## Configuración (una sola vez)
 
-Está en `docs/render.md`, sección "Pasar al panel": la rama `hito-5` y las variables `PANEL_EMAIL` y `PANEL_PASSWORD`.
+Está en `docs/render.md`, sección "Pasar al panel": las variables `PANEL_EMAIL` y `PANEL_PASSWORD`. El servicio usa la rama `main`.

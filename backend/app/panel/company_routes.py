@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from app.channels.web import widget
 from app.companies import connection as system
 from app.companies import delete as removal
 from app.companies import onboarding, review
@@ -611,6 +612,107 @@ a tu sistema con tus credenciales. Hasta que actives, el asistente usa respuesta
 <div class="row">{probe}{activate}</div>{test}</div>"""
 
 
+def _public_url(request: Request) -> str:
+    """La dirección pública del servicio. Detrás de un proxy (Render), el protocolo real llega
+    en X-Forwarded-Proto."""
+    proto = (request.headers.get("x-forwarded-proto") or request.url.scheme).split(",")[0].strip()
+    return f"{proto}://{request.headers.get('host') or request.url.netloc}"
+
+
+# Vista previa: cada cambio del formulario se ve en el widget antes de guardar.
+WIDGET_PREVIEW_JS = """(function(){var f=document.getElementById("widget-form");if(!f)return;
+var logo=null;function v(n){return f.elements[n].value}
+function push(){if(!window.EnterpriseChat)return;var c={name:v("nombre").trim(),accent:v("color"),
+suggestions:v("sugerencias").split("\\n").map(function(s){return s.trim()}).filter(Boolean)
+.slice(0,4)};
+if(logo!==null)c.logo=logo;window.EnterpriseChat.setBrand(c)}
+f.elements.pick.addEventListener("input",function(){f.elements.color.value=this.value;push()});
+f.elements.color.addEventListener("input",function(){if(/^#[0-9a-fA-F]{6}$/.test(this.value))
+f.elements.pick.value=this.value;push()});
+f.elements.nombre.addEventListener("input",push);f.elements.sugerencias.addEventListener("input",push);
+f.elements.logo.addEventListener("change",function(){var file=this.files[0];if(!file)return;
+var r=new FileReader();r.onload=function(){logo=r.result;push()};r.readAsDataURL(file)});
+var copy=document.getElementById("copy-snippet");if(copy)copy.addEventListener("click",function(){
+var text=document.getElementById("snippet").textContent;
+(navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(function(){
+copy.textContent="Copiado"},function(){var r=document.createRange();
+r.selectNodeContents(document.getElementById("snippet"));var s=getSelection();s.removeAllRanges();
+s.addRange(r)})})})();"""
+
+
+def _widget_html(ctx: Ctx, request: Request, slug: str, found: widget.WidgetSettings) -> str:
+    """Tarjeta "Widget para tu sitio": el código para copiar, los dominios, la marca y la
+    vista previa (el widget real, dentro de la página)."""
+    code = widget.snippet(_public_url(request), slug)
+    logo_note = (
+        '<label style="font-weight:400"><input type="checkbox" name="quitar_logo" value="si"> '
+        "Quitar el logo actual</label>"
+        if found.has_logo
+        else ""
+    )
+    return f"""<div class="card"><h3 style="margin-top:0">1. Pegá este código en tu sitio</h3>
+<p class="muted small">Va antes de <span class="mono">&lt;/body&gt;</span>, en todas las páginas
+donde quieras el chat. Aparece una burbuja abajo a la derecha.</p>
+<pre id="snippet">{esc(code)}</pre>
+<button type="button" id="copy-snippet">Copiar código</button>
+<form method="post" action="/panel/configuracion/widget" enctype="multipart/form-data"
+ id="widget-form">{_csrf(ctx)}
+<h3>2. Dominios permitidos</h3>
+<label for="dominios">Sitios donde se puede usar el chat (uno por línea)</label>
+<textarea id="dominios" name="dominios" class="mono" style="min-height:70px"
+ placeholder="www.tutienda.com&#10;*.tutienda.com">{esc(chr(10).join(found.domains))}</textarea>
+<p class="muted small">El chat solo funciona en estos sitios. Sin ninguno, el widget no se
+muestra en sitios ajenos. Usá <span class="mono">*.tutienda.com</span> para todos los
+subdominios y <span class="mono">localhost</span> para probar en tu computadora.</p>
+<h3>3. Marca</h3>
+<div class="row" style="align-items:flex-start"><div class="grow" style="min-width:260px">
+<label for="nombre">Nombre que ve el cliente</label>
+<input id="nombre" name="nombre" maxlength="60" required value="{esc(found.name)}">
+<label for="color">Color de acento</label>
+<div class="row"><input type="color" name="pick" aria-label="Elegir color"
+ value="{esc(found.accent)}" style="width:54px;height:44px;padding:4px">
+<input id="color" name="color" class="mono grow" maxlength="7" required
+ pattern="#[0-9a-fA-F]{{6}}" value="{esc(found.accent)}"></div>
+<label for="logo">Logo (PNG, JPG o WebP, cuadrado, hasta 200 KB)</label>
+<input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">{logo_note}
+<label for="sugerencias">Preguntas sugeridas (hasta 4, una por línea)</label>
+<textarea id="sugerencias" name="sugerencias" style="min-height:96px"
+ placeholder="¿Hacen envíos?">{esc(chr(10).join(found.suggestions))}</textarea>
+<p class="muted small">Se muestran cuando la conversación está vacía.</p>
+<button class="primary" type="submit">Guardar widget</button></div>
+<div><label>Vista previa</label>
+<div id="widget-preview" style="width:min(372px,calc(100vw - 66px));height:560px"></div>
+<p class="muted small">Es el chat real de {esc(ctx.session.company)}: lo que escribas acá
+aparece en Casos.</p></div></div></form></div>
+<script src="/widget.js" data-chat="{esc(slug)}" data-mode="inline"
+ data-target="#widget-preview"></script><script>{WIDGET_PREVIEW_JS}</script>"""
+
+
+@router.post("/configuracion/widget")
+async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
+    if data.too_big:
+        return _back("configuracion", error="El logo es demasiado grande.")
+    ctx = enter(request, deps, data.fields)
+    if isinstance(ctx, Response):
+        return ctx
+    fields = data.fields
+    try:
+        with deps.connection() as conn:
+            widget.save(
+                conn,
+                ctx.tenant_id,
+                name=fields.get("nombre", ""),
+                accent=fields.get("color", ""),
+                domains=fields.get("dominios", ""),
+                suggestions=fields.get("sugerencias", ""),
+                logo=data.files[0].data if data.files else None,
+                remove_logo=fields.get("quitar_logo") == "si",
+            )
+    except widget.WidgetError as error:
+        return _back("configuracion", error=str(error))
+    return _back("configuracion", ok="Widget guardado.")
+
+
 @router.get("/configuracion", response_class=HTMLResponse)
 def settings_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
@@ -622,6 +724,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
         found = system.load(conn, ctx.tenant_id)
         mode = system.mode_for(conn, ctx.tenant_id)
         slug = chat_slug(conn, ctx.tenant_id)
+        brand = widget.load(conn, ctx.tenant_id)
     approved = {t.name for t in tools if t.approved}
     chat = (
         f"<p>Probá el asistente de {esc(ctx.session.company)} en su propio chat: "
@@ -640,7 +743,12 @@ queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
 <h2>Herramientas</h2>{_tools_html(ctx, tools)}
 <h2>Sistema de la empresa</h2>{_system_html(ctx, found, mode)}
-<h2>Chat de prueba</h2><div class="card">{chat}</div>"""
+<h2>Chat de prueba</h2><div class="card">{chat}</div>
+<h2>Widget para tu sitio</h2>{
+        _widget_html(ctx, request, slug, brand)
+        if slug
+        else '<p class="muted">Esta empresa no tiene un chat web.</p>'
+    }"""
     return HTMLResponse(page("Configuración", body, active="configuracion", session=ctx.session))
 
 

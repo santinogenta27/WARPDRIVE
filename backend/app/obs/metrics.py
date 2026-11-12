@@ -8,6 +8,7 @@ from typing import Any
 
 import psycopg
 
+from app.cases import csat
 from app.cases.billing import billing_summary
 from app.db.connection import tenant_scope
 
@@ -107,6 +108,7 @@ def collect(conn: psycopg.Connection, tenant_id: uuid.UUID, *, days: int = 30) -
             "tasa_derivacion": escalated / total if total else None,
         },
         "cobro": billing_summary(conn, tenant_id),
+        "csat": csat.summary(conn, tenant_id, days=days),
         "latencia": {
             "turnos": latency[0],
             "p50_ms": _round(latency[1]),

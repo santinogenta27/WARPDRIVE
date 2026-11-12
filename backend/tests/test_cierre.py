@@ -65,7 +65,8 @@ def test_no_toma_como_confirmacion_una_consulta_nueva(text: str) -> None:
 def test_el_caso_se_resuelve_cuando_el_cliente_confirma(stack: SimulatedStack) -> None:
     answered = stack.send("lucia", "¿Abren los domingos?")
     thanks = stack.send("lucia", "¡Muchas gracias!")
-    assert thanks.case_id == answered.case_id and thanks.message == CLOSING_MESSAGE
+    # Con el cierre va la pregunta de si se resolvió (decisión 033).
+    assert thanks.case_id == answered.case_id and thanks.message.startswith(CLOSING_MESSAGE)
     assert case_row(stack, answered.case_id) == ("resolved", "agent", True)
     assert last_audit(stack, answered.case_id) == "case_resolved"
     # Lo siguiente que escribe es un caso nuevo.

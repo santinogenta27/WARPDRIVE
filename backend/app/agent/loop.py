@@ -28,7 +28,7 @@ from app.agent.classifier import (
 from app.agent.grounding import GroundingVerdict, check_grounding
 from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
-from app.cases import billing, closing
+from app.cases import billing, closing, csat
 from app.channels.whatsapp.format import to_whatsapp
 from app.db.connection import tenant_scope
 from app.identity import email_code
@@ -301,6 +301,9 @@ class Agent:
     def _handle(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
         company, tone = self._tenant(tenant_id)
         contact = self._contact(tenant_id, contact_id)
+        rated = self._csat_answer(tenant_id, contact, text, tone)
+        if rated is not None:
+            return rated
         case_id, classification = self._open_case(tenant_id, contact_id, company, text)
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone)
@@ -325,11 +328,35 @@ class Agent:
             and closing.is_confirmation(text)
             and closing.closable_by_confirmation(self._conn, tenant_id, case_id)
         ):
-            # Regla de cierre: el cliente confirma ("gracias", "eso era todo").
-            result = self._finish(turn, "responder", closing.CLOSING_MESSAGE)
+            # Regla de cierre: el cliente confirma ("gracias", "eso era todo"). Con el cierre
+            # va la pregunta de si se resolvió (CSAT, decisión 033), una sola vez por caso.
+            ask = csat.ask(self._conn, tenant_id, case_id)
+            message = closing.CLOSING_MESSAGE + (f"\n\n{csat.QUESTION}" if ask else "")
+            result = self._finish(turn, "responder", message)
             closing.resolve(self._conn, tenant_id, case_id, "El cliente confirmó.")
             return result
         return self._respond(turn, company, tone)
+
+    def _csat_answer(
+        self, tenant_id: uuid.UUID, contact: ContactContext, text: str, tone: str
+    ) -> AgentResult | None:
+        """El cliente responde si su consulta se resolvió (decisión 033). None: no hay una
+        pregunta pendiente o el mensaje es otra cosa, y sigue el flujo normal."""
+        case_id = csat.pending(self._conn, tenant_id, contact.id)
+        parsed = csat.parse(text) if case_id is not None else None
+        if case_id is None or parsed is None:
+            return None
+        resolved, comment = parsed
+        self._save_message(tenant_id, case_id, "customer", text)
+        turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone)
+        csat.answer(self._conn, tenant_id, case_id, resolved, comment)
+        self._audit(turn, "csat_answered", {"resuelto": resolved, "con_comentario": bool(comment)})
+        if resolved:
+            return self._finish(turn, "responder", csat.THANKS)
+        # Dijo que no: el caso se reabre (ya no se cobra) y lo atiende una persona.
+        billing.reopen(self._conn, tenant_id, case_id)
+        turn.prefix = csat.SORRY
+        return self._escalate(turn, csat.NOT_RESOLVED)
 
     def _continue_verification(
         self, turn: _Turn, pending: email_code.Verification, company: str, tone: str
