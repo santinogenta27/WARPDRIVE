@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from simulated.stack import SimulatedStack, build_simulated_stack
 
 from app.channels.web import widget
-from app.channels.web.routes import WebDeps, web_deps
+from app.channels.web.routes import STATIC, WebDeps, web_deps
 from app.channels.whatsapp.routing import register_whatsapp_channel
 from app.companies.create import chat_slug, create_company
 from app.db.connection import tenant_scope
@@ -139,6 +139,24 @@ def test_el_widget_es_un_solo_archivo_liviano_y_sin_dependencias(world: World) -
     assert "<form" not in script
     # Un mensaje del equipo ya mostrado no se repite (dos consultas superpuestas).
     assert "seen.indexOf(m.id)" in script
+
+
+def test_el_diseno_del_widget_oculta_el_scroll_nativo_y_marca_el_boton_de_enviar() -> None:
+    """Mejora de diseño: scroll discreto, vidrio más visible, enviar gris si está vacío y un
+    panel que flota. Se mira el archivo tal cual se sirve, sin base de datos."""
+    script = (STATIC / "widget.js").read_text(encoding="utf-8")
+    # La barra del navegador no se ve: la reemplaza una fina que aparece solo al desplazar.
+    assert "scrollbar-width:none" in script and "::-webkit-scrollbar{display:none}" in script
+    assert 'class="thumb"' in script and 'addEventListener("scroll"' in script
+    # El encabezado es una capa de vidrio propia: los mensajes pasan por debajo, desenfocados.
+    assert re.search(r"\.top\{[^}]*position:absolute", script)
+    assert script.count("backdrop-filter:blur(") >= 2  # el panel y el encabezado
+    # Enviar: gris con el campo vacío (no el acento apagado) y el acento cuando hay texto.
+    disabled = re.search(r"\.send:disabled\{([^}]*)\}", script)
+    assert disabled is not None
+    assert "opacity" not in disabled.group(1) and "var(--idle)" in disabled.group(1)
+    # Brillo en el borde del panel y una sombra más profunda.
+    assert ".panel::before" in script and "--rim" in script
 
 
 def test_la_pagina_de_la_empresa_y_la_de_la_demo_usan_el_mismo_widget(world: World) -> None:

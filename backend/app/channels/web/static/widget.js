@@ -19,13 +19,17 @@
 :host{all:initial}
 *{box-sizing:border-box}
 .root{--surface:255,255,255;--ink:#12151a;--muted:#5d6470;--line:rgba(18,21,26,.09);
---soft:rgba(18,21,26,.055);--warn-bg:rgba(180,83,9,.1);--warn:#8a4a06;--glass:.86;
---shadow:0 24px 64px -16px rgba(15,23,42,.28),0 2px 10px rgba(15,23,42,.06);
+--soft:rgba(18,21,26,.055);--warn-bg:rgba(180,83,9,.1);--warn:#8a4a06;--glass:.68;--top-glass:.6;
+--idle:rgba(18,21,26,.08);--idle-ink:#8b919b;--thumb:rgba(18,21,26,.3);
+--rim:rgba(255,255,255,.95);--rim-low:rgba(255,255,255,.3);
+--shadow:0 1px 2px rgba(15,23,42,.06),0 14px 30px -14px rgba(15,23,42,.2),0 50px 110px -30px rgba(15,23,42,.42);
 font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
 color:var(--ink);-webkit-font-smoothing:antialiased;text-align:left}
 .root[data-theme=dark]{--surface:23,25,30;--ink:#f1f2f4;--muted:#a4aab4;
 --line:rgba(255,255,255,.1);--soft:rgba(255,255,255,.08);--warn-bg:rgba(251,191,36,.12);
---warn:#f5c56b;--glass:.84;--shadow:0 24px 64px -16px rgba(0,0,0,.7),0 2px 10px rgba(0,0,0,.3)}
+--warn:#f5c56b;--glass:.72;--top-glass:.58;--idle:rgba(255,255,255,.09);--idle-ink:#7c828c;
+--thumb:rgba(255,255,255,.32);--rim:rgba(255,255,255,.26);--rim-low:rgba(255,255,255,.05);
+--shadow:0 1px 2px rgba(0,0,0,.35),0 16px 34px -14px rgba(0,0,0,.6),0 54px 120px -26px rgba(0,0,0,.9)}
 button,textarea{font:inherit;color:inherit}
 button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 :focus{outline:none}
@@ -49,11 +53,24 @@ transition:transform .35s cubic-bezier(.2,1.3,.4,1),opacity .25s;opacity:0;trans
 background:#d92d20;color:#fff;font-size:12px;font-weight:650;line-height:20px;text-align:center;
 box-shadow:0 0 0 2px rgb(var(--surface))}
 
-.panel{display:flex;flex-direction:column;overflow:hidden;background:rgba(var(--surface),.985);
+.panel{position:relative;display:flex;flex-direction:column;overflow:hidden;background:rgba(var(--surface),.985);
 border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow)}
+/* Brillo del borde: un aro de 1px, más claro arriba, como la luz sobre un vidrio. */
+.panel::before{content:"";position:absolute;inset:0;z-index:4;border-radius:inherit;padding:1px;pointer-events:none;
+background:linear-gradient(180deg,var(--rim),var(--rim-low) 34%,var(--rim-low) 72%,var(--rim));
+-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+.top{position:absolute;top:0;left:0;right:0;z-index:3;background:rgba(var(--surface),.97);
+border-bottom:1px solid var(--line)}
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-.panel{background:rgba(var(--surface),var(--glass));
--webkit-backdrop-filter:blur(26px) saturate(1.7);backdrop-filter:blur(26px) saturate(1.7)}}
+/* El vidrio del panel va en una capa aparte: si lo tuviera el panel, el encabezado (que está
+   adentro) no podría desenfocar los mensajes que pasan por debajo. */
+.panel{background:transparent;z-index:0}
+.panel::after{content:"";position:absolute;inset:0;z-index:-1;background:rgba(var(--surface),var(--glass));
+-webkit-backdrop-filter:blur(32px) saturate(1.9);backdrop-filter:blur(32px) saturate(1.9)}
+/* El encabezado es otra capa de vidrio: los mensajes pasan por debajo, desenfocados. */
+.top{background:rgba(var(--surface),var(--top-glass));
+-webkit-backdrop-filter:blur(18px) saturate(1.8);backdrop-filter:blur(18px) saturate(1.8)}}
 .root[data-mode=float] .panel{position:fixed;z-index:2147483001;right:20px;
 bottom:calc(max(20px,env(safe-area-inset-bottom)) + 70px);width:384px;max-width:calc(100vw - 40px);
 height:min(640px,calc(100vh - 120px));height:min(640px,calc(100dvh - 120px));
@@ -66,7 +83,7 @@ transition:transform .46s cubic-bezier(.16,1.22,.3,1),opacity .2s ease-out,visib
 .root:not([data-mode=float]){height:100%}
 .root:not([data-mode=float]) .panel{width:100%;height:100%}
 
-header{display:flex;align-items:center;gap:12px;padding:16px 14px 14px 18px;border-bottom:1px solid var(--line)}
+header{display:flex;align-items:center;gap:12px;padding:16px 14px 14px 18px}
 .logo{flex:none;width:38px;height:38px;border-radius:12px;background:var(--accent);color:var(--on-accent);
 display:grid;place-items:center;font-weight:650;font-size:17px;overflow:hidden}
 .logo img{width:100%;height:100%;object-fit:cover;display:block}
@@ -87,9 +104,14 @@ display:flex;align-items:center;gap:10px}
 .link{border:0;background:none;padding:2px 4px;border-radius:6px;font-weight:600;font-size:13px;
 text-decoration:underline;text-underline-offset:3px}
 
-.log{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:20px 16px 10px;display:flex;
-flex-direction:column;gap:10px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.log{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:86px 16px 10px;display:flex;
+flex-direction:column;gap:10px;scrollbar-width:none}
+.log::-webkit-scrollbar,textarea::-webkit-scrollbar{display:none}
 .log:focus-visible{outline-offset:-5px;border-radius:14px}
+/* La barra del navegador no se ve: esta, fina, aparece solo mientras se desplaza. */
+.thumb{position:absolute;top:0;right:4px;z-index:2;width:4px;height:0;border-radius:2px;background:var(--thumb);
+opacity:0;pointer-events:none;transition:opacity .6s ease}
+.thumb.on{opacity:1;transition-duration:.12s}
 .row{display:flex;flex-direction:column;max-width:84%;align-items:flex-start;
 animation:in .32s cubic-bezier(.2,.9,.3,1) both}
 .row.user{align-self:flex-end;align-items:flex-end}
@@ -118,14 +140,16 @@ font-size:14px;transition:background .15s}
 .composer{display:flex;align-items:flex-end;gap:8px;padding:10px 12px 12px}
 textarea{flex:1;min-width:0;resize:none;min-height:46px;max-height:124px;padding:12px 16px;border-radius:23px;
 border:1px solid var(--line);background:var(--soft);font-size:16px;line-height:1.35;overflow-y:hidden;
-transition:border-color .15s,background .15s}
+scrollbar-width:none;transition:border-color .15s,background .15s}
 textarea::placeholder{color:var(--muted);opacity:1}
 textarea:focus-visible{outline:none;border-color:var(--focus);background:transparent}
 textarea:disabled{opacity:.55}
 .send{flex:none;width:46px;height:46px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);
-display:grid;place-items:center;transition:transform .2s cubic-bezier(.2,1.3,.4,1),opacity .15s}
+display:grid;place-items:center;
+transition:transform .2s cubic-bezier(.2,1.3,.4,1),background-color .18s ease,color .18s ease}
 .send:hover:not(:disabled){transform:scale(1.07)}
-.send:disabled{opacity:.35;cursor:default}
+/* Gris con el campo vacío; el acento recién cuando hay algo para mandar. */
+.send:disabled{background:var(--idle);color:var(--idle-ink);cursor:default}
 .send svg{width:20px;height:20px}
 .ended{padding:6px 18px 14px;display:grid;justify-items:center}
 .foot{padding:0 18px max(12px,env(safe-area-inset-bottom));text-align:center;font-size:11.5px;color:var(--muted)}
@@ -141,13 +165,14 @@ display:grid;place-items:center;transition:transform .2s cubic-bezier(.2,1.3,.4,
 transform-origin:50% 100%;transform:translateY(24px)}
 .root[data-mode=float][data-open] .launcher{opacity:0;pointer-events:none}
 .root[data-mode=page] .panel{border-radius:0;border:0;box-shadow:none}
+.root[data-mode=float] .panel::before,.root[data-mode=page] .panel::before{display:none}
 header{padding-top:max(14px,env(safe-area-inset-top))}
 .row{max-width:88%}}
 @media (prefers-reduced-motion:reduce){
 *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
 transition-duration:.01ms!important}
 .root[data-mode=float] .panel{transform:none}}
-@media (forced-colors:active){.bubble,.panel,.launcher,.send{border:1px solid CanvasText}}
+@media (forced-colors:active){.bubble,.panel,.launcher,.send{border:1px solid CanvasText}.thumb{background:CanvasText}}
 `;
 
   var ICONS = {
@@ -168,13 +193,14 @@ transition-duration:.01ms!important}
     (embedded ? "" : '<button class="launcher" type="button" aria-expanded="false" aria-controls="panel">' +
       ICONS.chat + ICONS.close + '<span class="badge" hidden></span></button>') +
     '<section class="panel" id="panel" role="' + (embedded ? "region" : "dialog") + '" aria-label="Chat">' +
-    '<header><div class="logo" aria-hidden="true"></div><div class="title"><b></b>' +
+    '<div class="top"><header><div class="logo" aria-hidden="true"></div><div class="title"><b></b>' +
     '<span><i aria-hidden="true"></i><em style="font-style:normal">Asistente virtual</em></span></div>' +
     '<button class="icon fresh" type="button" aria-label="Empezar una conversación nueva" hidden>' + ICONS.fresh + "</button>" +
     (embedded ? "" : '<button class="icon shut" type="button" aria-label="Cerrar el chat">' + ICONS.close.replace(' class="i-close"', "") + "</button>") +
     "</header>" +
-    '<div class="bar" role="status" hidden></div>' +
+    '<div class="bar" role="status" hidden></div></div>' +
     '<div class="log" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Conversación"></div>' +
+    '<div class="thumb" aria-hidden="true"></div>' +
     '<div class="composer"><label class="sr" for="msg">Mensaje</label>' +
     '<textarea id="msg" rows="1" maxlength="1000" placeholder="Escribí tu consulta…" enterkeyhint="send"></textarea>' +
     '<button class="send" type="button" aria-label="Enviar" disabled>' + ICONS.send + "</button></div>" +
@@ -187,6 +213,7 @@ transition-duration:.01ms!important}
   // el navegador descartaría uno anidado.
   var log = $(".log"), form = $(".composer"), input = $("textarea"), send = $(".send");
   var bar = $(".bar"), ended = $(".ended"), foot = $(".foot"), fresh = $(".fresh");
+  var top = $(".top"), thumb = $(".thumb");
   var note = attr("note", "");
 
   var cfg = null, open = embedded, busy = false, typing = null, unread = 0, lastFocus = null;
@@ -247,7 +274,27 @@ transition-duration:.01ms!important}
   function format(text) {
     return escapeHtml(text).replace(/\*(\S(?:[^*\n]*\S)?)\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
   }
-  function scrollDown() { log.scrollTop = log.scrollHeight; }
+  // Un desplazamiento del propio widget (llega un mensaje) no muestra la barra.
+  var quietUntil = 0, thumbTimer = null;
+  function scrollDown() { quietUntil = Date.now() + 150; log.scrollTop = log.scrollHeight; }
+  // El encabezado flota sobre los mensajes: la lista empieza debajo de él, mida lo que mida.
+  function padTop() { log.style.paddingTop = top.offsetHeight + 16 + "px"; }
+  if (window.ResizeObserver) new ResizeObserver(padTop).observe(top);
+  function placeThumb() {
+    var view = log.clientHeight, full = log.scrollHeight;
+    var start = top.offsetHeight + 6, track = log.offsetTop + view - 6 - start;
+    if (full <= view + 1 || track < 40) return false;
+    var size = Math.max(28, track * view / full);
+    thumb.style.height = size + "px";
+    thumb.style.transform = "translateY(" + (start + (track - size) * log.scrollTop / (full - view)) + "px)";
+    return true;
+  }
+  log.addEventListener("scroll", function () {
+    if (Date.now() < quietUntil || !placeThumb()) return;
+    thumb.classList.add("on");
+    clearTimeout(thumbTimer);
+    thumbTimer = setTimeout(function () { thumb.classList.remove("on"); }, 900);
+  }, { passive: true });
   function brand() {
     var logo = $(".logo");
     $(".title b").textContent = cfg.name;
