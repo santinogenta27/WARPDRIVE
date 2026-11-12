@@ -16,6 +16,7 @@ from typing import Any, Literal
 import psycopg
 import yaml
 
+from app import i18n
 from app.agent import presentable, prompt
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
@@ -51,42 +52,22 @@ AGENT_MODEL = "claude-sonnet-5-5"
 MAX_STEPS = 8
 Action = Literal["responder", "ejecutar", "pedir_aprobacion", "derivar"]
 
-VERIFICATION_MESSAGE = (
-    "Para darte datos de tu pedido necesito verificar que sos el titular. "
-    "¿Me pasás el email con el que hiciste la compra? Te mando un código para confirmarlo."
-)
+# Los mensajes fijos al cliente están en app/i18n.py, en español y en inglés (decisión 036).
+# Estos nombres son los de español, que ya usaban los tests.
+_ES = i18n.MESSAGES["es"]
+VERIFICATION_MESSAGE = _ES["verification"]
 # Con la aprobación creada, si el modelo no da una respuesta válida (o quiere derivar).
-APPROVAL_PENDING_MESSAGE = (
-    "Tu pedido quedó registrado y en revisión: una persona del equipo lo tiene que aprobar. "
-    "Te avisamos por este mismo chat apenas esté."
-)
+APPROVAL_PENDING_MESSAGE = _ES["approval_pending"]
 # El mismo pedido ya tiene una solicitud pendiente desde otra conversación.
-DUPLICATE_APPROVAL_MESSAGE = (
-    "Ya tenemos una solicitud en revisión para ese pedido, así que no hace falta pedirla de "
-    "nuevo. Una persona del equipo la está revisando y te avisamos apenas esté."
-)
-ESCALATION_MESSAGE = (
-    "Te paso con una persona del equipo, que te va a responder por este mismo chat."
-)
-REFUSAL_MESSAGE = (
-    "Perdón, con eso no puedo ayudarte. Sí puedo darte una mano con tus propios pedidos o con "
-    "cualquier consulta sobre la tienda."
-)
+DUPLICATE_APPROVAL_MESSAGE = _ES["duplicate_approval"]
+ESCALATION_MESSAGE = _ES["escalation"]
+REFUSAL_MESSAGE = _ES["refusal"]
 # Verificación por código: misma respuesta exista o no el email, para no revelarlo.
-CODE_SENT_MESSAGE = (
-    "Si ese email está registrado en una compra, te llega un código de 6 dígitos. "
-    "Escribilo acá para confirmar que sos el titular. Vence en 10 minutos."
-)
-VERIFIED_PREFIX = "¡Listo, ya verifiqué tu identidad! "
-CODE_FAILED_MESSAGE = (
-    "No pudimos enviarte el código en este momento. Esperá un minuto y pasame de nuevo tu "
-    "email, así te mando otro."
-)
-CODE_EXPIRED_MESSAGE = "Ese código ya venció. Pasame de nuevo tu email y te mando uno nuevo."
-CODE_LOCKED_MESSAGE = (
-    "Ese código tampoco es correcto y ya no quedan intentos. Si querés, pasame de nuevo tu "
-    "email y te mando un código nuevo."
-)
+CODE_SENT_MESSAGE = _ES["code_sent"]
+VERIFIED_PREFIX = _ES["verified_prefix"]
+CODE_FAILED_MESSAGE = _ES["code_failed"]
+CODE_EXPIRED_MESSAGE = _ES["code_expired"]
+CODE_LOCKED_MESSAGE = _ES["code_locked"]
 
 
 CHAT_INSTRUCTIONS = """nombre: conversacion_general
@@ -110,10 +91,30 @@ condiciones:
   - Respondé con lo que dicen los documentos y citalos en fuentes.
   - Si la respuesta no está en los documentos, derivá.
 cierre: Preguntá si necesita algo más."""
-CHAT_FALLBACK = (
-    "¡Hola! Soy el asistente virtual de {empresa}. Te puedo ayudar con tus pedidos y con "
-    "consultas sobre la tienda. ¿En qué te ayudo?"
-)
+CHAT_FALLBACK = _ES["chat_fallback"]
+# Las mismas instrucciones para una empresa en inglés. Las claves del YAML no se traducen.
+CHAT_INSTRUCTIONS_EN = """nombre: conversacion_general
+objetivo: Chat with the customer in a friendly way and guide them to what the assistant can solve
+condiciones:
+  - Answer in one or two sentences, warm and brief, without handing off.
+  - If they greet you, thank you or say goodbye, reply in kind and offer help.
+  - If they ask whether you're a bot or who they're talking to, say you're the virtual
+    assistant of {empresa}.
+  - If they ask what you can do, tell them how you can help ({capacidades}).
+  - If they ask about something unrelated to the store, kindly say you can't help with that
+    and offer what you can do.
+  - If they're upset, acknowledge it with empathy and ask for what you need to help them.
+  - There are no documents in this chat: don't give store data, order details or numbers.
+    Set factual to false.
+cierre: Offer help with orders or questions about the store."""
+GENERAL_INSTRUCTIONS_EN = """nombre: consulta_general
+objetivo: Answer general questions about the store and its policies using the documents
+datos_necesarios: []
+herramientas: []
+condiciones:
+  - Answer with what the documents say and cite them in fuentes.
+  - If the answer is not in the documents, hand off.
+cierre: Ask if they need anything else."""
 
 
 class _ChatFallback(Exception):
@@ -124,11 +125,18 @@ class _ChatFallback(Exception):
 EMAIL_LEAD = re.compile(
     r"(?i)\b(?:(?:te\s+paso|ac[aá]\s+va|este\s+es)\s+)?(?:mi\s+)?(?:e-?mail|mail|correo"
     r"(?:\s+electr[oó]nico)?)\s*(?:es|:)?"
+    # En inglés: "my email is", "here's my email:", "email address:".
+    r"|(?i:\b(?:here(?:'s|\s+is)\s+)?(?:my\s+)?e-?mail(?:\s+address)?\s*(?:is|:)?)"
 )
 # El modelo le pide al cliente un dato personal en lugar de usar la herramienta (que dispara la
 # verificación por código): se reemplaza por el flujo de verificación.
 ASKS_PERSONAL_DATA = re.compile(
     r"(?i)\b(?:e-?mail|mail|correo|tel[eé]fono|celular|n[uú]mero\s+de\s+contacto|dni|documento)\b"
+)
+ASKS_PERSONAL_DATA_EN = re.compile(
+    r"(?i)\b(?:e-?mail|phone(?:\s+number)?|mobile(?:\s+number)?|cell(?:\s+number)?"
+    r"|contact\s+number|date\s+of\s+birth|ssn|social\s+security|(?:id|identity)\s+(?:number|card)"
+    r"|driver'?s\s+license|home\s+address)\b"
 )
 
 
@@ -137,6 +145,13 @@ LEGAL = "amenaza_legal"
 LEGAL_THREAT = re.compile(
     r"(?i)\b(?:denunci\w+|demand(?:a|o|ar|arlos|arlas)\b|abogad\w+|carta\s+documento|juicio"
     r"|defensa\s+(?:del?|al)\s+consumidor|acci[oó]n\s+legal|acciones\s+legales)"
+)
+# En inglés. Se controlan los dos idiomas en cualquier empresa: una amenaza legal la atiende una
+# persona aunque llegue en el otro idioma.
+LEGAL_THREAT_EN = re.compile(
+    r"(?i)\b(?:sue|suing|sued|lawsuit|lawyer|attorney|legal\s+action|take\s+(?:you|this|it)\s+"
+    r"to\s+court|small\s+claims|class\s+action|consumer\s+protection|attorney\s+general"
+    r"|better\s+business\s+bureau|bbb|file\s+a\s+(?:formal\s+)?complaint\s+with)\b"
 )
 # Ya verificado, el modelo vuelve a pedir la verificación de identidad o un código (lo hizo
 # Groq). Verificar otra cosa ("revisá el email de confirmación para verificarlo", "el código de
@@ -149,6 +164,19 @@ VERIFICATION_TALK = re.compile(
     r"|\b(?:env[ií]\w*|mand\w*|ingres\w*|pas[aáeo]\w*)\s+(?:\w+\s+){0,2}c[oó]digo"
     r"(?!\s+(?:de\s+)?(?:seguimiento|postal))"
 )
+# Lo mismo en inglés: "verify your identity", "I sent you a code", "enter the verification
+# code". Un "tracking code", un "zip code" o "verify the order number" no cuentan.
+VERIFICATION_TALK_EN = re.compile(
+    r"(?i)verify\s+(?:your|the\s+account\s+holder'?s?)\s+(?:identity|account|ownership)"
+    r"|verify\s+(?:that\s+)?you(?:'re|\s+are)\b|verify\s+you\b"
+    r"|(?:identity|account)\s+verification|verification\s+code|security\s+code|one-time\s+code"
+    r"|\d[\s-]*digit\s+code"
+    r"|\b(?:sen[dt]|email(?:ed)?|text(?:ed)?|enter|type|share|provide|forward)\w*\s+"
+    r"(?:\w+\s+){0,3}(?:a\s+|the\s+)?code\b(?<!tracking\scode)(?<!zip\scode)(?<!promo\scode)"
+    r"(?<!discount\scode)(?<!coupon\scode)(?<!postal\scode)"
+)
+VERIFICATION_TALKS = {"es": VERIFICATION_TALK, "en": VERIFICATION_TALK_EN}
+PERSONAL_DATA = {"es": ASKS_PERSONAL_DATA, "en": ASKS_PERSONAL_DATA_EN}
 FORMAT_CORRECTION = (
     "Respuesta rechazada: llegó vacía o con JSON, metadatos o nombres de herramientas. Terminá "
     "usando la herramienta responder (o derivar), con el texto para el cliente solo en mensaje."
@@ -157,10 +185,26 @@ VERIFIED_CORRECTION = (
     "El cliente ya está verificado (contacto verificado=sí): no le pidas verificación, códigos "
     "ni datos personales. Usá las herramientas para resolver su consulta."
 )
+CORRECTIONS = {
+    "es": {"format": FORMAT_CORRECTION, "verified": VERIFIED_CORRECTION},
+    "en": {
+        "format": (
+            "Answer rejected: it was empty or had JSON, metadata or tool names. Finish with the "
+            "responder tool (or derivar), with only the text for the customer in mensaje."
+        ),
+        "verified": (
+            'The customer is already verified (contacto verificado="sí"): don\'t ask them for '
+            "verification, codes or personal data. Use the tools to resolve their request."
+        ),
+    },
+}
 _FIXED_VERIFICATION = (
     "Para darte datos de tu pedido necesito verificar",
     "Si ese email está",
     "Ese código",
+    "To share details about your order, I first need",
+    "If that email is linked",
+    "That code",
 )
 
 
@@ -175,9 +219,10 @@ def _verification_exchange(role: str, text: str) -> bool:
     return False
 
 
-def _wrong_code_message(remaining: int) -> str:
-    left = "Te queda 1 intento" if remaining == 1 else f"Te quedan {remaining} intentos"
-    return f"Ese código no es correcto. {left}."
+def _wrong_code_message(remaining: int, language: str = "es") -> str:
+    if remaining == 1:
+        return i18n.text(language, "code_wrong_one")
+    return i18n.text(language, "code_wrong_many", n=remaining)
 
 
 @dataclass
@@ -220,16 +265,29 @@ class _Turn:
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
     classification: Classification | None = None
     tone: str = "rioplatense"
+    lang: str = "es"  # idioma de la empresa (decisión 036)
+
+    def say(self, key: str, **values: Any) -> str:
+        return i18n.text(self.lang, key, **values)
 
 
-def _grounding_correction(tool_use_id: str | None, reason: str) -> dict[str, Any]:
+def _grounding_correction(
+    tool_use_id: str | None, reason: str, language: str = "es"
+) -> dict[str, Any]:
     """Devuelve al modelo la respuesta rechazada para que la reescriba (una sola vez)."""
-    return _correction(
-        tool_use_id,
-        f"Respuesta rechazada por el control de fundamento: {reason}. Usá solo datos de "
-        "<documentos> citando su id en fuentes, o resultados de herramientas; si no alcanza, "
-        "derivá.",
-    )
+    if language == "en":
+        text = (
+            f"Answer rejected by the grounding check: {reason}. Use only data from "
+            "<documentos> citing its id in fuentes, or tool results; if that's not enough, "
+            "hand off."
+        )
+    else:
+        text = (
+            f"Respuesta rechazada por el control de fundamento: {reason}. Usá solo datos de "
+            "<documentos> citando su id en fuentes, o resultados de herramientas; si no alcanza, "
+            "derivá."
+        )
+    return _correction(tool_use_id, text)
 
 
 def _correction(tool_use_id: str | None, text: str) -> dict[str, Any]:
@@ -313,14 +371,16 @@ class Agent:
         )
 
     def _handle(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
-        company, tone = self._tenant(tenant_id)
+        company, tone, lang = self._tenant(tenant_id)
         contact = self._contact(tenant_id, contact_id)
-        rated = self._csat_answer(tenant_id, contact, text, tone)
+        rated = self._csat_answer(tenant_id, contact, text, tone, lang)
         if rated is not None:
             return rated
-        case_id, classification = self._open_case(tenant_id, contact_id, company, text)
+        case_id, classification = self._open_case(tenant_id, contact_id, company, text, lang)
         self._save_message(tenant_id, case_id, "customer", text)
-        turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone)
+        turn = _Turn(
+            tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone, lang=lang
+        )
         turn.classification = classification
         self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
         pending: email_code.Verification | None = None
@@ -345,14 +405,14 @@ class Agent:
             # Regla de cierre: el cliente confirma ("gracias", "eso era todo"). Con el cierre
             # va la pregunta de si se resolvió (CSAT, decisión 033), una sola vez por caso.
             ask = csat.ask(self._conn, tenant_id, case_id)
-            message = closing.CLOSING_MESSAGE + (f"\n\n{csat.QUESTION}" if ask else "")
+            message = turn.say("closing") + (f"\n\n{turn.say('csat_question')}" if ask else "")
             result = self._finish(turn, "responder", message)
             closing.resolve(self._conn, tenant_id, case_id, "El cliente confirmó.")
             return result
         return self._respond(turn, company, tone)
 
     def _csat_answer(
-        self, tenant_id: uuid.UUID, contact: ContactContext, text: str, tone: str
+        self, tenant_id: uuid.UUID, contact: ContactContext, text: str, tone: str, lang: str
     ) -> AgentResult | None:
         """El cliente responde si su consulta se resolvió (decisión 033). None: no hay una
         pregunta pendiente o el mensaje es otra cosa, y sigue el flujo normal."""
@@ -362,14 +422,16 @@ class Agent:
             return None
         resolved, comment = parsed
         self._save_message(tenant_id, case_id, "customer", text)
-        turn = _Turn(tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone)
+        turn = _Turn(
+            tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone, lang=lang
+        )
         csat.answer(self._conn, tenant_id, case_id, resolved, comment)
         self._audit(turn, "csat_answered", {"resuelto": resolved, "con_comentario": bool(comment)})
         if resolved:
-            return self._finish(turn, "responder", csat.THANKS)
+            return self._finish(turn, "responder", turn.say("csat_thanks"))
         # Dijo que no: el caso se reabre (ya no se cobra) y lo atiende una persona.
         billing.reopen(self._conn, tenant_id, case_id)
-        turn.prefix = csat.SORRY
+        turn.prefix = turn.say("csat_sorry")
         return self._escalate(turn, csat.NOT_RESOLVED)
 
     def _continue_verification(
@@ -385,17 +447,19 @@ class Agent:
                     self._mailer.send(
                         Email(
                             to=email.group(0),
-                            subject=f"Tu código de verificación de {company}",
-                            body=(
-                                f"Tu código para verificar tu identidad en {company} es {code}. "
-                                f"Vence en {email_code.CODE_TTL_MINUTES} minutos."
+                            subject=turn.say("email_subject", empresa=company),
+                            body=turn.say(
+                                "email_body",
+                                empresa=company,
+                                code=code,
+                                minutes=email_code.CODE_TTL_MINUTES,
                             ),
                         )
                     )
                 except MailError as error:
                     return self._code_not_sent(turn, pending, str(error))
             self._audit(turn, "verification_code_sent", {"registered": phone is not None})
-            return self._finish(turn, "responder", CODE_SENT_MESSAGE, verification=True)
+            return self._finish(turn, "responder", turn.say("code_sent"), verification=True)
         code_match = email_code.CODE.search(turn.text)
         if pending.status != "code_sent" or code_match is None:
             return None
@@ -407,18 +471,20 @@ class Agent:
             # Responde la consulta que había quedado pendiente, ya como cliente verificado.
             turn.contact = self._contact(turn.tenant_id, turn.contact.id)
             if not pending.question.strip():
-                return self._finish(turn, "responder", VERIFIED_PREFIX + "¿En qué te ayudo?")
+                return self._finish(
+                    turn, "responder", turn.say("verified_prefix") + turn.say("how_can_i_help")
+                )
             turn.text = pending.question
-            turn.prefix = VERIFIED_PREFIX
+            turn.prefix = turn.say("verified_prefix")
             return self._respond(turn, company, tone)
         if outcome == "wrong":
             return self._finish(
-                turn, "responder", _wrong_code_message(remaining), verification=True
+                turn, "responder", _wrong_code_message(remaining, turn.lang), verification=True
             )
         email_code.request_email(
             self._conn, turn.tenant_id, turn.contact.id, turn.case_id, pending.question
         )
-        message = CODE_EXPIRED_MESSAGE if outcome == "expired" else CODE_LOCKED_MESSAGE
+        message = turn.say("code_expired" if outcome == "expired" else "code_locked")
         return self._finish(turn, "responder", message, verification=True)
 
     def _code_not_sent(
@@ -436,7 +502,7 @@ class Agent:
                 (turn.tenant_id, "MailError", detail[:500]),
             )
         alerts.record_error(turn.tenant_id, "MailError")
-        return self._finish(turn, "responder", CODE_FAILED_MESSAGE, verification=True)
+        return self._finish(turn, "responder", turn.say("code_failed"), verification=True)
 
     def _pending_question(self, turn: _Turn) -> str:
         """La consulta a responder después de verificar: lo que acompaña al email en el mismo
@@ -454,7 +520,7 @@ class Agent:
 
     def _respond(self, turn: _Turn, company: str, tone: str) -> AgentResult:
         tenant_id, case_id, contact, text = turn.tenant_id, turn.case_id, turn.contact, turn.text
-        if LEGAL_THREAT.search(text):
+        if LEGAL_THREAT.search(text) or LEGAL_THREAT_EN.search(text):
             # Una amenaza de denuncia o de acción legal la atiende una persona, siempre: no
             # depende de lo que decida el modelo (decisión 027).
             self._audit(turn, "classified", {"case_type": LEGAL})
@@ -470,6 +536,7 @@ class Agent:
             message=text,
             case_types={name: goal for name, (goal, _) in case_types.items()},
             previous=previous,
+            language=turn.lang,
         )
         turn.classification = None  # vale solo para el mensaje con el que se abrió el caso
         self._audit_model_call(turn, "clasificador", classification.response)
@@ -478,11 +545,11 @@ class Agent:
         if label == ASK_FOR_HUMAN:
             return self._escalate(turn, "El cliente pidió hablar con una persona.")
         if label == NOT_ALLOWED:  # inyección o datos en masa: negativa fija, sin modelo ni derivar
-            return self._finish(turn, "responder", REFUSAL_MESSAGE)
+            return self._finish(turn, "responder", turn.say("refusal"))
         if label == CHAT:  # charla: responde solo, sin documentos, herramientas ni derivación
             return self._chat(turn, company, tone, case_types, history)
         if label == GENERAL:  # consulta general: documentos, sin herramientas ni verificación
-            instructions = GENERAL_INSTRUCTIONS
+            instructions = GENERAL_INSTRUCTIONS_EN if turn.lang == "en" else GENERAL_INSTRUCTIONS
         elif label in case_types:
             turn.case_type = label
             self._set_case_type(tenant_id, case_id, label)
@@ -523,8 +590,9 @@ class Agent:
         case_types: dict[str, tuple[str, str]],
         history: list[tuple[str, str]],
     ) -> AgentResult:
-        goals = "; ".join(goal for goal, _ in case_types.values()) or "consultas de la tienda"
-        instructions = CHAT_INSTRUCTIONS.format(empresa=company, capacidades=goals)
+        goals = "; ".join(goal for goal, _ in case_types.values()) or turn.say("store_questions")
+        template = CHAT_INSTRUCTIONS_EN if turn.lang == "en" else CHAT_INSTRUCTIONS
+        instructions = template.format(empresa=company, capacidades=goals)
         system = prompt.system_prompt(company, tone, instructions)
         messages: list[dict[str, Any]] = [
             {
@@ -533,7 +601,7 @@ class Agent:
             }
         ]
         return self._run_loop(
-            turn, system, messages, [], chat_fallback=CHAT_FALLBACK.format(empresa=company)
+            turn, system, messages, [], chat_fallback=turn.say("chat_fallback", empresa=company)
         )
 
     # -- ciclo de herramientas -------------------------------------------------------------
@@ -549,7 +617,7 @@ class Agent:
         """`chat_fallback`: charla. Solo se ofrece la herramienta responder y, si el modelo no
         logra una respuesta válida, se usa ese mensaje fijo en lugar de derivar."""
         finals = ("responder",) if chat_fallback is not None else ("responder", "derivar")
-        tools = prompt.tool_definitions(manifests, finals)
+        tools = prompt.tool_definitions(manifests, finals, english=turn.lang == "en")
         allowed = {m["name"] for m in manifests}
         try:
             return self._loop(turn, system, messages, tools, allowed, chat=chat_fallback)
@@ -615,7 +683,7 @@ class Agent:
                     turn.format_retries += 1
                     if response.tool_calls or response.text.strip():  # sin bloques vacíos
                         messages.append({"role": "assistant", "content": response.content})
-                    messages.append(_correction(final_id, FORMAT_CORRECTION))
+                    messages.append(_correction(final_id, CORRECTIONS[turn.lang]["format"]))
                     continue
             if final_name:
                 if final_name == "responder" and self._asks_personal_data(turn, final_input):
@@ -633,7 +701,7 @@ class Agent:
                         return self._give_up(turn, "Volvió a pedir la verificación.", chat)
                     turn.grounding_retries += 1
                     messages.append({"role": "assistant", "content": response.content})
-                    messages.append(_correction(final_id, VERIFIED_CORRECTION))
+                    messages.append(_correction(final_id, CORRECTIONS[turn.lang]["verified"]))
                     continue
                 if final_name == "responder":
                     verdict = self._check_grounding(turn, final_input)
@@ -649,7 +717,7 @@ class Agent:
                             )
                         turn.grounding_retries += 1
                         messages.append({"role": "assistant", "content": response.content})
-                        messages.append(_grounding_correction(final_id, verdict.reason))
+                        messages.append(_grounding_correction(final_id, verdict.reason, turn.lang))
                         continue
                 if final_name == "derivar" and chat is not None:
                     raise _ChatFallback  # en la charla no se deriva
@@ -660,7 +728,9 @@ class Agent:
             for call in response.tool_calls:
                 if call.name in prompt.FINAL_TOOL_NAMES:
                     outcome: dict[str, Any] = {
-                        "error": "Primero se ejecutan las herramientas; respondé después."
+                        "error": "Run the tools first; answer afterwards."
+                        if turn.lang == "en"
+                        else "Primero se ejecutan las herramientas; respondé después."
                     }
                 else:
                     decision = self._guardian.execute(
@@ -692,7 +762,7 @@ class Agent:
                             self._conn, turn.tenant_id, turn.contact.id, turn.case_id, turn.text
                         )
                         return self._finish(
-                            turn, "responder", VERIFICATION_MESSAGE, verification=True
+                            turn, "responder", turn.say("verification"), verification=True
                         )
                     if decision.reason == ALREADY_PENDING_REASON:
                         # El mismo pedido ya espera una aprobación en otra conversación: no se
@@ -707,7 +777,7 @@ class Agent:
                                 "reason": decision.reason,
                             },
                         )
-                        return self._finish(turn, "responder", DUPLICATE_APPROVAL_MESSAGE)
+                        return self._finish(turn, "responder", turn.say("duplicate_approval"))
                     self._audit(
                         turn,
                         "tool_call",
@@ -740,7 +810,7 @@ class Agent:
         return (
             not turn.contact.verified
             and turn.needs_identity
-            and ASKS_PERSONAL_DATA.search(message) is not None
+            and PERSONAL_DATA[turn.lang].search(message) is not None
         )
 
     def _reverifies(self, turn: _Turn, data: dict[str, Any]) -> bool:
@@ -749,7 +819,7 @@ class Agent:
         return (
             turn.contact.verified
             and turn.needs_identity
-            and VERIFICATION_TALK.search(message) is not None
+            and VERIFICATION_TALKS[turn.lang].search(message) is not None
         )
 
     def _request_verification(self, turn: _Turn, rejected: str) -> AgentResult:
@@ -762,7 +832,7 @@ class Agent:
             "verification_requested",
             {"reason": "El modelo pidió datos personales en texto.", "rejected_message": rejected},
         )
-        return self._finish(turn, "responder", VERIFICATION_MESSAGE, verification=True)
+        return self._finish(turn, "responder", turn.say("verification"), verification=True)
 
     def _give_up(self, turn: _Turn, reason: str, chat: str | None) -> AgentResult:
         """Sin una respuesta válida: deriva, salvo en la charla (mensaje fijo, sin derivar) o si
@@ -783,7 +853,7 @@ class Agent:
             return None
         self._audit(turn, "approval_message_fixed", {"reason": reason})
         return self._finish(
-            turn, "pedir_aprobacion", APPROVAL_PENDING_MESSAGE, approval_id=pending.approval_id
+            turn, "pedir_aprobacion", turn.say("approval_pending"), approval_id=pending.approval_id
         )
 
     def _check_grounding(self, turn: _Turn, data: dict[str, Any]) -> GroundingVerdict:
@@ -799,6 +869,7 @@ class Agent:
             evidence,
             tool_backed=bool(turn.decisions),
             tool_names={t.name for t in turn.tool_calls},
+            language=turn.lang,
         )
 
     def _final_action(self, turn: _Turn, name: str, data: dict[str, Any]) -> AgentResult:
@@ -840,7 +911,7 @@ class Agent:
                 (json.dumps(summary, ensure_ascii=False), turn.case_id),
             )
         self._audit(turn, "escalated", summary)
-        return self._finish(turn, "derivar", ESCALATION_MESSAGE, summary=summary)
+        return self._finish(turn, "derivar", turn.say("escalation"), summary=summary)
 
     def _finish(
         self,
@@ -903,14 +974,20 @@ class Agent:
         )
 
     # -- datos -----------------------------------------------------------------------------
-    def _tenant(self, tenant_id: uuid.UUID) -> tuple[str, str]:
+    def _tenant(self, tenant_id: uuid.UUID) -> tuple[str, str, str]:
+        """(nombre, tono, idioma). Una empresa en inglés habla siempre con el tono `english`."""
         with tenant_scope(self._conn, tenant_id):
             row = self._conn.execute(
                 "select name, settings from tenants where id = %s", (tenant_id,)
             ).fetchone()
         if row is None:
             raise LookupError("Tenant inexistente")
-        return row[0], (row[1] or {}).get("tone", "rioplatense")
+        settings = row[1] or {}
+        lang = i18n.normalize(settings.get("language"))
+        tone = str(settings.get("tone", "rioplatense"))
+        if lang == "en" and not prompt.is_english(tone):
+            tone = "english"
+        return row[0], tone, lang
 
     def _contact(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> ContactContext:
         with tenant_scope(self._conn, tenant_id):
@@ -924,7 +1001,7 @@ class Agent:
         return ContactContext(id=row[0], phone_hash=row[1], verified=row[2])
 
     def _open_case(
-        self, tenant_id: uuid.UUID, contact_id: uuid.UUID, company: str, text: str
+        self, tenant_id: uuid.UUID, contact_id: uuid.UUID, company: str, text: str, lang: str = "es"
     ) -> tuple[uuid.UUID, Classification | None]:
         """El caso del mensaje: el que el contacto tiene abierto; si no, el que resolvió hace
         menos de 7 días por el mismo tema, que se reabre (regla de reapertura); si no, uno
@@ -951,6 +1028,7 @@ class Agent:
                 company=company,
                 message=text,
                 case_types={name: goal for name, (goal, _) in case_types.items()},
+                language=lang,
             )
             if classification.label == candidate[1]:
                 billing.reopen(self._conn, tenant_id, candidate[0])

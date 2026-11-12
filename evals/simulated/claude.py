@@ -136,6 +136,11 @@ class SimulatedClaude:
                 "Para ayudarte con eso, indícanos tu número de teléfono o correo electrónico.",
                 factual=False,
             )
+        if self.mode == "asks_contact_en" and 'verificado="no"' in first and order_id:
+            return reply(
+                "To help with that, could you share your phone number or email address?",
+                factual=False,
+            )
         # Lo que hizo Groq después de verificar: ya verificado, vuelve a hablar de enviar un
         # código en lugar de usar la herramienta (hasta que se lo corrige).
         if self.mode == "reverify" and 'verificado="sí"' in first and order_id and not corrected:
@@ -322,10 +327,20 @@ def _best_document(question: str, docs: dict[str, str]) -> tuple[str, str] | Non
 
 _RULES = [
     (r"ignor\w* (tus|las) instrucciones|todos los (pedidos|clientes)", "pedido_no_permitido"),
+    (
+        r"ignore (your|all|the|previous) \w*\s*instructions|all (the )?(orders|customers)",
+        "pedido_no_permitido",
+    ),
     (r"\b(persona|humano|operador)\b", "derivar_humano"),
+    (r"\b(a person|a human|real person|representative|someone on your team)\b", "derivar_humano"),
     (
         r"^\W*(hola+|buenas+|buen d[ií]a+|gracias|chau|como andas|jaja\w*)\W*$|sos un bot"
         r"|q(ue)? pod[eé]s hacer|partido|peli\b|clima|nunca responden|la tarea",
+        "conversacion_general",
+    ),
+    (
+        r"^\W*(hi+|hello+|hey+|hi there|good (morning|afternoon)|thanks|bye)\W*$|are you a bot"
+        r"|what can you do|weather|homework",
         "conversacion_general",
     ),
     (r"cu[aá]nto tarda|env[ií]o gratis|gu[ií]a de talles", "consulta_general"),
@@ -337,6 +352,11 @@ _RULES = [
     (r"factura", "facturacion"),
     (r"sucursal|horario|abren|domingo|sábado|sabado|feriado", "horarios_y_sucursales"),
     (r"pedido|llega|envío|envio", "donde_esta_mi_pedido"),
+    # Inglés, con los tipos de Acme (en los tests de idioma Acme atiende en inglés).
+    (r"\baddress\b", "cambiar_direccion"),
+    (r"\brefund", "reembolso"),
+    (r"\bopen\b|sunday|hours|store", "horarios_y_sucursales"),
+    (r"\border\b|arrive|where is", "donde_esta_mi_pedido"),
 ]
 
 

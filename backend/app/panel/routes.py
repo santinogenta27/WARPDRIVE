@@ -20,6 +20,7 @@ import psycopg
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from app import i18n
 from app.audit import log as audit_log
 from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
@@ -346,26 +347,11 @@ cliente recibe el aviso en el chat.</p>{cards}
     return HTMLResponse(page("Aprobaciones", body, active="aprobaciones", session=ctx.session))
 
 
-def _approval_message(tool: str, params: dict[str, Any], outcome: ApprovalOutcome) -> str:
-    order = params.get("order_id")
-    about = f" del pedido {order}" if order else ""
-    if outcome.status == "rejected":
-        return (
-            f"Revisamos tu solicitud{about} y no la pudimos aprobar. Si querés, respondé este "
-            "mensaje y una persona del equipo te ayuda."
-        )
-    if outcome.status != "executed":
-        return (
-            f"Aprobamos tu solicitud{about}, pero no pudimos completarla automáticamente. "
-            "Una persona del equipo te va a escribir para terminarla."
-        )
-    if tool == "iniciar_reembolso":
-        amount = f" por {_money(params['amount'])}" if params.get("amount") else ""
-        return (
-            f"¡Buenas noticias! Aprobamos el reembolso{about}{amount}. Ya lo iniciamos: te "
-            "avisamos cuando se acredite en tu medio de pago."
-        )
-    return f"¡Listo! Aprobamos y realizamos lo que pediste{about}."
+def _approval_message(
+    tool: str, params: dict[str, Any], outcome: ApprovalOutcome, language: str = "es"
+) -> str:
+    """El aviso al cliente, en el idioma de la empresa (decisión 036)."""
+    return i18n.approval_message(language, tool, params, outcome.status)
 
 
 @router.post("/aprobaciones/{approval_id}")
@@ -402,7 +388,7 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
             conn,
             ctx.tenant_id,
             case_id,
-            _approval_message(tool, params, outcome),
+            _approval_message(tool, params, outcome, i18n.tenant_language(conn, ctx.tenant_id)),
             kind="approval_decided",
             detail={
                 "approval_id": str(approval_id),

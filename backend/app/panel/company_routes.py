@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from app import i18n
 from app.channels.web import widget
 from app.companies import connection as system
 from app.companies import delete as removal
@@ -771,6 +772,34 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
     return _back("configuracion", ok="Widget guardado.")
 
 
+def _language_html(ctx: Ctx, language: str) -> str:
+    """Idioma de la empresa (decisión 036): el del asistente, el chat, el widget y los emails."""
+    options = "".join(
+        f'<option value="{code}"{" selected" if code == language else ""}>{name}</option>'
+        for code, name in i18n.NAMES.items()
+    )
+    return f"""<div class="card"><form method="post" action="/panel/configuracion/idioma">
+{_csrf(ctx)}<label for="idioma">Idioma con el que atiende el asistente</label>
+<div class="row"><select id="idioma" name="idioma" style="max-width:260px">{options}</select>
+<button type="submit">Guardar idioma</button></div>
+<p class="muted small">Cambia las respuestas del asistente, los textos del chat y del widget y el
+email del código de verificación. En inglés, el asistente usa un tono cálido y profesional; en
+español, rioplatense con voseo.</p></form></div>"""
+
+
+@router.post("/configuracion/idioma")
+def save_language(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    choice = form.get("idioma", "")
+    if choice not in i18n.LANGUAGES:
+        return _back("configuracion", error="Elegí un idioma de la lista.")
+    with deps.connection() as conn:
+        i18n.set_language(conn, ctx.tenant_id, choice)
+    return _back("configuracion", ok=f"Idioma guardado: {i18n.NAMES[choice]}.")
+
+
 @router.get("/configuracion", response_class=HTMLResponse)
 def settings_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
@@ -783,6 +812,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
         mode = system.mode_for(conn, ctx.tenant_id)
         slug = chat_slug(conn, ctx.tenant_id)
         brand = widget.load(conn, ctx.tenant_id)
+        language = i18n.tenant_language(conn, ctx.tenant_id)
     approved = {t.name for t in tools if t.approved}
     chat = (
         f"<p>Probá el asistente de {esc(ctx.session.company)} en su propio chat: "
@@ -798,6 +828,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
     body = f"""<h1>Configuración</h1><p class="lead">Revisá lo que encontró el análisis y decidí
 qué usa el asistente. Lo que activás o aprobás acá pasa al asistente en vivo en el momento; nada
 queda activo sin tu aprobación.</p>{_notice(request)}
+<h2>Idioma</h2>{_language_html(ctx, language)}
 <h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
 <h2>Herramientas</h2>{_tools_html(ctx, tools)}
 <h2>Sistema de la empresa</h2>{_system_html(ctx, found, mode)}

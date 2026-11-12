@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="{{lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -38,7 +38,7 @@
 </head>
 <body>
 <main id="chat" aria-label="{{title}}"></main>
-<noscript>Para usar el chat hace falta JavaScript.</noscript>
-<script src="/widget.js" data-chat="{{slug}}" data-mode="page" data-target="#chat" data-note="{{note}}"></script>
+<noscript>{{nojs}}</noscript>
+<script src="/widget.js" data-chat="{{slug}}" data-mode="page" data-target="#chat" data-note="{{note}}" data-lang="{{lang}}"></script>
 </body>
 </html>

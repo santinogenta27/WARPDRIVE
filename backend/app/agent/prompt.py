@@ -1,5 +1,6 @@
 """Armado del prompt del agente (estructura de la spec v1.1, "Estructura del prompt")."""
 
+import copy
 import html
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,8 @@ PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 # v5: consultar el pedido antes de modificarlo, explicar las reglas del negocio con una
 # alternativa en lugar de derivar, y un mensaje sin JSON ni metadatos (docs/calidad.md).
 SYSTEM_PROMPT_VERSION = "system_v5"
+# Empresas en inglés (decisión 036): la traducción de la misma versión, no una versión nueva.
+ENGLISH_SUFFIX = "_en"
 
 TONES = {
     "rioplatense": (
@@ -22,8 +25,20 @@ TONES = {
         ' "usted" ni sus formas ("indícanos", "dime", "puedes").'
     ),
     "neutro": "Hablá en español neutro con tuteo.",
+    "english": (
+        "Always write in natural, warm and professional English, like a friendly support "
+        "specialist at a good online store: clear, courteous and to the point. Use contractions "
+        '("I\'ll", "you\'re"), address the customer as "you", and avoid stiff phrases, slang '
+        "and emojis. Reply in English even if the customer writes in another language."
+    ),
     "ingles": "Answer in English.",
 }
+ENGLISH_TONES = {"english", "ingles"}
+
+
+def is_english(tone: str) -> bool:
+    return tone in ENGLISH_TONES
+
 
 FINAL_TOOLS: list[dict[str, Any]] = [
     {
@@ -62,6 +77,26 @@ FINAL_TOOLS: list[dict[str, Any]] = [
     },
 ]
 FINAL_TOOL_NAMES = {t["name"] for t in FINAL_TOOLS}
+# Las mismas herramientas finales, con las descripciones en inglés: los nombres no cambian.
+_ENGLISH_DESCRIPTIONS = {
+    ("responder", None): "Sends the final answer to the customer.",
+    ("responder", "mensaje"): "Text for the customer",
+    ("responder", "fuentes"): "Ids of the documents used (empty if you used none)",
+    ("responder", "factual"): "true if the message states facts about the company or an order",
+    ("derivar", None): "Hands the case off to a member of the team, with a summary.",
+}
+
+
+def _final_tools(english: bool) -> list[dict[str, Any]]:
+    if not english:
+        return FINAL_TOOLS
+    translated = copy.deepcopy(FINAL_TOOLS)
+    for tool in translated:
+        tool["description"] = _ENGLISH_DESCRIPTIONS[(tool["name"], None)]
+        for field, spec in tool["input_schema"]["properties"].items():
+            if (tool["name"], field) in _ENGLISH_DESCRIPTIONS:
+                spec["description"] = _ENGLISH_DESCRIPTIONS[(tool["name"], field)]
+    return translated
 
 
 def _escape(text: str) -> str:
@@ -70,7 +105,8 @@ def _escape(text: str) -> str:
 
 
 def system_prompt(company: str, tone: str, case_type_instructions: str) -> str:
-    template = (PROMPTS_DIR / f"{SYSTEM_PROMPT_VERSION}.txt").read_text(encoding="utf-8")
+    name = SYSTEM_PROMPT_VERSION + (ENGLISH_SUFFIX if is_english(tone) else "")
+    template = (PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
     fixed = template.replace("{empresa}", company).replace(
         "{tono}", TONES.get(tone, TONES["rioplatense"])
     )
@@ -93,10 +129,13 @@ def user_turn(
 
 
 def tool_definitions(
-    manifests: list[dict[str, Any]], finals: tuple[str, ...] = ("responder", "derivar")
+    manifests: list[dict[str, Any]],
+    finals: tuple[str, ...] = ("responder", "derivar"),
+    *,
+    english: bool = False,
 ) -> list[dict[str, Any]]:
     business = [
         {"name": m["name"], "description": m["description"], "input_schema": m["input_schema"]}
         for m in manifests
     ]
-    return business + [t for t in FINAL_TOOLS if t["name"] in finals]
+    return business + [t for t in _final_tools(english) if t["name"] in finals]

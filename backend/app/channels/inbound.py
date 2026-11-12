@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import psycopg
 
+from app import i18n
 from app.agent.loop import Agent
 from app.audit import log as audit_log
 from app.channels.base import (
@@ -64,6 +65,8 @@ def handle_inbound(
     if message.type == "text" and message.text.strip():
         result = agent(conn).handle_message(tenant_id, contact_id, message.text)
         reply, case_id = result.message, result.case_id
+    elif i18n.tenant_language(conn, tenant_id) == "en":
+        reply = i18n.text("en", "unsupported")
     else:
         reply = UNSUPPORTED_MESSAGE
     try:
