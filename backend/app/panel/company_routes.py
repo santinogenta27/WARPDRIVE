@@ -19,6 +19,7 @@ from app.companies import connection as system
 from app.companies import delete as removal
 from app.companies import onboarding, review
 from app.companies.create import CompanyError, chat_slug, create_company
+from app.onboarding import ingest as ingestion
 from app.onboarding.ingest import Upload
 from app.panel import auth
 from app.panel.html import esc, local_time, page
@@ -242,6 +243,7 @@ def onboarding_page(request: Request, deps: Deps) -> Response:
         found = onboarding.sources(conn, ctx.tenant_id)
         names = sorted(onboarding.business_names(conn, ctx.tenant_id) - {ctx.session.company})
         run = onboarding.state(conn, ctx.tenant_id)
+        waiting = ingestion.pending_documents(conn, ctx.tenant_id)
     source_rows = "".join(
         f"<tr><td>{esc(name)}</td><td>{esc(KINDS.get(kind, kind))}</td>"
         f'<td class="num">{count or "—"}</td><td>{local_time(created)}</td></tr>'
@@ -287,6 +289,7 @@ def onboarding_page(request: Request, deps: Deps) -> Response:
     body = f"""<h1>Onboarding</h1><p class="lead">Subí el historial de atención y los documentos
 de {esc(ctx.session.company)}. El asistente aprende de ahí: detecta los tipos de caso, arma sus
 pruebas y te dice qué parte de la atención resolvería solo.</p>{_notice(request)}{done}
+{_pending_html(ctx, waiting)}
 <div class="card"><h2 style="margin-top:0">1. Subí tus fuentes</h2>{sources_table}
 <form method="post" action="/panel/onboarding/fuentes" enctype="multipart/form-data"
  style="margin-top:12px">{_csrf(ctx)}
@@ -296,7 +299,8 @@ pruebas y te dice qué parte de la atención resolvería solo.</p>{_notice(reque
 <p class="muted small">Chats de WhatsApp exportados (.txt, o un .zip con varios), tickets de
 helpdesk (.csv o .json) y documentos de políticas (.md, .txt, .docx o .pdf con texto). Hasta
 50 MB. En los chats y tickets, los datos personales se reemplazan por marcadores antes de
-guardar. El archivo original no se conserva.</p>
+guardar. En los documentos se reemplazan los números de tarjeta y los DNI; los emails y
+teléfonos de tu empresa quedan como están. El archivo original no se conserva.</p>
 <button class="primary" type="submit">Subir</button></form>
 <form method="post" action="/panel/onboarding/nombres" style="margin-top:16px">{_csrf(ctx)}
 <label for="nombres">Con qué nombre figura la empresa en los chats de WhatsApp</label>
@@ -316,6 +320,31 @@ Separá los nombres con comas y cargalos antes de subir los chats.</p>
             refresh=8 if running else None,
         )
     )
+
+
+def _pending_html(ctx: Ctx, waiting: list[ingestion.PendingDocument]) -> str:
+    """Documentos que parecen tener datos de personas: no se indexan hasta que la empresa
+    confirma. Se muestra el motivo, nunca los datos."""
+    if not waiting:
+        return ""
+    items = "".join(
+        f"""<li class="row" style="padding:8px 0"><span class="grow"><b>{esc(doc.name)}</b>
+<div class="muted small">Tiene {esc(doc.reason)}. Subido el {local_time(doc.created_at)}.</div>
+</span><form method="post" action="/panel/onboarding/documentos/{doc.id}/indexar">{_csrf(ctx)}
+<button type="submit">Indexar igual</button></form>
+<form method="post" action="/panel/onboarding/documentos/{doc.id}/descartar">{_csrf(ctx)}
+<button class="primary" type="submit">Descartar</button></form></li>"""
+        for doc in waiting
+    )
+    return f"""<div class="card alert" style="color:var(--ink)">
+<h2 style="margin-top:0">Documentos que esperan tu confirmación</h2>
+<p>Estos documentos parecen tener datos de personas y todavía <b>no se indexaron</b>. El
+asistente responde con lo que dicen tus documentos: si uno trae emails o teléfonos de clientes,
+podría mostrárselos a otro cliente.</p>
+<ul style="list-style:none;padding:0;margin:0">{items}</ul>
+<p class="muted small">Si es una política con los contactos de tu empresa, indexalo. Si es una
+lista de clientes o de empleados, descartalo. Los números de tarjeta y los DNI ya se
+reemplazaron.</p></div>"""
 
 
 def _ingest(deps: PanelDeps, tenant_id: uuid.UUID, files: list[Upload]) -> Any:
@@ -343,10 +372,39 @@ async def upload_sources(request: Request, data: Files, deps: Deps) -> Response:
     if result.skipped:
         summary += f" {result.skipped} ya estaban subidos."
     # Un documento sin texto (PDF escaneado) se avisa acá: el resto de la carga ya quedó.
-    warning = " ".join(result.unreadable)
+    waiting = [
+        f"{note} Parece tener datos de personas: no se indexó. Confirmalo o descartalo acá abajo."
+        for note in result.held
+    ]
+    warning = " ".join([*result.unreadable, *waiting])
     if not result.sources and not result.skipped:
         return _back("onboarding", warning=warning) if warning else _back("onboarding", ok=summary)
     return _back("onboarding", ok=summary, warning=warning)
+
+
+@router.post("/onboarding/documentos/{document_id}/{action}")
+async def decide_pending_document(
+    document_id: uuid.UUID, action: str, request: Request, form: Form, deps: Deps
+) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    if action not in ("indexar", "descartar"):
+        return _not_found("Esa acción", ctx.session)
+
+    def decide() -> str | None:
+        with deps.connection() as conn:
+            if action == "indexar":
+                return ingestion.confirm_pending(
+                    conn, ctx.tenant_id, document_id, deps.embedder(conn)
+                )
+            return ingestion.discard_pending(conn, ctx.tenant_id, document_id)
+
+    name = await run_in_threadpool(decide)
+    if name is None:
+        return _not_found("Ese documento", ctx.session)
+    done = "quedó indexado" if action == "indexar" else "se descartó: no quedó nada guardado"
+    return _back("onboarding", ok=f"{name} {done}.")
 
 
 @router.post("/onboarding/nombres")

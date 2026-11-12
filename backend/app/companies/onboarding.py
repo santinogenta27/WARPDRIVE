@@ -91,6 +91,8 @@ def add_sources(
             uploads,
             business=business_names(conn, tenant_id),
             embedder=embedder,
+            # Desde el panel hay dónde confirmar: un documento con datos de personas espera.
+            hold_personal_data=True,
         )
     except (ValueError, KeyError, UnicodeDecodeError) as error:
         raise OnboardingError(f"No se pudo leer un archivo: {error}") from error

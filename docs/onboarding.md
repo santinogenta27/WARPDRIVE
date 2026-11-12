@@ -60,4 +60,5 @@ El historial sintético se regenera con `python evals/fixtures/acme/onboarding/g
 - **Tickets JSON:** una lista de tickets con `requester` y `comments` (formato tipo Zendesk).
 - **Documentos:** Markdown o texto, DOCX, PDF con texto y URL (decisión 030).
   - Un PDF escaneado, con contraseña o dañado no se guarda: la pantalla avisa por qué y el resto de la carga sigue.
-  - Los documentos no se anonimizan: son las políticas de la empresa, con sus datos de contacto. Los chats y tickets sí.
+  - En los documentos se reemplazan los números de tarjeta y los DNI. Los emails, teléfonos y CUIT de la empresa quedan como están (decisión 035). Los chats y tickets se anonimizan enteros.
+  - Un documento con 3 o más emails o teléfonos distintos parece una lista de personas: no se indexa hasta que la empresa lo confirma en la pantalla Onboarding.

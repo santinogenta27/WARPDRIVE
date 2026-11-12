@@ -38,12 +38,14 @@ La spec lista PDF entre los documentos de la ingesta. La decisión 021 lo dejó 
 
 ### 4. Datos personales: los documentos no se anonimizan
 
+**Actualización (12 de noviembre de 2026, decisión 035):** en los documentos ahora se reemplazan los números de tarjeta y los DNI, y un documento con datos de varias personas espera la confirmación de la empresa antes de indexarse. Los emails, teléfonos y CUIT de la empresa siguen sin tocarse, por el motivo de abajo.
+
 Esto ya era así con DOCX y Markdown, y PDF sigue la misma regla.
 
 - **Chats y tickets:** se anonimizan antes de guardarse. Son conversaciones con clientes.
 - **Documentos:** se indexan como están. Son las políticas de la empresa, y sus datos de contacto (el email de soporte, un teléfono, el CUIT) son parte de la respuesta que el asistente tiene que dar. El anonimizador no distingue el email de soporte del email de un cliente: los reemplazaría a los dos.
 - El texto de la pantalla decía que los datos personales se reemplazan "antes de guardar", sin aclarar. Ahora dice que eso vale para chats y tickets.
-- **Riesgo:** si alguien sube como documento un PDF con datos de clientes (una factura, una planilla), ese texto queda en el RAG. Queda pendiente decidir si se anonimizan tarjetas y DNI también en los documentos.
+- **Riesgo:** si alguien sube como documento un PDF con datos de clientes (una factura, una planilla), ese texto queda en el RAG. ~~Queda pendiente decidir si se anonimizan tarjetas y DNI también en los documentos.~~ Resuelto en la decisión 035.
 
 ### 5. Arreglo: documentos con saltos de línea de Windows
 
@@ -59,4 +61,4 @@ Esto ya era así con DOCX y Markdown, y PDF sigue la misma regla.
 
 - OCR para PDF escaneados.
 - Tablas: el texto de una tabla sale fila por fila, sin columnas.
-- Anonimizar tarjetas y DNI en documentos.
+- ~~Anonimizar tarjetas y DNI en documentos.~~ Hecho en la decisión 035.

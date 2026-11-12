@@ -32,6 +32,7 @@ import pypdf
 
 from app.db.connection import tenant_scope
 from app.llm.embedder import Embedder
+from app.onboarding import sensitive
 from app.onboarding.anonymize import Anonymizer
 from app.rag.indexer import index_document
 
@@ -94,6 +95,9 @@ class IngestResult:
     skipped: int
     # Un aviso por documento que no se pudo leer (PDF escaneado, con contraseña o dañado).
     unreadable: tuple[str, ...] = ()
+    # Un aviso por documento que no se indexó porque parece tener datos de personas: espera la
+    # confirmación de la empresa (decisión 035).
+    held: tuple[str, ...] = ()
 
 
 class UnreadableDocument(ValueError):
@@ -374,10 +378,16 @@ def ingest(
     business: set[str],
     embedder: Embedder,
     http: httpx.Client | None = None,
+    hold_personal_data: bool = False,
 ) -> IngestResult:
-    """Guarda cada archivo como fuente; los ya ingeridos (mismo hash) se saltean."""
+    """Guarda cada archivo como fuente; los ya ingeridos (mismo hash) se saltean.
+
+    En los documentos se reemplazan tarjetas y DNI antes de guardar. Con `hold_personal_data`
+    (el panel), un documento que parece tener datos de varias personas no se indexa: queda en
+    `pending_documents` hasta que la empresa lo confirma o lo descarta."""
     sources = conversations = messages = documents = skipped = 0
     unreadable: list[str] = []
+    held: list[str] = []
     for upload in uploads:
         kind = detect_kind(upload)
         content = upload.name.encode() if kind == "url" else upload.data
@@ -398,6 +408,25 @@ def ingest(
                 except UnreadableDocument as error:
                     unreadable.append(str(error))
                     continue
+                document = _without_cards_and_ids(document)
+                reason = sensitive.personal_data(document.text) if hold_personal_data else None
+                if reason is not None:
+                    conn.execute(
+                        "insert into pending_documents (tenant_id, name, title, source, text,"
+                        " content_hash, reason) values (%s, %s, %s, %s, %s, %s, %s)"
+                        " on conflict (tenant_id, content_hash) do nothing",
+                        (
+                            tenant_id,
+                            PurePath(upload.name).name,
+                            document.title,
+                            document.source,
+                            document.text,
+                            digest,
+                            reason,
+                        ),
+                    )
+                    held.append(f"{PurePath(upload.name).name}: {reason}")
+                    continue
             row = conn.execute(
                 "insert into sources (tenant_id, kind, file_path, status, content_hash)"
                 " values (%s, %s, %s, 'done', %s) returning id",
@@ -411,7 +440,7 @@ def ingest(
                     conversations += 1
                 continue
         if document is None:
-            document = fetch_url(upload.name, http)
+            document = _without_cards_and_ids(fetch_url(upload.name, http))
         index_document(
             conn,
             tenant_id,
@@ -421,4 +450,63 @@ def ingest(
             text=document.text,
         )
         documents += 1
-    return IngestResult(sources, conversations, messages, documents, skipped, tuple(unreadable))
+    return IngestResult(
+        sources, conversations, messages, documents, skipped, tuple(unreadable), tuple(held)
+    )
+
+
+def _without_cards_and_ids(document: Document) -> Document:
+    text, _ = sensitive.redact(document.text)
+    title, _ = sensitive.redact(document.title)
+    return Document(title=title, source=document.source, text=text)
+
+
+@dataclass(frozen=True)
+class PendingDocument:
+    id: uuid.UUID
+    name: str
+    reason: str
+    created_at: datetime
+
+
+def pending_documents(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[PendingDocument]:
+    """Documentos que esperan la confirmación de la empresa."""
+    with tenant_scope(conn, tenant_id):
+        rows = conn.execute(
+            "select id, name, reason, created_at from pending_documents order by created_at, id"
+        ).fetchall()
+    return [PendingDocument(*row) for row in rows]
+
+
+def confirm_pending(
+    conn: psycopg.Connection, tenant_id: uuid.UUID, document_id: uuid.UUID, embedder: Embedder
+) -> str | None:
+    """La empresa confirma: el documento se indexa y deja de esperar. Devuelve su nombre, o
+    None si no existe (o es de otra empresa)."""
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "delete from pending_documents where id = %s"
+            " returning name, title, source, text, content_hash",
+            (document_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        name, title, source, text, digest = row
+        conn.execute(
+            "insert into sources (tenant_id, kind, file_path, status, content_hash)"
+            " values (%s, 'document', %s, 'done', %s)",
+            (tenant_id, name, digest),
+        )
+    index_document(conn, tenant_id, embedder, title=title, source=source, text=text)
+    return str(name)
+
+
+def discard_pending(
+    conn: psycopg.Connection, tenant_id: uuid.UUID, document_id: uuid.UUID
+) -> str | None:
+    """La empresa lo descarta: no queda nada guardado. Devuelve su nombre, o None."""
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "delete from pending_documents where id = %s returning name", (document_id,)
+        ).fetchone()
+    return str(row[0]) if row else None
