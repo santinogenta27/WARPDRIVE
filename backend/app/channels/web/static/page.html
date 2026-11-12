@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>{{title}}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23{{accent}}'/%3E%3Cpath d='M9 11.5A2.5 2.5 0 0 1 11.5 9h9a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5H15l-4 3v-3.2A2.5 2.5 0 0 1 9 17.5z' fill='white'/%3E%3C/svg%3E">
+<style>
+  /* La página del chat es solo el marco: el chat entero lo dibuja /widget.js, el mismo archivo
+     que se instala en el sitio de un cliente. */
+  :root { --bg: #f4f5f7; --glow: #{{accent}}; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0c0d10; } }
+  /* ?tema=claro u ?tema=oscuro fija el tema (por defecto, el del sistema). */
+  html[data-tema=claro] { --bg: #f4f5f7; color-scheme: light; }
+  html[data-tema=oscuro] { --bg: #0c0d10; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background:
+      radial-gradient(70% 55% at 50% -10%, color-mix(in srgb, var(--glow) 16%, transparent), transparent 70%),
+      var(--bg);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    display: grid;
+    place-items: center;
+  }
+  #chat { width: 100%; height: 100dvh; }
+  @media (min-width: 600px) {
+    body { padding: 28px; }
+    #chat { max-width: 430px; height: min(760px, calc(100dvh - 56px)); }
+  }
+  noscript { padding: 24px; text-align: center; color: #5f6672; }
+</style>
+<script>
+  var tema = new URLSearchParams(location.search).get("tema");
+  if (tema === "claro" || tema === "oscuro") document.documentElement.setAttribute("data-tema", tema);
+</script>
+</head>
+<body>
+<main id="chat" aria-label="{{title}}"></main>
+<noscript>Para usar el chat hace falta JavaScript.</noscript>
+<script src="/widget.js" data-chat="{{slug}}" data-mode="page" data-target="#chat" data-note="{{note}}"></script>
+</body>
+</html>
