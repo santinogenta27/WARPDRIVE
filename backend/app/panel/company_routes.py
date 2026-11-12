@@ -694,7 +694,7 @@ var r=new FileReader();r.onload=function(){logo=r.result;push()};r.readAsDataURL
 var copy=document.getElementById("copy-snippet");if(copy)copy.addEventListener("click",function(){
 var text=document.getElementById("snippet").textContent;
 (navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(function(){
-copy.textContent="Copiado"},function(){var r=document.createRange();
+copy.textContent=copy.getAttribute("data-done")},function(){var r=document.createRange();
 r.selectNodeContents(document.getElementById("snippet"));var s=getSelection();s.removeAllRanges();
 s.addRange(r)})})})();"""
 
@@ -713,7 +713,7 @@ def _widget_html(ctx: Ctx, request: Request, slug: str, found: widget.WidgetSett
 <p class="muted small">Va antes de <span class="mono">&lt;/body&gt;</span>, en todas las páginas
 donde quieras el chat. Aparece una burbuja abajo a la derecha.</p>
 <pre id="snippet">{esc(code)}</pre>
-<button type="button" id="copy-snippet">Copiar código</button>
+<button type="button" id="copy-snippet" data-done="Copiado">Copiar código</button>
 <form method="post" action="/panel/configuracion/widget" enctype="multipart/form-data"
  id="widget-form">{_csrf(ctx)}
 <h3>2. Dominios permitidos</h3>
