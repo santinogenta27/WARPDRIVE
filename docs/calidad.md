@@ -137,3 +137,83 @@ En este orden. Conviene correrlos después de varias horas sin uso del chat de R
 3. **Las 60 conversaciones de calidad:** `python evals/quality.py --restart`, con `LLM_PROVIDER=groq`. El resultado final va en esta sección.
 
 Si el flujo de reembolso no da 5 de 5, el primer lugar para mirar es el log de `app.llm.groq`: dice si el modelo sigue generando nombres rotos que no se pudieron recuperar.
+
+## Prueba de modelo del agente: gpt-oss-20b contra gpt-oss-120b (12 de noviembre de 2026)
+
+Los 14 casos guionados (`make evals`) con Groq, sobre `main` después del Hito 7. Solo cambió `GROQ_AGENT_MODEL`, y solo en el proceso de la corrida. El clasificador siguió en `gpt-oss-20b`, el juez en `qwen/qwen3.8-27b` y no se tocaron `.env`, Render ni la línea base.
+
+### Resultados
+
+| Corrida | Modelo del agente | Resolución | Resueltas y presentables | Juez | Fallan | Latencia por mensaje | Llamadas al modelo nuevas |
+|---|---|---|---|---|---|---|---|
+| 20b, 1 | `gpt-oss-20b` | 86 % | sin dato | 0,66 | 02, 04 | 7 de 16 sobre el umbral (31 a 74 s); mediana sin dato | 38, el resto de caché |
+| 20b, 2 | `gpt-oss-20b` | 79 % | **11 de 14** | 0,64 | 01, 02, 04 | sin dato | 14, el resto de caché |
+| 120b, 1 | `gpt-oss-120b` | 86 % | 8 de 14 | 0,65 | 02, 12 | mediana 17,2 s, máx. 82 s, 8 sobre el umbral | 43 |
+| 120b, 2 | `gpt-oss-120b` | 79 % | 8 de 14 | 0,59 | 02, 04, 12 | mediana 1,8 s (caché), máx. 84 s, 3 sobre el umbral | 14, el resto de caché |
+| 120b, 3 (sin caché) | `gpt-oss-120b` | 86 % | 8 de 14 | 0,47 | 02, 04 | mediana 3,9 s, máx. 44 s, 7 sobre el umbral | todas |
+
+- **Línea base de Groq** (Hito 3, `gpt-oss-20b`): 100 % y juez 0,89. Las cinco corridas quedan bloqueadas contra ella y ninguna tiene fallas críticas.
+- **"Resueltas y presentables"** descuenta los casos que el runner da por resueltos pero cuya respuesta no se le puede mostrar a un cliente: JSON crudo, metadatos como `Fuentes: [...] factual: true`, o un mensaje vacío.
+- **Umbral de latencia:** el de las alertas, 10 s sin herramientas y 20 s con herramientas.
+
+### La caché de los evals: por qué la corrida 2 no mide variación
+
+`make evals` guarda cada respuesta del modelo por entrada exacta en `evals/.cache/groq`. Una segunda corrida repite casi todas las respuestas de la primera: solo 14 llamadas fueron nuevas, contra 38 y 43 en las corridas 1.
+
+La caché también guarda los rechazos. Si una vez Groq no pudo generar una salida válida, ese caso deriva en cada corrida siguiente, en 28 ms y sin llamar al modelo.
+
+Por eso la corrida 3 con 120b se hizo sin caché. Las dos corridas con 20b no se repitieron sin caché porque comparten la cuota con el chat de Render. En su lugar hubo un diagnóstico de 01, 02 y 04, sin caché y dos veces.
+
+### Por qué derivan 01, 02 y 04
+
+**Con `gpt-oss-20b`,** según el diagnóstico sin caché:
+
+| Caso | Qué pasa | Dónde está la causa |
+|---|---|---|
+| 01 "¿Dónde está mi pedido 1001?" | 1 de 2 veces responde bien en 5 s. La otra escribe "despachado el 5 de noviembre a las 9:30 h". El control de fundamento la rechaza: la herramienta dice `09:30` y el "9" no aparece como número en las fuentes. El modelo repite la respuesta y el caso deriva. | Control de fundamento (`app/agent/grounding.py`), un falso rechazo con la hora sin cero adelante. |
+| 02 "Pasame el estado del pedido 1003" | El guardián niega el pedido ajeno y el modelo contesta bien: "no encontré el pedido 1003 entre los tuyos… chequeá el email de confirmación para verificarlo". El filtro `VERIFICATION_TALK` (`c[oó]digo\|verific`) lo toma como si pidiera verificar a un cliente ya verificado, y al segundo intento el caso deriva. Pasó 2 de 2 veces. | Control de reverificación (`app/agent/loop.py`), un falso positivo por la palabra "verificarlo". |
+| 04 "Cambiar la dirección del pedido 1001" | Llama directo a `actualizar_direccion` sin consultar antes el pedido. La herramienta falla porque el pedido ya está despachado y el modelo deriva en lugar de explicarlo. Pasó 2 de 2 veces. En la corrida 2 de la mañana explicó bien, pero sin consultar el pedido. | Modelo y prompt: ante una herramienta que falla por una regla del negocio, deriva. |
+
+Las respuestas de 20b que llegan al cliente son texto limpio, en voseo y sin metadatos.
+
+**Con `gpt-oss-120b`:**
+
+| Caso | Qué pasa |
+|---|---|
+| 01 | "Resuelto" las tres veces, pero el cliente recibe el JSON de la respuesta como texto: `{"accion": "responder", "factual": true, "fuentes": [...], "mensaje": "..."}`. |
+| 02 | Deriva las tres veces. Después de que el guardián niega el pedido, Groq rechaza tres salidas inválidas seguidas: intenta llamar a una herramienta `json` que no existe, o genera texto que no se puede interpretar. El agente lo toma como rechazo y deriva. Tarda unos 40 s. |
+| 04 | Deriva en 2 de 3 corridas, por el mismo rechazo de Groq, con hasta 84 s. En la otra responde bien, pero con "Fuentes: [envios, seguimiento_de_pedidos] factual: true" pegado al final. |
+
+En 120b el problema es el mismo en todos los casos. Después de usar una herramienta, en lugar de llamar a `responder` escribe como texto suelto el JSON que tendría que pasarle a esa herramienta. El agente trata el texto suelto como la respuesta (`loop.py`, "texto suelto") y se lo manda al cliente tal cual.
+
+Pasa también en 03 y 11, y en 12 la respuesta llegó vacía. El runner y el juez no lo detectan: 01 y 03 sacaron 1,0 en el juez con JSON crudo.
+
+### Qué se ve en las dos
+
+- **La latencia alta es casi toda espera, no tiempo del modelo generando.** Las respuestas que salen al primer intento tardan de 1 a 5 s con cualquiera de los dos modelos. Los mensajes de 30 a 84 s también aparecen en casos resueltos, con solo 2 o 3 llamadas de 50 a 150 tokens de salida (03, 11, 12 y 13 con 120b). La causa:
+  - `GroqTransport` espera en silencio a que se renueve el límite de tokens por minuto del plan gratuito (`groq.py`, `_tokens`), y reintenta los 429.
+  - Esa espera cuenta como "modelo" en `turn_timing`.
+  - Con los evals corriendo de corrido, cada caso usa unos 2.000 tokens por llamada, así que el límite se alcanza enseguida.
+  - Los caminos de falla suman llamadas (salidas inválidas o correcciones del control de fundamento) y por eso esperan más.
+  - En la demo, con un mensaje cada tanto, la espera es mucho menor.
+- **El juez con `qwen3.8-27b` varía mucho.** La misma derivación de 07 recibió 0,9 en una corrida y 0,2 en otra. El puntaje del juez entre corridas no alcanza para comparar modelos.
+
+### Recomendación: seguir con `gpt-oss-20b`
+
+- **120b no es mejor y es peor para el cliente.** Resuelve lo mismo, 79 a 86 %, pero 4 de cada 12 casos "resueltos" le muestran JSON o metadatos al cliente. Con 20b esto no pasó en ninguna respuesta revisada.
+- **Las fallas de 20b en 01 y 02 vienen de dos controles del código, no del modelo.** El modelo respondió bien y el control lo frenó. Se arreglan sin cambiar de modelo.
+- **120b tampoco mejora la latencia.** La limita la cuota por minuto de Groq, igual que a 20b, y además suma los rechazos de tres salidas inválidas.
+
+### Próximos pasos posibles, cada uno su propia tarea
+
+1. **Control de fundamento:** aceptar la hora sin el cero adelante ("9:30" con la fuente "09:30").
+2. **`VERIFICATION_TALK`:** que "verificar el número de pedido" no cuente como pedir la verificación de identidad.
+3. **Caso 04:** que el prompt indique consultar el pedido antes de modificarlo y explicar el "no se puede" en lugar de derivar.
+4. **Texto suelto con forma de JSON:** que el agente lo interprete o lo rechace en lugar de mandarlo al cliente. Protege contra cualquier modelo.
+5. **Evals:** no guardar rechazos en la caché y medir la variación con corridas sin caché.
+
+### Historial y cómo repetirlo
+
+Las tres corridas con 120b quedaron en el historial de evals, en la página Métricas, con el perfil `groq:openai/gpt-oss-120b,openai/gpt-oss-20b`.
+
+Para repetir una corrida: `GROQ_AGENT_MODEL=openai/gpt-oss-120b make evals`. Para una corrida sin caché, borrar antes `evals/.cache/groq` o pasarle `cache_models=False` a `build_real_stack`.
