@@ -1,6 +1,6 @@
 # Progreso
 
-Última actualización: 10 de noviembre de 2026. Lo más nuevo es el **Hito 6** (rama `hito-6`): está más abajo, con lo que quedó sin medir por la cuota de Groq.
+Última actualización: 12 de noviembre de 2026. Lo más nuevo es el **Hito 7 — Listo para vender**: cinco tareas, cada una en su rama y su pull request a `main`. Está más abajo. Del Hito 6 sigue sin medirse con Groq real lo que se anota en su sección.
 
 Ramas, cada una sale de la anterior: `hito-1` (tareas 1 a 5), `hito-2` (tareas 6 a 11), `gemini-gratis`, `hito-3`, `calidad`, `hito-4`, `hito-5` (la demo en Render) y `hito-6`.
 
@@ -332,6 +332,81 @@ Arreglos:
 - **Pendiente:** OCR, tablas y decidir si se anonimizan tarjetas y DNI en documentos.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_onboarding_ingest.py`. En el panel: **Onboarding** → subí `evals/fixtures/acme/onboarding/garantia.pdf`.
 
+## Hito 7 — Listo para vender (12 de noviembre de 2026)
+
+Cinco tareas. Cada una sale de `main` en su propia rama y tiene su pull request: ninguna depende de otra y se pueden aprobar en cualquier orden. Ninguna está mergeada todavía.
+
+| Tarea | Rama | Pull request | Decisión | Migración |
+|---|---|---|---|---|
+| 1. Widget instalable | `widget` | [#4](https://github.com/santinogenta27/WARPDRIVE/pull/4) | 031 | 0017 |
+| 2. Facturación por período | `facturacion` | [#5](https://github.com/santinogenta27/WARPDRIVE/pull/5) | 032 | — |
+| 3. CSAT y alertas por email | `csat-alertas` | [#6](https://github.com/santinogenta27/WARPDRIVE/pull/6) | 033 | 0018 |
+| 4. Borrado de una empresa | `borrado-empresa` | [#7](https://github.com/santinogenta27/WARPDRIVE/pull/7) | 034 | 0019 |
+| 5. Datos sensibles en documentos | `datos-sensibles` | [#8](https://github.com/santinogenta27/WARPDRIVE/pull/8) | 035 (y actualiza la 030) | 0020 |
+
+Las migraciones son aditivas y ya están aplicadas en Neon: las aplican los tests. No rompen la demo de Acme, que corre `main`.
+
+### Tarea 1 — Widget instalable (decisión 031)
+
+- **Qué hace:** una línea de `<script>` abre el chat de la empresa en una burbuja en su sitio, con el mismo flujo que `/c/…` (verificación, aprobaciones, mensajes del equipo).
+- **Dominios permitidos por empresa**, en Configuración. Desde otro sitio el servidor responde 403.
+- **Marca por empresa:** nombre, color de acento, logo y preguntas sugeridas, con vista previa.
+- **La página `/c/…` y la de la demo son el mismo widget.** La página vieja se borró.
+- **Diseño:** Shadow DOM, un archivo de 32 KB sin dependencias, tema claro y oscuro, pantalla completa en celular, estados de carga, sin conexión, error y límite, y accesible con teclado.
+- **Revisado en Chrome** con `docs/widget-ejemplo.html`, en escritorio y celular, claro y oscuro. Capturas en `docs/img/widget/`.
+- **También:** `render.yaml` pasa a `branch: main`.
+- **Cómo probarlo:** `docs/widget.md`.
+- **Pendiente:** probarlo en un iPhone real; minificar el archivo.
+
+### Tarea 2 — Facturación por período (decisión 032, tarea 22 de la spec)
+
+- **Qué hace:** panel del operador → **Facturación**. Casos resueltos por empresa y por mes, con el detalle caso por caso y exportación a CSV.
+- **Regla:** se cobra el caso que resolvió el asistente, sin intervención de una persona y sin reabrirse en 7 días. Las columnas son: a cobrar, dentro de los 7 días, con una persona y reabiertos.
+- **El mes** es el de Buenos Aires y queda cerrado el día 8 del mes siguiente.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_facturacion.py`. En el panel, con la sesión del operador.
+- **Pendiente:** precio por caso, guardar el cierre de cada mes y emitir la factura.
+
+### Tarea 3 — CSAT y alertas por email (decisión 033)
+
+- **CSAT:** al cerrar un caso, el chat pregunta si se resolvió. El cliente responde sí o no, con un comentario si quiere. Se ve en **Métricas**.
+- **Un "no" reabre el caso y lo pasa a una persona.** Ese caso no se cobra.
+- **La pregunta es texto**, así funciona igual en el chat web, el widget y WhatsApp.
+- **Alertas:** las de la decisión 028 también se envían por email al operador (`ALERT_EMAIL_TO` o `PANEL_EMAIL`), como mucho una por tipo y empresa cada 15 minutos. Siguen en los logs.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_csat.py backend/tests/test_alertas_por_email.py`.
+- **Pendiente:** botones Sí/No en el widget; cargar `ALERT_EMAIL_TO` en Render con un email real.
+
+### Tarea 4 — Borrado de una empresa (decisión 034)
+
+- **Qué hace:** panel del operador → **Empresas → Borrar…**. Pide escribir el nombre de la empresa y borra todos sus datos en una transacción.
+- **Las tablas se buscan en el catálogo de Postgres:** una tabla nueva se borra sola. El test recorre todas y exige cero filas.
+- **Auditoría del operador:** tabla `operator_audit`, de solo inserción, con altas y borrados. Solo cantidades.
+- **La auditoría de casos sigue siendo de solo inserción.** Solo se va cuando se borra su empresa entera.
+- **La empresa de demo no se borra.** La sesión de un usuario de una empresa borrada deja de servir.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_borrado_empresa.py`.
+- **Pendiente:** exportar los datos antes de borrar; los backups anteriores al borrado todavía los tienen.
+
+### Tarea 5 — Datos sensibles en documentos (decisión 035)
+
+- **Qué hace:** en los documentos del onboarding (PDF, DOCX, Markdown) se reemplazan los números de tarjeta y los DNI antes de guardar. Los emails, teléfonos y CUIT de la empresa no se tocan.
+- **Un documento con 3 o más emails o teléfonos distintos** no se indexa: la pantalla Onboarding avisa y pide confirmar o descartar.
+- **Actualiza la decisión 030.**
+- **Cómo probarlo:** `python -m pytest backend/tests/test_datos_sensibles.py`.
+- **Pendiente:** pantalla para ver y borrar documentos ya indexados.
+
+### Cómo se verificó
+
+- **Antes de cada tarea, su test de aceptación.** Después, la suite completa y `python evals/runner.py --simulated` en cada rama. El resultado de cada una está en la descripción de su pull request.
+- **No se corrió ninguna medición con Groq real.**
+- Como cada rama sale de `main`, ninguna tiene los cambios de las otras. Al aprobar varias, conviene correr `make test` una vez sobre `main`.
+
+### Decisiones tomadas sin tu aprobación (revisalas)
+
+- **031:** sin dominios cargados el widget no funciona en sitios ajenos; el logo se guarda en la base y no se acepta SVG; la página `/c/…` pasó a ser el widget.
+- **032:** un caso entra en el mes en que se resolvió; no se guarda el cierre del mes.
+- **033:** la pregunta de CSAT es texto y no botones; un "no" reabre el caso y lo deriva; las alertas van a `PANEL_EMAIL` si no hay `ALERT_EMAIL_TO`.
+- **034:** borrado real y no una marca; también se borra la auditoría de casos de esa empresa; la empresa de demo no se puede borrar.
+- **035:** el umbral de 3 emails o teléfonos distintos; por línea de comandos no hay espera.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
@@ -360,9 +435,10 @@ Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **tran
 - Ver que el CI de GitHub Actions quede verde: el repositorio es privado y no lo pude consultar desde acá.
 - Panel de la spec en Next.js, con magic link y roles. Hoy el panel son páginas servidas por la API, con una clave por usuario y varias empresas (decisiones 022 y 026).
 - Activar el email real en Render: crear la cuenta de Resend, verificar `enterprisedataai.com` y cargar las variables (`docs/render.md`). El código ya está.
-- CSAT, alerta por caída de la resolución y un destino para las alertas (decisión 028).
-- Conteo para facturar por período (tarea 22): hoy hay un resumen del total (decisión 027).
-- OCR para PDF escaneados, almacenamiento de archivos y borrado de una empresa con un comando.
+- Alerta por caída de la resolución o del CSAT (decisiones 028 y 033).
+- Precio por caso, cierre guardado de cada mes y emisión de la factura (decisión 032).
+- OCR para PDF escaneados y almacenamiento de archivos.
+- Del Hito 7: probar el widget en un iPhone real, botones Sí/No para el CSAT, exportar los datos de una empresa antes de borrarla y una pantalla para ver y borrar documentos indexados.
 - Avisar por WhatsApp cuando se decide una aprobación o responde el equipo. En el chat web ya llega; WhatsApp está en pausa.
 - Anclar fuera de la base el último hash de auditoría de cada caso (decisión 010).
 - `fallbacks` del lado del servidor ante rechazos del modelo: hoy se deriva (decisión 007).
