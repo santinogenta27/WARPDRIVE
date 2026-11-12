@@ -8,6 +8,7 @@ Agente de soporte que se configura solo con el historial de cada empresa. La emp
 
 - **Onboarding sin comandos.** Una empresa nueva sube su historial y sus documentos desde el panel, mira el avance de las 6 etapas y recibe su reporte de preparación.
 - **Nada queda activo sin aprobación.** La empresa revisa los tipos de caso y las herramientas que encontró el análisis, fija límites y decide qué usa el asistente.
+- **Se instala con una línea.** Un widget con la marca de la empresa abre el chat en su sitio, solo desde los dominios que ella habilita. Ver [`docs/widget.md`](docs/widget.md).
 - **Atiende con fuentes.** Responde con los documentos de la empresa (RAG híbrido) o con el resultado de una herramienta. Si no tiene de dónde, deriva a una persona.
 - **Las acciones pasan por un guardián.** Identidad verificada, dueño del recurso, montos y riesgo se controlan en código. Un reembolso espera siempre la aprobación de una persona.
 - **Todo queda auditado.** Cada paso de un caso se registra en una cadena de hashes: modificar o borrar un evento se detecta.
@@ -118,9 +119,10 @@ make api                    # http://localhost:8000 (chat) y /panel
 | [`docs/spec.md`](docs/spec.md) | La spec técnica: fuente de verdad |
 | [`docs/progreso.md`](docs/progreso.md) | Qué está hecho, qué falta y cómo probarlo |
 | [`docs/demo.md`](docs/demo.md) | Guion de la demo, incluido el onboarding con datos del cliente |
+| [`docs/widget.md`](docs/widget.md) | Cómo instalar el chat en el sitio de un cliente |
 | [`docs/onboarding.md`](docs/onboarding.md) | El pipeline de autoconfiguración y sus formatos |
 | [`docs/calidad.md`](docs/calidad.md) | Mediciones de calidad con modelos reales |
-| [`docs/decisions/`](docs/decisions/) | Una nota por decisión técnica (001 a 030) |
+| [`docs/decisions/`](docs/decisions/) | Una nota por decisión técnica |
 
 ## Estado
 

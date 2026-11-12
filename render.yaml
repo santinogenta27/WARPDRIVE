@@ -6,7 +6,7 @@ services:
     runtime: python
     plan: free
     region: virginia # Neon está en São Paulo; Render no tiene región en Sudamérica
-    branch: hito-5 # chat web + panel de la empresa en el mismo servicio (decisión 022)
+    branch: main # chat web + panel de la empresa en el mismo servicio (decisión 022)
     autoDeploy: true
     buildCommand: pip install -r backend/requirements.txt
     # Aplica las migraciones pendientes (idempotente) y arranca la API con el chat web.

@@ -16,7 +16,7 @@ El chat web es la tarea 12b: el mismo agente, guardián y auditoría que por Wha
   - **El código no llega por email:** sin `RESEND_API_KEY` y `MAIL_FROM` en el `.env`, o con un email de prueba como `@example.com`, aparece en la terminal de `make api`, en una línea `[Mailer de consola, no se envió]`.
   - Escribí el código en el chat. El agente confirma la verificación y responde la consulta del pedido.
   - Otros clientes de la demo: `martin@example.com` (pedidos 1003 y 1005) y `sofia@example.com` (pedido 1006).
-- **Límite:** cada sesión tiene 20 mensajes. "Cómo probarla" → "Empezar de nuevo" abre una sesión nueva.
+- **Límite:** cada sesión tiene 20 mensajes. Para abrir una sesión nueva, usá el botón de las dos flechas, arriba a la derecha del chat ("Empezar una conversación nueva").
 
 ## Cómo funciona
 

@@ -88,7 +88,8 @@ NAV = [
     ("configuracion", "Configuración"),
     ("metricas", "Métricas"),
 ]
-ADMIN_NAV = [("empresas", "Empresas")]  # solo el operador de la plataforma
+# Solo el operador de la plataforma.
+ADMIN_NAV = [("empresas", "Empresas"), ("facturacion", "Facturación")]
 
 
 def esc(value: object) -> str:

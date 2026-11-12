@@ -4,7 +4,7 @@ Deja el chat de Acme Store en un link fijo del tipo `https://acme-chat-demo.onre
 
 ## Antes de empezar
 
-- La rama `hito-3` tiene que estar en GitHub, con `render.yaml` en la raíz.
+- El servicio usa la rama `main`, que tiene `render.yaml` en la raíz. Las secciones "Pasar al panel" y "Pasar al hito 6" cuentan cómo se llegó hasta acá: en un servicio nuevo no hacen falta.
 - Tené a mano tu `.env`: vas a copiar tres valores (`DATABASE_URL`, `GEMINI_API_KEY` y `ENCRYPTION_KEY`).
 - La base de Neon ya tiene a Acme Store con el chat web asignado (`make demo-setup`). Si algún día usás otra base, corré `make demo-setup` contra ella antes.
 
@@ -14,7 +14,7 @@ Deja el chat de Acme Store en un link fijo del tipo `https://acme-chat-demo.onre
 2. **Dale acceso al repositorio.** El repositorio es privado: cuando GitHub pregunte a qué repositorios puede acceder Render, elegí **Only select repositories** → `santinogenta27/WARPDRIVE` → **Install**.
 3. **Creá el Blueprint.** En el panel de Render: **New +** → **Blueprint**.
    - Elegí el repositorio `WARPDRIVE`.
-   - En **Branch**, elegí `hito-3`. `render.yaml` todavía no está en `main`.
+   - En **Branch**, elegí `main`.
    - En **Blueprint Name**, poné `acme-chat-demo`.
 4. **Cargá los secretos.** Render muestra el servicio `acme-chat-demo` (Web Service, plan **Free**) y pide cuatro valores. Copialos de tu `.env`: lo que está después del `=`, sin comillas ni espacios.
    - `DATABASE_URL`
@@ -128,7 +128,8 @@ Qué tener en cuenta:
 
 - **Código de verificación:** sin `RESEND_API_KEY` y `MAIL_FROM`, el chat no envía emails y el código aparece en **Logs** del servicio (buscá `Mailer de consola`). Ver "Enviar el código de verificación por email".
 - **El plan gratis se duerme** después de 15 minutos sin visitas. La primera visita después de eso tarda alrededor de un minuto en responder; las siguientes, lo normal.
-- **Cada push a la rama del servicio despliega solo** (`autoDeploy`). Hoy la rama es `hito-5`.
+- **Cada push a la rama del servicio despliega solo** (`autoDeploy`). La rama es `main`: aprobar un pull request despliega.
+- **Widget para el sitio de un cliente:** no pide variables nuevas. La migración 0017 se aplica sola al arrancar. Cómo instalarlo: `docs/widget.md`.
 - **Cambiar los límites:** servicio → **Environment** → editá la variable → **Save Changes**. Se redespliega solo.
   - `WEB_CHAT_IP_DAILY_LIMIT`: mensajes por IP en 24 h. Por defecto, 30.
   - `WEB_CHAT_DAILY_LIMIT`: mensajes en total en 24 h. Por defecto, 300. Cuida la cuota diaria gratuita de Gemini.
