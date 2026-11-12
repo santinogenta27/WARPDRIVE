@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, Response
 from app.obs import metrics
 from app.obs.tracing import trace_id_for
 from app.panel.html import esc, local_time, page
+from app.panel.privacy import mask_codes
 from app.panel.routes import Deps, enter
 
 router = APIRouter(prefix="/panel", include_in_schema=False)
@@ -127,6 +128,18 @@ def render(data: dict[str, Any], company: str) -> str:
         for e in data["evals"]
     ]
     days = data["dias"]
+    rated = data["csat"]
+    comment_rows = [
+        [
+            local_time(c["fecha"]),
+            '<span class="badge resolved">Sí</span>'
+            if c["resuelto"]
+            else '<span class="badge escalated">No</span>',
+            f"“{esc(mask_codes(c['comentario']))}”",
+            f'<a class="mono" href="/panel/casos/{c["caso"]}">{esc(str(c["caso"])[:8])}</a>',
+        ]
+        for c in rated["comentarios"]
+    ]
     return f"""<h1>Métricas</h1><p class="lead">Cómo viene atendiendo el asistente de
 {esc(company)} en los últimos {days} días.</p>
 <div class="kpis">{_kpi(_pct(cases["tasa_resolucion"]), "resueltos por el asistente", True)}
@@ -145,6 +158,20 @@ persona. Derivación: de todos los casos, los que pasaron a una persona.</p>
 <p><b>Para el cobro:</b> {billing["cobrables"]} cobrables · {billing["en_ventana"]} dentro de los
 7 días (todavía pueden reabrirse) · {billing["con_persona"]} con una persona ·
 {billing["reabiertos"]} reabiertos.</p></div>
+
+<h2>Satisfacción (CSAT)</h2><div class="card">
+<div class="kpis" style="margin:0">{_kpi(_pct(rated["satisfaccion"]), "dijeron que se resolvió")}
+{_kpi(str(rated["si"]), "respondieron que sí")}{_kpi(str(rated["no"]), "respondieron que no")}
+</div><p class="muted small">Al cerrar un caso, el chat pregunta si la consulta se resolvió.
+Respondieron {rated["respuestas"]} de {rated["preguntas"]}. Un "no" reabre el caso y lo pasa a
+una persona.</p>
+{
+        _table(
+            ["Fecha", "¿Se resolvió?", "Comentario", "Caso"],
+            comment_rows,
+            "Todavía no hay comentarios.",
+        )
+    }</div>
 
 <h2>Latencia</h2><div class="card"><p>{latency["turnos"]} respuestas medidas. La mitad tarda
 menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
