@@ -58,7 +58,7 @@ def test_el_chat_usa_el_modelo_de_groq_que_mejor_resolvio_los_evals() -> None:
 
 def test_el_servicio_despliega_la_rama_con_el_panel() -> None:
     """El panel vive en la misma API: el servicio gratis sirve el chat y el panel."""
-    assert _service()["branch"] == "hito-5"
+    assert _service()["branch"] == "main"
     assert TestClient(app).get("/panel/login").status_code == 200
 
 

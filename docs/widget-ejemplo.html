@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tienda de ejemplo · Widget de Enterprise Data AI</title>
+<!--
+  Página de ejemplo: el sitio de un cliente con el widget instalado.
+
+  Cómo probarla en tu computadora:
+    1. make api                              (el chat queda en http://localhost:8000)
+    2. En el panel → Configuración → Widget para tu sitio, agregá "localhost" a los dominios.
+    3. python -m http.server 8010 --directory docs
+    4. Abrí http://localhost:8010/widget-ejemplo.html
+
+  Con ?tema=oscuro la página se ve oscura, y el widget la sigue.
+  Con ?chat=ENLACE y ?servidor=https://… se prueba el chat de otra empresa u otro servidor.
+  Con ?abrir=1 el chat se abre solo.
+-->
+<style>
+  :root { --bg: #fbfaf8; --ink: #1c1b19; --muted: #6f6b64; --line: #e9e5de; --card: #ffffff; }
+  html.oscuro { --bg: #111214; --ink: #f0efec; --muted: #a09d97; --line: #26272b; --card: #18191c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 Georgia, "Times New Roman", serif; }
+  /* Reglas agresivas a propósito: el widget vive en un Shadow DOM y no se entera. */
+  button { font-family: "Comic Sans MS", cursive !important; text-transform: uppercase; }
+  div { letter-spacing: .02em; }
+  header, main, footer { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+  header { display: flex; align-items: center; gap: 28px; height: 72px; border-bottom: 1px solid var(--line); }
+  header b { font-size: 22px; letter-spacing: -.01em; }
+  header nav { display: flex; gap: 22px; color: var(--muted); font-family: system-ui, sans-serif; font-size: 14px; }
+  .hero { padding: 64px 0 40px; max-width: 620px; }
+  .hero h1 { font-size: clamp(34px, 6vw, 54px); line-height: 1.05; margin: 0 0 16px; letter-spacing: -.02em; }
+  .hero p { color: var(--muted); font-size: 18px; margin: 0 0 24px; }
+  .cta { display: inline-block; padding: 12px 22px; border-radius: 999px; background: var(--ink); color: var(--bg);
+    font: 600 15px system-ui, sans-serif; border: 0; cursor: pointer; text-transform: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; padding-bottom: 80px; }
+  .item { background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .item i { display: block; aspect-ratio: 4 / 3; }
+  .item span { display: block; padding: 12px 14px 2px; font-family: system-ui, sans-serif; font-size: 14px; }
+  .item em { display: block; padding: 0 14px 14px; color: var(--muted); font: 13px system-ui, sans-serif; }
+  @media (max-width: 640px) { header nav { display: none; } .hero { padding-top: 40px; } }
+  footer { padding: 24px; border-top: 1px solid var(--line); color: var(--muted); font: 13px system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<header><b>Tienda de ejemplo</b><nav><span>Novedades</span><span>Ropa</span><span>Calzado</span><span>Ayuda</span></nav></header>
+<main>
+  <section class="hero">
+    <h1>Lo de siempre, mejor hecho.</h1>
+    <p>Esta es una tienda inventada para mostrar el widget. La burbuja de abajo a la derecha es el chat: lo agrega una sola línea de código.</p>
+    <button class="cta" type="button" onclick="EnterpriseChat.open()">Hablar con atención al cliente</button>
+  </section>
+  <section class="grid" aria-label="Productos">
+    <div class="item"><i style="background:#d9cfc1"></i><span>Campera liviana</span><em>$ 84.000</em></div>
+    <div class="item"><i style="background:#b9c4c9"></i><span>Zapatillas urbanas</span><em>$ 112.000</em></div>
+    <div class="item"><i style="background:#c9d1bd"></i><span>Remera de algodón</span><em>$ 21.500</em></div>
+    <div class="item"><i style="background:#d6c3c3"></i><span>Mochila</span><em>$ 56.000</em></div>
+  </section>
+</main>
+<footer>Sitio de ejemplo. Los productos no existen.</footer>
+
+<script>
+  // Solo para la demo: tema, enlace del chat y servidor por parámetros de la dirección.
+  var params = new URLSearchParams(location.search);
+  if (params.get("tema") === "oscuro") document.documentElement.className = "oscuro";
+  var tag = document.createElement("script");
+  tag.src = (params.get("servidor") || "http://localhost:8000") + "/widget.js";
+  tag.setAttribute("data-chat", params.get("chat") || "acme-demo");
+  tag.async = true;
+  if (params.get("abrir")) tag.onload = function () { setTimeout(function () { EnterpriseChat.open(); }, 900); };
+  document.body.appendChild(tag);
+</script>
+<!-- En un sitio real alcanza con esta línea (la da el panel, en Configuración):
+<script src="https://TU-SERVICIO/widget.js" data-chat="ENLACE-DE-TU-CHAT" async></script>
+-->
+</body>
+</html>

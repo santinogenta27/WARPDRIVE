@@ -13,7 +13,7 @@ Unos 10 minutos, más 10 si mostrás el onboarding con los datos del cliente (se
   - archiva las conversaciones de prueba (la auditoría queda guardada);
   - rechaza las aprobaciones pendientes;
   - devuelve los pedidos de Acme a su estado inicial.
-- **En el chat, "Cómo probarla" → "Empezar de nuevo"**, para arrancar con una conversación limpia.
+- **En el chat, tocá el botón de las dos flechas, arriba a la derecha del chat ("Empezar una conversación nueva")**, para arrancar con una conversación limpia.
 
 ## 1. El reporte de preparación (2 min): "esto es lo que el asistente resolvería en tu empresa"
 
@@ -54,7 +54,7 @@ Ventana del cliente:
 
 ## 3. Un reembolso: decide una persona (3 min)
 
-1. Arrancá una conversación nueva: "Cómo probarla" → "Empezar de nuevo".
+1. Arrancá una conversación nueva, con el botón de las dos flechas.
 2. Escribí "Quiero el reembolso del pedido 1005". El asistente pide el email de la compra para mandarte un código.
 3. Respondé `martin@example.com` y escribí el código de los Logs.
 4. El asistente **no devuelve la plata solo**: avisa que el pedido pasa a revisión de una persona.
@@ -154,4 +154,4 @@ Qué decir: "Si intervino una persona de tu equipo, o el cliente volvió por lo 
 
 ## Configuración (una sola vez)
 
-Está en `docs/render.md`, sección "Pasar al panel": la rama `hito-5` y las variables `PANEL_EMAIL` y `PANEL_PASSWORD`.
+Está en `docs/render.md`, sección "Pasar al panel": las variables `PANEL_EMAIL` y `PANEL_PASSWORD`. El servicio usa la rama `main`.
