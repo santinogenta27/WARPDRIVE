@@ -58,6 +58,7 @@ La demo de Acme sigue andando en `hito-5` sin tocar nada. Para sumar lo del hito
    - `OTEL_EXPORTER_OTLP_ENDPOINT` y `OTEL_EXPORTER_OTLP_HEADERS`: envían las trazas a un backend de OpenTelemetry.
    - `OTEL_TRACES_CONSOLE=1`: escribe las trazas en **Logs**.
    - `ALERT_LATENCY_MS`, `ALERT_COST_PER_CASE_USD` y `ALERT_ERRORS`: umbrales de las alertas (decisión 028).
+   - `ALERT_EMAIL_TO`: a quién le llegan las alertas por email (decisión 033). Necesita `RESEND_API_KEY` y `MAIL_FROM`. Sin esta variable van a `PANEL_EMAIL`; si ese email es de prueba (`@acme.example`), no se envía nada.
 
 Qué cambia al pasar:
 
