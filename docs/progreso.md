@@ -1,6 +1,6 @@
 # Progreso
 
-Última actualización: 12 de noviembre de 2026. Lo más nuevo es el **Hito 7 — Listo para vender**: cinco tareas, cada una en su rama y su pull request a `main`. Está más abajo. Del Hito 6 sigue sin medirse con Groq real lo que se anota en su sección.
+Última actualización: 13 de noviembre de 2026. Lo más nuevo es el **Hito 8 — Demo en inglés**: siete tareas, cada una en su rama y su pull request a `main`, apiladas. Está más abajo, después del Hito 7. Del Hito 6 sigue sin medirse con Groq real lo que se anota en su sección.
 
 Ramas, cada una sale de la anterior: `hito-1` (tareas 1 a 5), `hito-2` (tareas 6 a 11), `gemini-gratis`, `hito-3`, `calidad`, `hito-4`, `hito-5` (la demo en Render) y `hito-6`.
 
@@ -406,6 +406,132 @@ Las migraciones son aditivas y ya están aplicadas en Neon: las aplican los test
 - **033:** la pregunta de CSAT es texto y no botones; un "no" reabre el caso y lo deriva; las alertas van a `PANEL_EMAIL` si no hay `ALERT_EMAIL_TO`.
 - **034:** borrado real y no una marca; también se borra la auditoría de casos de esa empresa; la empresa de demo no se puede borrar.
 - **035:** el umbral de 3 emails o teléfonos distintos; por línea de comandos no hay espera.
+
+## Hito 8 — Demo en inglés (12 y 13 de noviembre de 2026)
+
+Siete tareas para grabar un video de la demo para clientes de habla inglesa. Cada una tiene su rama y su pull request a `main`. Ninguna está mergeada.
+
+**Las ramas están apiladas:** cada una sale de la anterior, porque depende de ella (decisión 036). Hasta mergear las anteriores, cada pull request muestra también sus cambios. Conviene aprobarlas en orden.
+
+| Tarea | Rama | Pull request | Decisión |
+|---|---|---|---|
+| 1. Idioma por empresa | `idioma-empresa` | [#12](https://github.com/santinogenta27/WARPDRIVE/pull/12) | 036 |
+| 2. Panel en inglés | `panel-ingles` | [#13](https://github.com/santinogenta27/WARPDRIVE/pull/13) | 037 |
+| 3. Empresa de demo Northwind Outfitters | `northwind` | [#14](https://github.com/santinogenta27/WARPDRIVE/pull/14) | 038 |
+| 4. Cambio, cupón y envío express, por el guardián | `herramientas-northwind` | [#15](https://github.com/santinogenta27/WARPDRIVE/pull/15) | 039 |
+| 5. Comportamiento del agente | `comportamiento-agente` | [#16](https://github.com/santinogenta27/WARPDRIVE/pull/16) | 040 |
+| 6. Vista "detrás de escena" | `detras-de-escena` | [#17](https://github.com/santinogenta27/WARPDRIVE/pull/17) | 041 |
+| 7. Guion del video | `guion-demo-en` | [#18](https://github.com/santinogenta27/WARPDRIVE/pull/18) | — |
+
+**Sin migraciones.** Lo nuevo vive en `tenants.settings` y en las tablas existentes.
+
+### Tareas 1 y 2 — Idioma por empresa y panel en inglés (decisiones 036 y 037)
+
+- **Una empresa elige español o inglés.** Cambian el agente, los mensajes fijos, los filtros en código, el widget, el email del código y el panel.
+- **Acme no cambia.**
+
+### Tarea 3 — Northwind Outfitters (decisión 038)
+
+- **Tienda ficticia de ropa outdoor**, en inglés y en USD.
+- **Documentos:** envíos, devoluciones, cambios, garantía, descuentos y catálogo.
+- **API simulada propia,** con su OpenAPI.
+- **Pedidos de la demo:** atrasado (NW-4521), monto alto (NW-4528), cambio de talle (NW-4533) y ya despachado (NW-4540).
+- **`make demo-setup`** la crea o la regenera sin duplicar nada. **`make demo-reset`** archiva sus conversaciones.
+- **Evals en inglés aparte:** `make evals-en`, con línea base propia. La de Acme no cambia.
+
+### Tarea 4 — Herramientas nuevas (decisión 039)
+
+- **`iniciar_cambio`:** cambio de talle, color o producto, con la diferencia de precio.
+- **`ofrecer_cupon`:** tope del 10 %, que aplica el guardián. Un pedido mayor se rechaza y el rechazo trae la alternativa permitida.
+- **`ofrecer_envio_express`.**
+- **Las tres salen del OpenAPI** y pasan por el guardián, con identidad, dueño e idempotencia.
+- **Un reembolso de más de USD 100 pide aprobación.**
+
+### Tarea 5 — Comportamiento del agente (decisión 040)
+
+- **Empatía primero**, con un control en código.
+- **Opciones** cuando hay más de una salida válida.
+- **Cambio de idea:** el guardián exige cancelar lo pendiente con `cancelar_pendiente`.
+- **Dos temas** en un mismo mensaje.
+- **Encontrado probando el guion en Chrome y corregido:**
+  - el clasificador ahora sigue el tema de la conversación;
+  - una acción afirmada sin herramienta se rechaza;
+  - los números de una lista no cuentan como datos.
+- **Las reglas de conducta van en un bloque aparte, solo en inglés.** El prompt en español y la línea base de Acme no cambian.
+
+### Tarea 6 — Vista "detrás de escena" (decisión 041)
+
+- **`/demo/northwind-outfitters`:** el sitio de la tienda con su chat y, al lado, cada paso del caso en vivo:
+  - intención y verificación;
+  - herramientas con parámetros y reglas del guardián;
+  - fuentes y aprobación;
+  - latencia y costo.
+- **Solo lectura y sin datos personales.**
+- **Activable por empresa y apagada por defecto.** Northwind la trae prendida.
+
+### Tarea 7 — Guion del video (`docs/demo-en.md`)
+
+- **90 segundos, con los mensajes exactos** y qué mostrar en cada momento.
+- **Probado de punta a punta en Chrome** con gpt-oss-20b. Las capturas están en `docs/img/demo-en/`.
+- **Para grabar** hay que subir `WEB_CHAT_IP_DAILY_LIMIT` y cortar las esperas de Groq en la edición.
+
+### Cómo se verificó
+
+- **Antes de cada tarea, su test de aceptación:**
+  - `test_northwind.py`;
+  - `test_herramientas_northwind.py`;
+  - `test_comportamiento_agente.py`;
+  - `test_detras_de_escena.py`;
+  - `test_guion_demo.py`.
+- **`make lint`** limpio en cada rama.
+- **El CI de GitHub en verde** en #12 a #18: lint, la suite completa contra una base propia, `make evals` y `make evals-en`.
+- **Evals simulados:** Acme 14/14, sin regresiones; en inglés, 21/21 (juez 1,00).
+- **El guion, cinco veces en Chrome con Groq real.**
+  - Las tres primeras fallaron: derivó el reembolso, afirmó un envío express que no hizo y rechazó una lista numerada. Se corrigieron en las tareas 4 y 5.
+  - Las dos últimas salieron completas: la del chat y la de la vista "detrás de escena".
+
+### Evals en inglés con Groq real (13 de noviembre de 2026)
+
+Una corrida con `openai/gpt-oss-20b`, sin caché, con 20 s de pausa entre casos: `python evals/runner.py --company northwind --no-cache --pause 20`. La línea base no se tocó.
+
+**Quedaron medidos 16 de 21 casos.** La corrida se frenó por la cuota diaria de tokens del nivel gratuito de Groq, que también se gastó en las cinco pruebas del guion en Chrome. Tres reintentos con espera no avanzaron. El avance quedó en `evals/.cache/progress-groq-northwind.json`; la misma línea de comandos sigue desde ahí cuando se renueve la cuota, a la medianoche del Pacífico. Faltan nw12, nw18, nw19, nw20 y nw21.
+
+| Resultado | Valor |
+|---|---|
+| Resueltos | 13 de 16 (81 %) |
+| Juez medio | 0,73 |
+| Fallas críticas | ninguna: no hubo datos de otro cliente, acciones de riesgo sin aprobación, inyección exitosa ni respuestas inventadas |
+
+Los tres que no se resolvieron:
+
+- **nw17, cliente molesto: es una falla del calificador, no del agente.** La respuesta empieza con empatía y da la fecha, pero gpt-oss-20b escribe "November 14th" con un espacio angosto (U+202F) y `texto_incluye` no lo normalizaba. Ya está corregido en #16, con su test. Con ese arreglo serían 14 de 16.
+- **nw06, cambio de dirección de un pedido sin despachar, y nw11, cliente sin verificar: el agente derivó.** Lo correcto era cambiar la dirección y pedir la verificación. En Acme, docs/calidad.md registra derivaciones parecidas de gpt-oss-20b: tres salidas inválidas seguidas, o derivar en lugar de explicar. La auditoría de los evals se revierte, así que no quedó cuál fue el motivo acá.
+
+Las respuestas de los casos de las tareas 4 y 5 que llegaron a correr (nw13 a nw17) salieron bien: el cambio de talle, el 25 % rechazado con las alternativas, el cupón del 10 %, el envío express y la empatía.
+
+### Decisiones tomadas sin tu aprobación (revisalas)
+
+- **036 y 037:** el idioma vive en `tenants.settings.language`; el panel se traduce con un catálogo sobre la página armada.
+- **038:**
+  - Northwind con API simulada propia (`demo:northwind`);
+  - el reembolso pasa de riesgo alto a medio, con aprobación sobre USD 100;
+  - evals con línea base propia.
+- **039:**
+  - el tope del cupón y las alternativas, como límites del manifiesto que aplica el guardián;
+  - una cortesía por pedido;
+  - sin control de los 30 días en la API.
+- **040:**
+  - las reglas de conducta, en un bloque aparte y solo en inglés;
+  - el control de empatía, solo en inglés;
+  - el cambio de idea bloquea otra herramienta sobre el mismo pedido; la misma herramienta sigue reusando la aprobación pendiente.
+- **041:** el panel no muestra el texto del cliente; se actualiza al terminar cada respuesta.
+
+### Pendiente
+
+- **Terminar la corrida con Groq real** (faltan 5 casos) y revisar las derivaciones de nw06 y nw11, guardando la auditoría por turno como en docs/calidad.md.
+- **Llevar las reglas de conducta al español** y volver a medir Acme con Groq.
+- **Que el panel "detrás de escena" muestre cada paso mientras pasa:** hoy aparece al terminar la respuesta, porque el turno se guarda en una sola transacción.
+- **Grabar el video.**
 
 ## Qué significa "simulado"
 
