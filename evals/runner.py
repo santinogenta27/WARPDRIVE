@@ -176,7 +176,8 @@ def grade(case: dict[str, Any], result: AgentResult, high_risk: set[str]) -> Cas
     # Hito 8 (decisión 040), solo en los casos que los definen:
     # `texto_incluye`: grupos de palabras; de cada grupo, la respuesta trae al menos una.
     # `ejecutadas_en_la_conversacion`: herramientas que se ejecutaron en algún turno.
-    low = result.message.lower()
+    # Espacios normalizados: gpt-oss-20b escribe "November 14" (espacio angosto).
+    low = " ".join(result.message.lower().split())
     if "texto_incluye" in expected:
         checks["texto"] = all(
             any(word.lower() in low for word in group) for group in expected["texto_incluye"]
