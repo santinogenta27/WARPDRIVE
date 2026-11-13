@@ -20,6 +20,7 @@ from app.companies import connection as system
 from app.companies import delete as removal
 from app.companies import onboarding, review
 from app.companies.create import CompanyError, chat_slug, create_company
+from app.demo import behind
 from app.onboarding import ingest as ingestion
 from app.onboarding.ingest import Upload
 from app.panel import auth
@@ -809,6 +810,40 @@ def save_language(request: Request, form: Form, deps: Deps) -> Response:
     return _back("configuracion", ok=f"Idioma guardado: {i18n.NAMES[choice]}.")
 
 
+def _behind_html(ctx: Ctx, slug: str | None, on: bool) -> str:
+    """Vista "detrás de escena" de la demo (decisión 041): apagada por defecto."""
+    if not slug:
+        return '<div class="card"><p class="muted">Esta empresa no tiene un chat web.</p></div>'
+    link = (
+        f'<p>Abrila en <a href="/demo/{esc(slug)}" target="_blank" rel="noopener">'
+        f"/demo/{esc(slug)}</a>.</p>"
+        if on
+        else ""
+    )
+    state = "Activada" if on else "Desactivada"
+    return f"""<div class="card"><div class="row"><div class="grow">
+<span class="badge {"resolved" if on else ""}">{state}</span>
+<p class="muted small">Una página para mostrar la demo: el sitio con el chat a la izquierda y,
+a la derecha, cada paso del caso en vivo (intención, verificación, herramientas, reglas del
+guardián, fuentes, aprobación, latencia y costo). Es de solo lectura y no muestra mensajes ni
+datos personales de los clientes.</p>{link}</div>
+<form method="post" action="/panel/configuracion/detras-de-escena">{_csrf(ctx)}
+<button name="activo" value="{"no" if on else "si"}" class="{"" if on else "primary"}">
+{"Desactivar" if on else "Activar"}</button></form></div></div>"""
+
+
+@router.post("/configuracion/detras-de-escena")
+def save_behind(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    on = form.get("activo") == "si"
+    with deps.connection() as conn:
+        behind.set_enabled(conn, ctx.tenant_id, on)
+    state = "activada" if on else "desactivada"
+    return _back("configuracion", ok=f"Vista detrás de escena {state}.")
+
+
 @router.get("/configuracion", response_class=HTMLResponse)
 def settings_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
@@ -822,6 +857,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
         slug = chat_slug(conn, ctx.tenant_id)
         brand = widget.load(conn, ctx.tenant_id)
         language = i18n.tenant_language(conn, ctx.tenant_id)
+        behind_on = behind.enabled(conn, ctx.tenant_id)
     approved = {t.name for t in tools if t.approved}
     chat = (
         f"<p>Probá el asistente de {esc(ctx.session.company)} en su propio chat: "
@@ -846,7 +882,8 @@ queda activo sin tu aprobación.</p>{_notice(request)}
         _widget_html(ctx, request, slug, brand)
         if slug
         else '<p class="muted">Esta empresa no tiene un chat web.</p>'
-    }"""
+    }
+<h2>Vista detrás de escena</h2>{_behind_html(ctx, slug, behind_on)}"""
     return HTMLResponse(page("Configuración", body, active="configuracion", session=ctx.session))
 
 

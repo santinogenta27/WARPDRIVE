@@ -194,6 +194,21 @@ PHRASES: dict[str, str] = {
     "Ya hay una solicitud pendiente de aprobación para el mismo recurso.": (
         "There's already a pending approval for the same resource."
     ),
+    # vista detrás de escena (decisión 041)
+    "Vista detrás de escena": "Behind the scenes",
+    "Activada": "On",
+    "Desactivada": "Off",
+    "Abrila en": "Open it at",
+    "Una página para mostrar la demo: el sitio con el chat a la izquierda y, a la derecha, cada "
+    "paso del caso en vivo (intención, verificación, herramientas, reglas del guardián, fuentes, "
+    "aprobación, latencia y costo). Es de solo lectura y no muestra mensajes ni datos personales "
+    "de los clientes.": (
+        "A page to show the demo: the site with the chat on the left and, on the right, each step "
+        "of the case live (intent, verification, tools, policy guard rules, sources, approval, "
+        "latency and cost). It's read-only and doesn't show customers' messages or personal data."
+    ),
+    "Vista detrás de escena activada.": "Behind-the-scenes view turned on.",
+    "Vista detrás de escena desactivada.": "Behind-the-scenes view turned off.",
     # conducta del agente (decisión 040)
     "Pidió empatía antes de responder": "Asked for empathy before answering",
     "Atendió un segundo tema": "Handled a second topic",

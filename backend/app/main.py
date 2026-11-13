@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from app.channels.twilio.webhook import router as twilio_router
 from app.channels.web.routes import router as web_router
 from app.channels.whatsapp.webhook import router as whatsapp_router
+from app.demo.behind_routes import router as behind_router
 from app.panel.billing_routes import router as billing_router
 from app.panel.company_routes import router as company_router
 from app.panel.metrics_routes import router as metrics_router
@@ -30,6 +31,7 @@ app.include_router(panel_router)
 app.include_router(company_router)
 app.include_router(metrics_router)
 app.include_router(billing_router)
+app.include_router(behind_router)  # vista detrás de escena (decisión 041)
 
 
 @app.get("/health")
