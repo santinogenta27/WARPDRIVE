@@ -22,6 +22,9 @@ _THOUSANDS = re.compile(r"\b\d{1,3}(?:\.\d{3})+\b(?!,\d)")
 # En inglés la coma separa miles y el punto, decimales: "$1,250.00" es 1250.
 _THOUSANDS_EN = re.compile(r"\b\d{1,3}(?:,\d{3})+\b")
 _DECIMAL = re.compile(r"\d+(?:\.\d+)?")
+# El número de una lista ("1. A 10% coupon", "2) Free express shipping") no es un dato: lo vio
+# gpt-oss-20b al ofrecer dos opciones y la respuesta terminaba derivada (decisión 040).
+_LIST_MARKER = re.compile(r"(?m)^[ \t]*\d{1,2}[.)][ \t]+")
 
 
 def _decimal(token: str) -> str:
@@ -133,7 +136,7 @@ def check_grounding(
             *_numbers(sources_text, "en"),
         ]
     }
-    numbers = _numbers(_ON_THE_HOUR.sub(r"\1", message), language)
+    numbers = _numbers(_ON_THE_HOUR.sub(r"\1", _LIST_MARKER.sub("", message)), language)
     unsupported = sorted({n for n in numbers if _plain(n) not in known})
     if unsupported:
         return GroundingVerdict(False, f"datos sin respaldo en las fuentes: {unsupported}")

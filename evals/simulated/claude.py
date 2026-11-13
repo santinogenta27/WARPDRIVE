@@ -58,7 +58,7 @@ class SimulatedClaude:
         tool_names = {t["name"] for t in body.get("tools", [])}
         self.requests.append({"tool_names": tool_names, "body": body})
         if "clasificar" in tool_names:
-            blocks = [self._tool_use("clasificar", {"tipo": _classify(body)})]
+            blocks = [self._tool_use("clasificar", _classification(body))]
         elif "calificar" in tool_names:
             blocks = [self._tool_use("calificar", _judge(body))]
         else:
@@ -384,6 +384,35 @@ _POLICY = re.compile(
     r"|warranty cover|coupons?\b|discounts?\b|price|hours|store|international",
     re.I,
 )
+
+
+# Seguir el tema de la conversación (decisión 040): elegir una opción, "actually", "instead".
+_CONTINUES = re.compile(
+    r"(?i)\b(i'?ll take|i will take|i'?d like the|i'?d rather|actually|instead|that one|go with"
+    r"|changed my mind|ok(ay)?|yes|sure|sounds good)\b"
+)
+
+
+def _classification(body: dict[str, Any]) -> dict[str, Any]:
+    """El tipo del mensaje y, en inglés, el tema actual y un segundo tema (decisión 040)."""
+    label = _classify(body)
+    if not str(body.get("system") or "").startswith("You classify"):
+        return {"tipo": label}  # el clasificador en español no cambia
+    content = body["messages"][0]["content"]
+    text = html.unescape(_tag(content, "mensaje_cliente")).lower()
+    current = re.search(r"<tipo_actual>(.*?)</tipo_actual>", content)
+    if current and label in {"otro", "consulta_general"} and _CONTINUES.search(text):
+        label = current.group(1)
+    found: dict[str, Any] = {"tipo": label}
+    others = body["tools"][0]["input_schema"]["properties"].get("otro_tipo", {}).get("enum", [])
+    if len(english.order_ids(text)) >= 2:
+        second = next(
+            (lab for pat, lab in _RULES if lab in others and lab != label and re.search(pat, text)),
+            None,
+        )
+        if second is not None:
+            found["otro_tipo"] = second
+    return found
 
 
 def _classify(body: dict[str, Any]) -> str:

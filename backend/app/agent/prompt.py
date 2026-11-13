@@ -5,6 +5,7 @@ import html
 from pathlib import Path
 from typing import Any
 
+from app.policy.guardian import CANCEL_PENDING
 from app.rag.search import SearchResult
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
@@ -128,14 +129,47 @@ def user_turn(
     )
 
 
+def cancel_pending_tool(english: bool) -> dict[str, Any]:
+    """Herramienta interna para un cambio de idea (decisión 040): cancela lo que el caso tiene
+    pendiente de aprobación. La ejecuta el guardián; se ofrece solo si hay algo pendiente."""
+    return {
+        "name": CANCEL_PENDING,
+        "description": (
+            "Cancels a request of this conversation that is still waiting for a person's "
+            "approval, when the customer changes their mind. Use it before doing something else "
+            "with the same order."
+            if english
+            else "Cancela una solicitud de esta conversación que espera la aprobación de una "
+            "persona, cuando el cliente cambia de idea. Usala antes de hacer otra cosa con el "
+            "mismo pedido."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The order of the pending request"
+                    if english
+                    else "El pedido de la solicitud pendiente",
+                }
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+    }
+
+
 def tool_definitions(
     manifests: list[dict[str, Any]],
     finals: tuple[str, ...] = ("responder", "derivar"),
     *,
     english: bool = False,
+    pending: bool = False,
 ) -> list[dict[str, Any]]:
+    """`pending`: el caso tiene algo pendiente de aprobación; se suma `cancelar_pendiente`."""
     business = [
         {"name": m["name"], "description": m["description"], "input_schema": m["input_schema"]}
         for m in manifests
     ]
-    return business + [t for t in _final_tools(english) if t["name"] in finals]
+    extra = [cancel_pending_tool(english)] if pending else []
+    return business + extra + [t for t in _final_tools(english) if t["name"] in finals]

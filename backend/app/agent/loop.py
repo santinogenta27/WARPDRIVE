@@ -17,7 +17,7 @@ import psycopg
 import yaml
 
 from app import i18n
-from app.agent import presentable, prompt
+from app.agent import conduct, presentable, prompt
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
     CHAT,
@@ -41,6 +41,7 @@ from app.mailer import Email, Mailer, MailError, mailer_from_env
 from app.obs import alerts, timing, tracing
 from app.policy.guardian import (
     ALREADY_PENDING_REASON,
+    CANCEL_PENDING,
     UNVERIFIED_REASON,
     ContactContext,
     GuardDecision,
@@ -260,6 +261,7 @@ class _Turn:
     documents: list[SearchResult] = field(default_factory=list)
     grounding_retries: int = 0
     format_retries: int = 0  # respuestas vacías o con JSON o metadatos (presentable.py)
+    tone_retries: int = 0  # cliente molesto y respuesta sin empatía (conduct.py)
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
@@ -537,6 +539,7 @@ class Agent:
             case_types={name: goal for name, (goal, _) in case_types.items()},
             previous=previous,
             language=turn.lang,
+            current=self._current_case_type(tenant_id, case_id) if history else None,
         )
         turn.classification = None  # vale solo para el mensaje con el que se abrió el caso
         self._audit_model_call(turn, "clasificador", classification.response)
@@ -558,6 +561,17 @@ class Agent:
             return self._escalate(turn, "El tipo de caso no está activo para la empresa.")
 
         tool_names = list(yaml.safe_load(instructions).get("herramientas") or [])
+        if label in case_types and classification.also in case_types:
+            # Dos temas en el mismo mensaje (decisión 040): las instrucciones y las herramientas
+            # de los dos tipos de caso. El caso queda con el tipo principal.
+            second = case_types[str(classification.also)][1]
+            self._audit(turn, "second_topic", {"case_type": classification.also})
+            tool_names += [
+                name
+                for name in yaml.safe_load(second).get("herramientas") or []
+                if name not in tool_names
+            ]
+            instructions = f"{instructions.strip()}\n---\n{second.strip()}"
         manifests = self._guardian.manifests(tenant_id, tool_names)
         turn.needs_identity = any(m.get("requires_verified_contact") for m in manifests)
         # La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el
@@ -617,8 +631,13 @@ class Agent:
         """`chat_fallback`: charla. Solo se ofrece la herramienta responder y, si el modelo no
         logra una respuesta válida, se usa ese mensaje fijo en lugar de derivar."""
         finals = ("responder",) if chat_fallback is not None else ("responder", "derivar")
-        tools = prompt.tool_definitions(manifests, finals, english=turn.lang == "en")
-        allowed = {m["name"] for m in manifests}
+        # Con algo pendiente de aprobación, el agente puede cancelarlo si el cliente cambia de
+        # idea (decisión 040).
+        pending = chat_fallback is None and self._has_pending(turn.tenant_id, turn.case_id)
+        tools = prompt.tool_definitions(
+            manifests, finals, english=turn.lang == "en", pending=pending
+        )
+        allowed = {m["name"] for m in manifests} | ({CANCEL_PENDING} if pending else set())
         try:
             return self._loop(turn, system, messages, tools, allowed, chat=chat_fallback)
         except _ChatFallback:
@@ -704,6 +723,45 @@ class Agent:
                     messages.append(_correction(final_id, CORRECTIONS[turn.lang]["verified"]))
                     continue
                 if final_name == "responder":
+                    # Controles de conducta (decisión 040): una acción afirmada sin herramienta
+                    # es una respuesta inventada; con el cliente molesto, primero la empatía.
+                    said = str(final_input.get("mensaje") or "")
+                    if not self._acted(turn) and conduct.claims_action(said, turn.lang):
+                        self._audit(
+                            turn,
+                            "grounding_rejected",
+                            {
+                                "reason": conduct.ACTION_CLAIM_REASON,
+                                "rejected_message": final_input,
+                            },
+                        )
+                        if turn.grounding_retries >= 1:
+                            return self._give_up(
+                                turn, f"Control de fundamento: {conduct.ACTION_CLAIM_REASON}.", chat
+                            )
+                        turn.grounding_retries += 1
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append(
+                            _correction(final_id, conduct.ACTION_CORRECTIONS[turn.lang])
+                        )
+                        continue
+                    if (
+                        turn.tone_retries == 0
+                        and conduct.is_upset(turn.text, turn.lang)
+                        and not conduct.shows_empathy(said, turn.lang)
+                    ):
+                        self._audit(
+                            turn,
+                            "tone_rejected",
+                            {
+                                "reason": "Cliente molesto, sin empatía.",
+                                "rejected_message": final_input,
+                            },
+                        )
+                        turn.tone_retries += 1
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append(_correction(final_id, conduct.TONE_CORRECTIONS[turn.lang]))
+                        continue
                     verdict = self._check_grounding(turn, final_input)
                     if not verdict.ok:
                         self._audit(
@@ -733,14 +791,19 @@ class Agent:
                         else "Primero se ejecutan las herramientas; respondé después."
                     }
                 else:
-                    decision = self._guardian.execute(
-                        tenant_id=turn.tenant_id,
-                        case_id=turn.case_id,
-                        contact=turn.contact,
-                        tool_name=call.name,
-                        tool_input=call.input,
-                        allowed=allowed,
-                    )
+                    if call.name == CANCEL_PENDING and CANCEL_PENDING in allowed:
+                        decision = self._guardian.cancel_pending(
+                            turn.tenant_id, turn.case_id, call.input
+                        )
+                    else:
+                        decision = self._guardian.execute(
+                            tenant_id=turn.tenant_id,
+                            case_id=turn.case_id,
+                            contact=turn.contact,
+                            tool_name=call.name,
+                            tool_input=call.input,
+                            allowed=allowed,
+                        )
                     turn.decisions.append(decision)
                     turn.tool_calls.append(
                         ToolExecution(call.name, call.input, decision.status, decision.reason)
@@ -802,6 +865,13 @@ class Agent:
                 )
             messages.append({"role": "user", "content": results})
         return self._give_up(turn, f"Se alcanzó el límite de {self._max_steps} pasos.", chat)
+
+    @staticmethod
+    def _acted(turn: _Turn) -> bool:
+        """En este turno una herramienta modificó algo o pidió una aprobación."""
+        return any(
+            d.side_effect and d.status in ("executed", "approval_required") for d in turn.decisions
+        )
 
     def _asks_personal_data(self, turn: _Turn, data: dict[str, Any]) -> bool:
         """Sin verificar, el modelo le pide al cliente el email, el teléfono u otro dato personal
@@ -1053,6 +1123,25 @@ class Agent:
             parsed = yaml.safe_load(instructions or "") or {}
             result[name] = (str(parsed.get("objetivo", name)), instructions or "")
         return result
+
+    def _current_case_type(self, tenant_id: uuid.UUID, case_id: uuid.UUID) -> str | None:
+        """El tipo de caso que la conversación tiene hasta ahora (decisión 040)."""
+        with tenant_scope(self._conn, tenant_id):
+            row = self._conn.execute(
+                "select t.name from cases c join case_types t on t.id = c.case_type_id"
+                " where c.id = %s",
+                (case_id,),
+            ).fetchone()
+        return str(row[0]) if row else None
+
+    def _has_pending(self, tenant_id: uuid.UUID, case_id: uuid.UUID) -> bool:
+        """El caso tiene una solicitud esperando la aprobación de una persona."""
+        with tenant_scope(self._conn, tenant_id):
+            row = self._conn.execute(
+                "select 1 from approvals where case_id = %s and status = 'pending' limit 1",
+                (case_id,),
+            ).fetchone()
+        return row is not None
 
     def _set_case_type(self, tenant_id: uuid.UUID, case_id: uuid.UUID, name: str) -> None:
         with tenant_scope(self._conn, tenant_id):

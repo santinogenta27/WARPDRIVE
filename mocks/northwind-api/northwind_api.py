@@ -75,6 +75,15 @@ def create_app(orders: list[dict[str, Any]] | None = None) -> FastAPI:
     app.openapi = lambda: json.loads(OPENAPI_PATH.read_text(encoding="utf-8"))  # type: ignore[method-assign]
     customers = json.loads(CUSTOMERS_PATH.read_text(encoding="utf-8"))
 
+    def reset() -> None:
+        """Back to the initial orders, with no refunds, exchanges or courtesies (for evals)."""
+        state.clear()
+        state.update({o["id"]: copy.deepcopy(o) for o in data})
+        for kept in (refunds, cancels, exchanges, exchanged, courtesies, given_for):
+            kept.clear()
+
+    app.state.reset = reset
+
     def find(order_id: str) -> dict[str, Any] | None:
         return state.get(canonical(order_id))
 

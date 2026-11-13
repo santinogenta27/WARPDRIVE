@@ -609,6 +609,10 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
         return "Descartó una respuesta sin respaldo", esc(p.get("reason"))
     if kind == "format_rejected":
         return "Descartó una respuesta que no se podía mostrar", esc(p.get("reason"))
+    if kind == "tone_rejected":  # decisión 040
+        return "Pidió empatía antes de responder", esc(p.get("reason"))
+    if kind == "second_topic":
+        return "Atendió un segundo tema", esc(type_label(p.get("case_type")))
     if kind == "final_action":
         named = ", ".join(esc(s) for s in p.get("sources") or [])
         cited = f"<br><span class=muted>Fuentes citadas: {named}</span>" if named else ""

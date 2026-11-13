@@ -1,5 +1,5 @@
 nombre: where_is_my_order
-objetivo: Tell the customer where their order is, when it arrives and what we can do if it's late
+objetivo: Tell the customer where their order is and when it arrives, and make it right when an order is late (courtesy coupon, discount or free express shipping), also when the customer asks for one of those or picks one
 datos_necesarios: [order_id]
 herramientas: [consultar_pedido, ofrecer_cupon, ofrecer_envio_express]
 condiciones:

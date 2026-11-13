@@ -17,6 +17,10 @@ _UPSET = re.compile(
     r"(?i)\b(?:ridiculous|unacceptable|frustrat\w*|angry|upset|annoyed|terrible|worst|furious"
     r"|disappointed|still (?:hasn'?t|not)|where the hell|fed up|seriously)\b|!!|\?!"
 )
+CANCEL = "cancelar_pendiente"  # herramienta interna del cambio de idea (decisión 040)
+_PENDING_NAMES = {"iniciar_reembolso": "refund", "cancelar_pedido": "cancellation"}
+_CHANGED = re.compile(r"changed my mind|change of plans|instead|rather|actually", re.I)
+_EMPATHY = re.compile(r"\b(sorry|apologi|understand)", re.I)
 _EXCHANGE = re.compile(r"exchange|swap|another size|different size|bigger|smaller", re.I)
 _PERCENT = re.compile(r"(\d{1,3})\s*%")
 _SIZE = re.compile(r"\b(?:size|an?|in)\s+(XS|XL|S|M|L|\d{1,2})\b(?!')", re.I)
@@ -101,10 +105,25 @@ class EnglishAgent:
         orders = order_ids(message) or order_ids(history)[-1:]
         order_id = orders[0] if orders else None
         upset = bool(_UPSET.search(message))
+        # Lo que se canceló en este turno porque el cliente cambió de idea (decisión 040).
+        cancelled = [
+            item
+            for name, _, result in results
+            if name == CANCEL
+            for item in result.get("canceladas") or []
+        ]
 
         def reply(text: str, sources: list[str] | None = None, factual: bool = True) -> list[Any]:
             if self.mode == "tuteo":  # el simulado en español se escapa al tuteo: acá no se corrige
                 text = f"{text} Dime si necesitas algo más."
+            for item in cancelled:
+                what = _PENDING_NAMES.get(item["herramienta"], "request")
+                order = (item.get("parametros") or {}).get("order_id")
+                text = f"I cancelled your {what} request for order {order}. {text}"
+            # Con el cliente molesto, primero la empatía (en el modo "sin_empatia", recién
+            # cuando el control en código lo corrige).
+            if upset and not _EMPATHY.search(text) and (self.mode != "sin_empatia" or corrected):
+                text = f"I'm really sorry about the trouble. {text}"
             data = {"mensaje": text, "fuentes": sources or [], "factual": factual}
             text_only = loose(data)
             if text_only is not None:
@@ -139,8 +158,31 @@ class EnglishAgent:
                 "To help with that, could you share your phone number or email address?",
                 factual=False,
             )
+        if self.mode == "afirma_sin_hacer" and not corrected and not results:
+            # Como gpt-oss-20b en la prueba de la demo: afirma algo que no hizo.
+            return reply(
+                "Done! I've added free express shipping to your next order.", factual=False
+            )
+        # Cambio de idea: primero se cancela lo pendiente; después, lo nuevo.
+        if (
+            CANCEL in tool_names
+            and _CHANGED.search(low)
+            and not any(r[0] == CANCEL for r in results)
+        ):
+            return [self.tool_use(CANCEL, {"order_id": order_id} if order_id else {})]
+        if results and results[-1][0] == CANCEL:
+            denied = next((r for r in reversed(results) if "pendiente" in r[2]), None)
+            if denied is not None:
+                return [self.tool_use(denied[0], denied[1])]
+            if order_id and "consultar_pedido" in tool_names:
+                return [self.tool_use("consultar_pedido", {"order_id": order_id})]
+        # Dos temas: cada pedido con lo suyo, en una sola respuesta.
+        if len(order_ids(message)) >= 2 and "consultar_pedido" in tool_names:
+            return self.several(message, results, tool_names, reply)
         if results:
             name, call_input, result = results[-1]
+            if "pendiente" in result and CANCEL in tool_names:
+                return [self.tool_use(CANCEL, {"order_id": call_input.get("order_id")})]
             return self.after_tool(name, call_input, result, low, message, tool_names, reply)
         if order_id and "consultar_pedido" in tool_names:
             return [self.tool_use("consultar_pedido", {"order_id": order_id})]
@@ -244,7 +286,59 @@ class EnglishAgent:
             return [self.tool_use("ofrecer_cupon", call)]
         if "express" in low and "ofrecer_envio_express" in tool_names:
             return [self.tool_use("ofrecer_envio_express", {"order_id": order_id})]
-        return reply(self.order_status(order_id, data))
+        offers = bool({"ofrecer_cupon", "ofrecer_envio_express"} & tool_names)
+        return reply(self.order_status(order_id, data, offers))
+
+    def several(
+        self,
+        message: str,
+        results: list[tuple[str, dict[str, Any], dict[str, Any]]],
+        tool_names: set[str],
+        reply: Reply,
+    ) -> list[dict[str, Any]]:
+        """Un mensaje con dos pedidos y dos temas: consulta cada pedido, hace lo que pide cada
+        frase (el cambio de talle) y responde todo junto."""
+        looked = {
+            r[1].get("order_id"): r[2].get("data") or {}
+            for r in results
+            if r[0] == "consultar_pedido"
+        }
+        wanted = order_ids(message)
+        for order in wanted:
+            if order not in looked:
+                return [self.tool_use("consultar_pedido", {"order_id": order})]
+        sentences = re.split(r"(?<=[.?!])\s+", message)
+        offers = bool({"ofrecer_cupon", "ofrecer_envio_express"} & tool_names)
+        parts: list[str] = []
+        for order in wanted:
+            data = looked[order]
+            sentence = next((s for s in sentences if order in s.upper()), "")
+            if not data:
+                parts.append(f"I couldn't find order {order} among your orders.")
+                continue
+            if _EXCHANGE.search(sentence) and "iniciar_cambio" in tool_names:
+                done = next(
+                    (
+                        r
+                        for r in results
+                        if r[0] == "iniciar_cambio" and r[1].get("order_id") == order
+                    ),
+                    None,
+                )
+                if done is None:
+                    asked = self.exchange(order, data, sentence, reply)
+                    if asked and asked[0].get("name") == "iniciar_cambio":
+                        return asked
+                    parts.append(str((asked[0].get("input") or {}).get("mensaje") or ""))
+                elif "error" in done[2]:
+                    parts.append(
+                        f"I couldn't start the exchange for order {order}: {done[2]['error']}"
+                    )
+                else:
+                    parts.append(self._exchanged(done[2].get("data") or {}))
+                continue
+            parts.append(self.order_status(order, data, offers))
+        return reply(" ".join(p for p in parts if p))
 
     def exchange(
         self, order_id: Any, data: dict[str, Any], message: str, reply: Reply
@@ -310,7 +404,18 @@ class EnglishAgent:
     }
 
     @staticmethod
-    def order_status(order_id: Any, data: dict[str, Any]) -> str:
+    def order_status(order_id: Any, data: dict[str, Any], offers: bool = False) -> str:
+        """`offers`: con un pedido atrasado, las opciones de la política para elegir."""
+        text = EnglishAgent._status(order_id, data)
+        if offers and data.get("delay"):
+            text += (
+                " To make up for the delay, I can give you a courtesy coupon for your next order "
+                "or free express shipping on your next order. Which would you prefer?"
+            )
+        return text
+
+    @staticmethod
+    def _status(order_id: Any, data: dict[str, Any]) -> str:
         items = ", ".join(i["name"] for i in data.get("items") or []) or "your items"
         status = str(data.get("status"))
         if status == "delivered":
