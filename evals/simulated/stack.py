@@ -23,6 +23,7 @@ from app.agent.loop import Agent, AgentResult
 from app.contacts import hash_address
 from app.db.connection import tenant_scope
 from app.demo.acme import AcmeSeed, seed_acme
+from app.demo.northwind import NorthwindSeed
 from app.llm.client import AnthropicProvider, LLMClient, LLMProvider, PostgresUsageRecorder
 from app.llm.embedder import VoyageEmbedder
 from app.llm.errors import QuotaExhausted
@@ -51,9 +52,9 @@ class RecordingMailer:
 @dataclass
 class SimulatedStack:
     conn: psycopg.Connection
-    seed: AcmeSeed
+    seed: AcmeSeed | NorthwindSeed
     agent: Agent
-    acme: TestClient
+    acme: TestClient  # la API simulada de la empresa (Acme o Northwind)
     llm: LLMClient
     claude: SimulatedClaude | None = None  # None con claves reales
     mode: str = "simulated"
@@ -122,11 +123,27 @@ class ExhaustedProvider:
         raise QuotaExhausted("sin cuota (simulado)", daily=True)
 
 
+def _company(
+    conn: psycopg.Connection, company: str, embedder: Any
+) -> tuple[AcmeSeed | NorthwindSeed, TestClient]:
+    """La empresa de demo y su API simulada: `acme` (en español) o `northwind` (en inglés)."""
+    if company == "northwind":
+        from app.demo.northwind import sandbox_client, seed_northwind
+
+        return seed_northwind(conn, embedder), sandbox_client()
+    return seed_acme(conn, embedder), TestClient(create_app())
+
+
 def build_simulated_stack(
-    conn: psycopg.Connection, *, mode: str = "normal", primary_out_of_quota: bool = False
+    conn: psycopg.Connection,
+    *,
+    mode: str = "normal",
+    primary_out_of_quota: bool = False,
+    company: str = "acme",
 ) -> SimulatedStack:
     """`primary_out_of_quota`: el modelo simulado responde como respaldo de un principal sin
-    cuota, con el mismo FallbackProvider que usa la demo (Groq agotado → Gemini)."""
+    cuota, con el mismo FallbackProvider que usa la demo (Groq agotado → Gemini). `company`:
+    `acme` o `northwind` (decisión 038)."""
     recorder = PostgresUsageRecorder(conn)
     embedder = VoyageEmbedder(
         recorder=recorder, api_key="sim", http_client=httpx.Client(transport=voyage_transport())
@@ -139,16 +156,15 @@ def build_simulated_stack(
     exhausted = ExhaustedProvider()
     provider = FallbackProvider(exhausted, simulated) if primary_out_of_quota else simulated
     llm = LLMClient(provider=provider, recorder=recorder)
-    acme = TestClient(create_app())
-    guardian = Guardian(conn, ToolRuntime(acme))
-    seed = seed_acme(conn, embedder)
+    seed, sandbox = _company(conn, company, embedder)
+    guardian = Guardian(conn, ToolRuntime(sandbox))
     mailer = RecordingMailer()
     agent = Agent(conn, llm, embedder, guardian, mailer=mailer)
     return SimulatedStack(
         conn=conn,
         seed=seed,
         agent=agent,
-        acme=acme,
+        acme=sandbox,
         llm=llm,
         claude=claude,
         mode="simulated",
@@ -172,7 +188,11 @@ def model_profile(backend: str | None) -> str:
 
 
 def build_real_stack(
-    conn: psycopg.Connection, cache_dir: Path, *, cache_models: bool = True
+    conn: psycopg.Connection,
+    cache_dir: Path,
+    *,
+    cache_models: bool = True,
+    company: str = "acme",
 ) -> SimulatedStack:
     """Modelos y embeddings reales según las claves del entorno; Acme sigue simulada. Mide un
     solo proveedor: sin respaldo automático al otro gratuito. `cache_models=False`: cada pedido
@@ -198,9 +218,8 @@ def build_real_stack(
         else provider_from_env()
     )
     llm = LLMClient(provider=provider, recorder=recorder)
-    acme = TestClient(create_app())
-    guardian = Guardian(conn, ToolRuntime(acme))
-    seed = seed_acme(conn, embedder)
+    seed, sandbox = _company(conn, company, embedder)
+    guardian = Guardian(conn, ToolRuntime(sandbox))
     mailer = RecordingMailer()
     agent = Agent(conn, llm, embedder, guardian, mailer=mailer)
     mode = backend if backend in ("gemini", "groq") else "real"
@@ -208,7 +227,7 @@ def build_real_stack(
         conn=conn,
         seed=seed,
         agent=agent,
-        acme=acme,
+        acme=sandbox,
         llm=llm,
         mode=mode,
         mailer=mailer,

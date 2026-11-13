@@ -1,0 +1,11 @@
+nombre: where_is_my_order
+objetivo: Tell the customer where their order is, when it arrives and what we can do if it's late
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido]
+condiciones:
+  - Look up the order and give its status, carrier, tracking number and estimated delivery date.
+  - If the order has a delay, apologize, explain the reason and give the new estimated delivery
+    date from the order.
+  - If the order is late, offer the options in the shipping document and let the customer choose.
+  - If the order number is missing, ask for it.
+cierre: Ask if there's anything else you can help with.

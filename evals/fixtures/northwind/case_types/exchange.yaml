@@ -1,0 +1,8 @@
+nombre: exchange
+objetivo: Exchange an item of a delivered order for another size, color or product
+datos_necesarios: [order_id, new_size]
+herramientas: [consultar_pedido]
+condiciones:
+  - Look up the order first. Exchanges are free within 30 days of delivery.
+  - If the new size is missing, ask for it.
+cierre: Explain the next steps (prepaid return label and when the new item ships).

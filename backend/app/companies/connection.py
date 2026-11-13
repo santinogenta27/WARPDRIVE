@@ -16,7 +16,7 @@ import os
 import socket
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
@@ -33,6 +33,7 @@ from app.tools.runtime import HttpClient, ToolRuntime
 AUTH_KINDS = ("none", "bearer", "api_key", "basic")
 MAX_OPENAPI_BYTES = 2_000_000
 DEMO_BASE_URL = "demo:acme"  # la API simulada de Acme, solo para la demo
+DEMO_PREFIX = "demo:"  # cualquier API simulada de una empresa de demo (demo:northwind)
 PHONE_FIELDS = ("phone", "telefono", "customer_phone", "celular")
 Resolver = Callable[[str], list[str]]
 ClientFactory = Callable[["SystemConnection", str | None], HttpClient]
@@ -361,8 +362,15 @@ def deactivate(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
         )
 
 
-def connect_demo(conn: psycopg.Connection, tenant_id: uuid.UUID, spec: dict[str, Any]) -> None:
-    """Acme: su "sistema" es la API simulada de la demo. Queda activa, sin credenciales."""
+def connect_demo(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    spec: dict[str, Any],
+    *,
+    base_url: str = DEMO_BASE_URL,
+) -> None:
+    """Empresas de demo (Acme y Northwind): su "sistema" es una API simulada en proceso. Queda
+    activa, sin credenciales."""
     lookup = find_identity_lookup(spec)
     with tenant_scope(conn, tenant_id):
         conn.execute(
@@ -370,7 +378,7 @@ def connect_demo(conn: psycopg.Connection, tenant_id: uuid.UUID, spec: dict[str,
             " values (%s, %s, %s, 'active', now())"
             " on conflict (tenant_id) do update set openapi = excluded.openapi,"
             " base_url = excluded.base_url, status = 'active', updated_at = now()",
-            (tenant_id, Jsonb(spec), DEMO_BASE_URL),
+            (tenant_id, Jsonb(spec), base_url),
         )
         if lookup is not None:
             conn.execute(
@@ -397,7 +405,7 @@ def mode_for(conn: psycopg.Connection, tenant_id: uuid.UUID) -> str:
     connection = load(conn, tenant_id)
     if connection is None:
         return "demo" if _is_demo(conn, tenant_id) else "sin_sistema"
-    if connection.base_url == DEMO_BASE_URL:
+    if (connection.base_url or "").startswith(DEMO_PREFIX):
         return "demo"
     if connection.status == "active" and connection.base_url:
         return "real"
@@ -409,16 +417,20 @@ def runtime_for(
     tenant_id: uuid.UUID,
     *,
     demo: Callable[[], HttpClient] | None = None,
+    demos: Mapping[str, Callable[[], HttpClient]] | None = None,
     client_factory: ClientFactory = http_client,
 ) -> tuple[ToolRuntime, str]:
-    """El runtime de herramientas de la empresa y su modo (ver `mode_for`). Sin `demo`, la
-    empresa de demo queda sin sistema: la API simulada es solo para la demo."""
+    """El runtime de herramientas de la empresa y su modo (ver `mode_for`). `demo`: la API
+    simulada de Acme; `demos`: las de otras empresas de demo, por su URL (`demo:northwind`).
+    Sin ellas, la empresa de demo queda sin sistema: la API simulada es solo para la demo."""
     from app.onboarding.report import SandboxRuntime
 
     mode = mode_for(conn, tenant_id)
-    if mode == "demo":
-        return (ToolRuntime(demo()), mode) if demo is not None else (NoSystemRuntime(), mode)
     connection = load(conn, tenant_id)
+    if mode == "demo":
+        url = (connection.base_url if connection is not None else None) or DEMO_BASE_URL
+        factory = demo if url == DEMO_BASE_URL else (demos or {}).get(url)
+        return (ToolRuntime(factory()), mode) if factory is not None else (NoSystemRuntime(), mode)
     if mode == "real" and connection is not None:
         return ToolRuntime(client_factory(connection, _secret(conn, tenant_id))), mode
     if mode == "simulado" and connection is not None and connection.openapi:

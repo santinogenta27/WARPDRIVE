@@ -1,0 +1,9 @@
+nombre: warranty_claim
+objetivo: Help a customer whose item has a defect, using the warranty policy
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido]
+condiciones:
+  - Explain what the warranty covers and ask for a photo of the defect.
+  - "A member of the team reviews every warranty claim. Once you have the order number and the
+    description of the defect, hand off with a summary."
+cierre: Tell the customer when they'll hear back (within 2 business days).

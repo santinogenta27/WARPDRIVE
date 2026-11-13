@@ -5,7 +5,7 @@ requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
-pythonpath = ["backend", "mocks/acme-api", "evals"]
+pythonpath = ["backend", "mocks/acme-api", "mocks/northwind-api", "evals"]
 addopts = "-q"
 # El TestClient de la API simulada ignora el timeout por pedido (el cliente real sí lo usa).
 filterwarnings = ["ignore:You should not use the 'timeout' argument with the TestClient"]
@@ -19,12 +19,12 @@ extend-exclude = ["web"]
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["app", "acme_api"]
+known-first-party = ["app", "acme_api", "northwind_api"]
 
 [tool.mypy]
 python_version = "3.12"
-files = ["backend/app", "mocks/acme-api", "evals"]
-mypy_path = ["backend", "mocks/acme-api"]
+files = ["backend/app", "mocks/acme-api", "mocks/northwind-api", "evals"]
+mypy_path = ["backend", "mocks/acme-api", "mocks/northwind-api"]
 disallow_untyped_defs = true
 check_untyped_defs = true
 warn_unused_ignores = true

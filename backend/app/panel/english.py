@@ -515,6 +515,22 @@ PHRASES: dict[str, str] = {
         "The customer came back about the same topic within 7 days."
     ),
     "Reinicio de la demo": "Demo reset",
+    "Deja el panel limpio para empezar una demo nueva:": (
+        "It leaves the dashboard clean to start a new demo:"
+    ),
+    "Las conversaciones de prueba se archivan: salen del panel y del chat.": (
+        "Test conversations are archived: they leave the dashboard and the chat."
+    ),
+    "Las aprobaciones pendientes se rechazan, así no se ejecutan después.": (
+        "Pending approvals are rejected, so they don't run later."
+    ),
+    "Los pedidos de la API simulada vuelven a su estado inicial.": (
+        "The simulated API's orders go back to their initial state."
+    ),
+    "La auditoría de cada caso queda guardada e íntegra: es de solo inserción y no se borra.": (
+        "Each case's audit trail stays stored and intact: it's insert-only and never deleted."
+    ),
+    "Solo el operador de la demo puede reiniciarla.": "Only the demo operator can reset it.",
     "Tiene": "It has",
     ".": ".",
 }

@@ -20,6 +20,7 @@ from app.db.connection import tenant_scope
 
 UNSET: Any = object()
 AMOUNT_SOURCES = ("input.amount", "order.total")
+RISKS = ("low", "medium", "high")
 
 
 class ReviewError(ValueError):
@@ -138,10 +139,13 @@ def set_tool(
     max_amount: Any = UNSET,
     approval_over: Any = UNSET,
     amount_from: Any = UNSET,
+    risk: Any = UNSET,
 ) -> bool:
     """Aprueba una herramienta o cambia sus límites. `max_amount`: sobre ese monto se rechaza
     siempre. `approval_over`: sobre ese monto pide aprobación humana. Una herramienta de riesgo
-    alto pide aprobación siempre: ese límite no se puede quitar. False si no es de la empresa."""
+    alto pide aprobación siempre: ese límite no se puede quitar. `risk`: la empresa puede
+    corregir el riesgo que estimó el generador (un reembolso que solo pide aprobación sobre un
+    monto es de riesgo medio, decisión 038). False si no es de la empresa."""
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
             "select manifest from tools where id = %s for update", (tool_id,)
@@ -149,6 +153,13 @@ def set_tool(
         if row is None:
             return False
         manifest: dict[str, Any] = dict(row[0])
+        if risk is not UNSET and risk is not None:
+            if risk not in RISKS:
+                raise ReviewError("Riesgo desconocido.")
+            manifest["risk"] = risk
+            if risk != "high" and manifest.get("approval_over") == 0:
+                manifest["approval_over"] = None
+            conn.execute("update tools set risk = %s where id = %s", (risk, tool_id))
         if max_amount is not UNSET:
             manifest["max_amount"] = _amount(max_amount, "El monto máximo")
         if approval_over is not UNSET:
