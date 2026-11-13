@@ -1,0 +1,10 @@
+[
+  {"code": "TRJ", "name": "Trail Runner Jacket", "price": 149.0, "sizes": ["XS", "S", "M", "L", "XL"], "colors": ["Lake Blue", "Black", "Moss"]},
+  {"code": "ADV", "name": "Alpine Down Vest", "price": 129.0, "sizes": ["XS", "S", "M", "L", "XL"], "colors": ["Black", "Rust"]},
+  {"code": "MCS", "name": "Merino Crew Sweater", "price": 89.0, "sizes": ["XS", "S", "M", "L", "XL"], "colors": ["Navy", "Oat", "Charcoal"]},
+  {"code": "CFP", "name": "Canvas Field Pants", "price": 74.0, "sizes": ["28", "30", "32", "34", "36", "38"], "colors": ["Olive", "Khaki"]},
+  {"code": "OTE", "name": "Everyday Organic Tee", "price": 28.0, "sizes": ["XS", "S", "M", "L", "XL"], "colors": ["White", "Black", "Sage"]},
+  {"code": "CHB", "name": "Leather Chelsea Boots", "price": 189.0, "sizes": ["6", "7", "8", "9", "10", "11", "12", "13"], "colors": ["Walnut", "Black"]},
+  {"code": "WCT", "name": "Waxed Canvas Tote", "price": 59.0, "sizes": ["One size"], "colors": ["Field Tan"]},
+  {"code": "WBN", "name": "Wool Beanie", "price": 24.0, "sizes": ["One size"], "colors": ["Heather Gray", "Navy"]}
+]

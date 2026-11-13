@@ -6,8 +6,9 @@ Los permisos se aplican en código, nunca en el prompt. Orden de controles:
   3. Identidad: si el manifiesto lo pide, el contacto está verificado.
   4. Dueño: el recurso (p. ej. el pedido) pertenece al contacto. Si no existe o es de otro, la
      respuesta es la misma, para no revelar que existe.
-  5. Monto y riesgo: sobre `max_amount` se rechaza; riesgo alto o monto sobre `approval_over`
-     crea una aprobación humana y no se ejecuta.
+  5. Monto y riesgo: sobre `max_amount` se rechaza (con las alternativas de la política, si las
+     tiene); riesgo alto o monto sobre `approval_over` crea una aprobación humana y no se
+     ejecuta.
   6. Ejecución contra la API del cliente.
 """
 
@@ -65,6 +66,25 @@ def _sanitize(data: Any) -> Any:
 
 def _denied(reason: str, message: str | None = None) -> GuardDecision:
     return GuardDecision("denied", {"error": message or reason}, reason=reason)
+
+
+def _over_max(manifest: dict[str, Any], max_amount: float) -> GuardDecision:
+    """Sobre el máximo se rechaza siempre. Si la política tiene alternativas (decisión 039), el
+    rechazo las trae: la misma herramienta hasta el máximo y las otras que permite. Así el agente
+    ofrece lo permitido en lugar de solo negarse."""
+    decision = _denied("El monto supera el máximo permitido para esta herramienta.")
+    alternatives = manifest.get("alternatives")
+    if alternatives:
+        decision.result.update(
+            {
+                "maximo_permitido": max_amount,
+                "alternativas": [
+                    {"herramienta": manifest["name"], "maximo": max_amount},
+                    *({"herramienta": name} for name in alternatives),
+                ],
+            }
+        )
+    return decision
 
 
 def _amount(
@@ -215,7 +235,7 @@ class Guardian:
         amount = _amount(manifest, tool_input, resources)
         max_amount = manifest.get("max_amount")
         if max_amount is not None and amount is not None and amount > max_amount:
-            return _denied("El monto supera el máximo permitido para esta herramienta.")
+            return _over_max(manifest, max_amount)
         if approved_by_human:
             return None
         approval_over = manifest.get("approval_over")

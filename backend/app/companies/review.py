@@ -19,7 +19,7 @@ from psycopg.types.json import Jsonb
 from app.db.connection import tenant_scope
 
 UNSET: Any = object()
-AMOUNT_SOURCES = ("input.amount", "order.total")
+AMOUNT_SOURCES = ("input.amount", "order.total", "input.percent")
 RISKS = ("low", "medium", "high")
 
 
@@ -140,12 +140,14 @@ def set_tool(
     approval_over: Any = UNSET,
     amount_from: Any = UNSET,
     risk: Any = UNSET,
+    alternatives: Any = UNSET,
 ) -> bool:
     """Aprueba una herramienta o cambia sus límites. `max_amount`: sobre ese monto se rechaza
     siempre. `approval_over`: sobre ese monto pide aprobación humana. Una herramienta de riesgo
     alto pide aprobación siempre: ese límite no se puede quitar. `risk`: la empresa puede
     corregir el riesgo que estimó el generador (un reembolso que solo pide aprobación sobre un
-    monto es de riesgo medio, decisión 038). False si no es de la empresa."""
+    monto es de riesgo medio, decisión 038). `alternatives`: herramientas que la política permite
+    cuando la acción supera el máximo (decisión 039). False si no es de la empresa."""
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
             "select manifest from tools where id = %s for update", (tool_id,)
@@ -169,6 +171,12 @@ def set_tool(
             if amount_from not in AMOUNT_SOURCES:
                 raise ReviewError("Origen del monto desconocido.")
             manifest["amount_from"] = amount_from
+        if alternatives is not UNSET and alternatives is not None:
+            names = [str(name) for name in alternatives]
+            if names:
+                manifest["alternatives"] = names
+            else:
+                manifest.pop("alternatives", None)
         conn.execute(
             "update tools set manifest = %s, max_amount = %s, approved = coalesce(%s, approved)"
             " where id = %s",

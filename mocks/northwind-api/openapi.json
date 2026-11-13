@@ -108,6 +108,68 @@
           "409": {"$ref": "#/components/responses/Conflict"}
         }
       }
+    },
+    "/orders/{order_id}/exchanges": {
+      "post": {
+        "operationId": "iniciarCambio",
+        "summary": "Starts a free exchange of an item of a delivered order of the verified customer for another size, color or product; a prepaid return label is emailed and the new item ships when the carrier scans the return. Each item can be exchanged once",
+        "parameters": [
+          {"$ref": "#/components/parameters/OrderId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ExchangeRequest"}}}
+        },
+        "responses": {
+          "201": {
+            "description": "Exchange started (or the existing one for the same idempotency key)",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Exchange"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/orders/{order_id}/coupons": {
+      "post": {
+        "operationId": "ofrecerCupon",
+        "summary": "Gives the verified customer a courtesy coupon for a percentage off the next order, for a problem with this order. One courtesy (coupon or free express shipping) per order",
+        "parameters": [
+          {"$ref": "#/components/parameters/OrderId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CouponRequest"}}}
+        },
+        "responses": {
+          "201": {
+            "description": "Coupon created (or the existing one for the same idempotency key)",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Courtesy"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/orders/{order_id}/express-shipping": {
+      "post": {
+        "operationId": "ofrecerEnvioExpress",
+        "summary": "Gives the verified customer free express shipping on the next order, for a problem with this order. One courtesy (coupon or free express shipping) per order",
+        "parameters": [
+          {"$ref": "#/components/parameters/OrderId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "responses": {
+          "201": {
+            "description": "Free express shipping granted (or the existing one for the same idempotency key)",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Courtesy"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
     }
   },
   "components": {
@@ -226,6 +288,69 @@
           "created_at": {"type": "string", "format": "date-time"}
         },
         "required": ["id", "order_id", "amount", "currency", "status", "created_at"],
+        "additionalProperties": false
+      },
+      "ExchangeRequest": {
+        "type": "object",
+        "properties": {
+          "item_sku": {"type": "string", "description": "SKU of the item to exchange, from the order's items"},
+          "new_size": {"type": "string", "description": "New size, for example L or 32. Omit to keep the size"},
+          "new_color": {"type": "string", "description": "New color. Omit to keep the color"},
+          "new_product": {"type": "string", "description": "Name of another product from the catalog, for example Alpine Down Vest. Omit to keep the product"}
+        },
+        "required": ["item_sku"],
+        "additionalProperties": false
+      },
+      "ExchangeItem": {
+        "type": "object",
+        "properties": {
+          "sku": {"type": "string"},
+          "name": {"type": "string"},
+          "size": {"type": "string"},
+          "color": {"type": "string"},
+          "unit_price": {"type": "number", "minimum": 0}
+        },
+        "required": ["name", "size", "color"],
+        "additionalProperties": false
+      },
+      "Exchange": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "order_id": {"type": "string"},
+          "status": {"type": "string", "enum": ["requested"]},
+          "from_item": {"$ref": "#/components/schemas/ExchangeItem"},
+          "to_item": {"$ref": "#/components/schemas/ExchangeItem"},
+          "price_difference": {"type": "number", "description": "Positive: the customer pays the difference; negative: it's refunded"},
+          "currency": {"type": "string", "const": "USD"},
+          "return_label": {"type": "string", "enum": ["emailed"]},
+          "new_item_ships": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"}
+        },
+        "required": [
+          "id", "order_id", "status", "from_item", "to_item", "price_difference", "currency",
+          "return_label", "new_item_ships", "created_at"
+        ],
+        "additionalProperties": false
+      },
+      "CouponRequest": {
+        "type": "object",
+        "properties": {"percent": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Percentage off the next order"}},
+        "required": ["percent"],
+        "additionalProperties": false
+      },
+      "Courtesy": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "string"},
+          "kind": {"type": "string", "enum": ["coupon", "free_express_shipping"]},
+          "order_id": {"type": "string"},
+          "percent": {"type": "integer"},
+          "applies_to": {"type": "string", "enum": ["next_order"]},
+          "valid_days": {"type": "integer"},
+          "expires_on": {"type": "string", "format": "date"}
+        },
+        "required": ["code", "kind", "order_id", "applies_to", "valid_days", "expires_on"],
         "additionalProperties": false
       }
     }
