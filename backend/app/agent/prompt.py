@@ -18,6 +18,9 @@ PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 SYSTEM_PROMPT_VERSION = "system_v5"
 # Empresas en inglés (decisión 036): la traducción de la misma versión, no una versión nueva.
 ENGLISH_SUFFIX = "_en"
+# Reglas de conducta (decisión 040): empatía, opciones, cambio de idea, dos temas y no afirmar
+# acciones que no hizo una herramienta. Se suman al prompt en inglés.
+CONDUCT_VERSION = "conduct_v1_en"
 
 TONES = {
     "rioplatense": (
@@ -105,12 +108,20 @@ def _escape(text: str) -> str:
     return html.escape(text, quote=False)
 
 
+def conduct_rules() -> str:
+    """Reglas de conducta del Hito 8 (decisión 040), aparte de la traducción del prompt: por ahora
+    solo en inglés, así el prompt en español y la línea base de Acme no cambian."""
+    return (PROMPTS_DIR / f"{CONDUCT_VERSION}.txt").read_text(encoding="utf-8").strip()
+
+
 def system_prompt(company: str, tone: str, case_type_instructions: str) -> str:
     name = SYSTEM_PROMPT_VERSION + (ENGLISH_SUFFIX if is_english(tone) else "")
     template = (PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
     fixed = template.replace("{empresa}", company).replace(
         "{tono}", TONES.get(tone, TONES["rioplatense"])
     )
+    if is_english(tone):
+        fixed = f"{fixed.rstrip()}\n{conduct_rules()}"
     return f"{fixed}\n<tipo_de_caso>\n{case_type_instructions.strip()}\n</tipo_de_caso>"
 
 

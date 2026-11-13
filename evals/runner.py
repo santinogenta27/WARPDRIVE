@@ -412,7 +412,7 @@ def record_history(
     prompt y el modelo: la página Métricas del panel lo muestra (decisión 028). Los evals corren
     en una transacción que se revierte, así que esto usa una conexión propia. Sin empresa de
     demo en la base (el CI), no guarda nada."""
-    from app.agent.prompt import ENGLISH_SUFFIX, SYSTEM_PROMPT_VERSION
+    from app.agent.prompt import CONDUCT_VERSION, ENGLISH_SUFFIX, SYSTEM_PROMPT_VERSION
     from app.db.connection import connect
     from app.demo import northwind
     from app.demo.acme import find_demo_tenant
@@ -429,7 +429,9 @@ def record_history(
             target,
             tenant_id,
             mode=mode,
-            prompt_version=SYSTEM_PROMPT_VERSION + (ENGLISH_SUFFIX if company != "acme" else ""),
+            # En inglés, la traducción más las reglas de conducta (decisión 040).
+            prompt_version=SYSTEM_PROMPT_VERSION
+            + (f"{ENGLISH_SUFFIX}+{CONDUCT_VERSION}" if company != "acme" else ""),
             model=model,
             scores={
                 **report.scores(),

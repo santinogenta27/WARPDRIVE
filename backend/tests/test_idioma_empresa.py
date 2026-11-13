@@ -121,10 +121,15 @@ def test_en_ingles_no_se_pasa_a_voseo(conn: psycopg.Connection) -> None:
 
 
 def test_el_prompt_en_ingles_es_la_misma_version() -> None:
-    english = prompt.system_prompt("Northwind", "english", "nombre: x")
-    spanish = prompt.system_prompt("Acme", "rioplatense", "nombre: x")
+    template = prompt.PROMPTS_DIR / f"{prompt.SYSTEM_PROMPT_VERSION}.txt"
+    spanish = template.read_text(encoding="utf-8")
+    english = template.with_name(f"{prompt.SYSTEM_PROMPT_VERSION}_en.txt").read_text("utf-8")
     assert english.count("\n- ") == spanish.count("\n- ")  # las mismas reglas, traducidas
     assert prompt.SYSTEM_PROMPT_VERSION == "system_v5"
+    # Las reglas de conducta del Hito 8 (decisión 040) van aparte y solo en inglés.
+    built = prompt.system_prompt("Northwind", "english", "nombre: x")
+    assert prompt.conduct_rules() in built
+    assert prompt.conduct_rules() not in prompt.system_prompt("Acme", "rioplatense", "nombre: x")
 
 
 # -- 2. mensajes fijos -------------------------------------------------------------------------

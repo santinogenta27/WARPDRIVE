@@ -203,8 +203,8 @@ class Guardian:
         tool_input: dict[str, Any],
     ) -> GuardDecision | None:
         """Cambio de idea: si el caso tiene una solicitud pendiente sobre el mismo recurso (el
-        pedido) y la acción nueva es otra (otra herramienta u otros parámetros), no se hace hasta
-        cancelar la pendiente. La misma acción repetida sigue de largo: reusa la pendiente."""
+        pedido) y la acción nueva es otra herramienta, no se hace hasta cancelar la pendiente.
+        La misma herramienta sigue como antes: reusa la aprobación pendiente del caso."""
         if manifest["upstream"]["method"] == "GET":
             return None
         key = _resource_key(manifest, tool_input)
@@ -214,8 +214,8 @@ class Guardian:
             row = self._conn.execute(
                 "select t.name, a.params from approvals a join tools t on t.id = a.tool_id"
                 " where a.case_id = %s and a.resource_key = %s and a.status = 'pending'"
-                " and not (t.name = %s and a.params = %s) limit 1",
-                (case_id, key, manifest["name"], Jsonb(tool_input)),
+                " and t.name <> %s limit 1",
+                (case_id, key, manifest["name"]),
             ).fetchone()
         if row is None:
             return None

@@ -29,8 +29,8 @@ El criterio es el de siempre: lo que importa se controla en código; el prompt a
 
 ### 3. Cambio de idea: el guardián exige cancelar lo pendiente
 
-- **La regla, en código:** si el caso tiene una solicitud pendiente de aprobación sobre un pedido, otra acción sobre ese mismo pedido se rechaza hasta cancelarla. "Otra" quiere decir otra herramienta, u otros parámetros de la misma. El rechazo dice qué está pendiente.
-- **La misma acción repetida** sigue como antes: reusa la aprobación pendiente, sin duplicarla.
+- **La regla, en código:** si el caso tiene una solicitud pendiente de aprobación sobre un pedido, una acción con otra herramienta sobre ese mismo pedido se rechaza hasta cancelarla. El rechazo dice qué está pendiente.
+- **La misma herramienta** sigue como antes: reusa la aprobación pendiente del caso, aunque cambie el monto (`test_guardian.py`).
 - **`cancelar_pendiente`** es una herramienta interna que el agente recibe solo si el caso tiene algo pendiente. La ejecuta el guardián (`Guardian.cancel_pending`), que solo toca las aprobaciones de ese caso:
   - las deja rechazadas, así nadie las ejecuta después;
   - el caso vuelve a abierto.
@@ -48,9 +48,12 @@ El criterio es el de siempre: lo que importa se controla en código; el prompt a
 - **Por qué no en código:** controlarlo en código exigiría saber cuáles son las opciones de cada política. El eval lo mide.
 - **El objetivo de `where_is_my_order` cambió:** ahora nombra la compensación de un atraso. Así un pedido de cupón o de envío express sobre un pedido va a ese tipo, con sus herramientas, y pasa por el guardián.
 
-### 6. El prompt en inglés suma estas reglas, sin versión nueva
+### 6. Las reglas de conducta van en un bloque aparte, solo en inglés
 
-`system_v5_en.txt` todavía no está en `main`: es de la tarea 1 de este hito. Por eso no hay corridas históricas con él y se edita en el lugar. El prompt en español no cambia.
+- `system_v5_en.txt` sigue siendo la traducción exacta de `system_v5.txt` (decisión 036).
+- Las reglas nuevas están en `prompts/conduct_v1_en.txt`: dos temas, empatía, opciones, cambio de idea y no afirmar acciones. Se suman al prompt de las empresas en inglés.
+- El historial de evals registra la versión como `system_v5_en+conduct_v1_en`.
+- **El prompt en español no cambia:** así la línea base de Acme sigue valiendo. Pasar estas reglas al español es traducir el bloque y volver a medir Acme.
 
 ### 7. Evals en inglés
 

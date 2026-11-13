@@ -207,10 +207,8 @@ def test_con_algo_pendiente_lo_nuevo_sobre_el_mismo_pedido_espera_la_cancelacion
     blocked = _run(store, "iniciar_cambio", EXCHANGE)
     assert blocked.status == "denied"
     assert blocked.result["pendiente"]["herramienta"] == "iniciar_reembolso"
-    # Otro monto de la misma herramienta también es un cambio de idea.
-    other = _run(store, "iniciar_reembolso", {"order_id": "NW-4528", "amount": 24})
-    assert other.status == "denied" and "pendiente" in other.result
-    # Lo mismo otra vez no: se reusa la aprobación pendiente (sin duplicarla).
+    # La misma herramienta no: sigue como antes y reusa la aprobación pendiente del caso
+    # (test_guardian.py).
     again = _run(store, "iniciar_reembolso", {"order_id": "NW-4528", "amount": 213})
     assert again.status == "approval_required"
 
