@@ -332,7 +332,7 @@ def run_evals(
             continue
         if pause and results:
             time.sleep(pause)
-        stack.reset_sandbox()  # cada caso con los pedidos en su estado inicial
+        stack.start_case()  # cada caso con los pedidos en su estado inicial
         agent_result = send_case(stack, case)
         graded = grade(case, agent_result, high_risk)
         graded.judge = judge(stack, case, agent_result, company)

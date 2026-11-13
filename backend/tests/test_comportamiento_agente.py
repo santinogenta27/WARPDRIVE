@@ -251,7 +251,7 @@ def test_los_casos_de_comportamiento_se_resuelven_con_el_modelo_simulado(
     high_risk = runner._high_risk_tools(stack)
     failed = {}
     for case in chosen:
-        stack.reset_sandbox()
+        stack.start_case()
         graded = runner.grade(case, runner.send_case(stack, case), high_risk)
         if not graded.resolved:
             failed[case["id"]] = (graded.checks, graded.critical, graded.message)

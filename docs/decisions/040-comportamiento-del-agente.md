@@ -72,7 +72,7 @@ El runner suma dos controles, que se aplican solo a los casos que los definen (l
 - **`texto_incluye`:** grupos de palabras; de cada grupo, la respuesta tiene que traer al menos una.
 - **`ejecutadas_en_la_conversacion`:** herramientas que se ejecutaron en cualquier turno.
 
-Además, antes de cada caso la API simulada de Northwind vuelve a sus pedidos iniciales, y al cerrar un caso se rechazan sus aprobaciones pendientes. La API de Acme no tiene ese reinicio: sus evals corren igual que antes.
+Además, antes de cada caso (`SimulatedStack.start_case`) la API simulada de Northwind vuelve a sus pedidos iniciales y se rechazan las aprobaciones que quedaron pendientes del caso anterior. La API de Acme no tiene ese reinicio: sus evals corren igual que antes.
 
 ## Límites
 

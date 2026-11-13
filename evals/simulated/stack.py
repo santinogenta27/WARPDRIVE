@@ -99,15 +99,17 @@ class SimulatedStack:
     def close_open_cases(self) -> None:
         with tenant_scope(self.conn, self.seed.tenant_id):
             self.conn.execute("update cases set status = 'resolved' where status <> 'resolved'")
-            # Una aprobación que quedó pendiente no bloquea el mismo pedido en el caso siguiente.
-            self.conn.execute("update approvals set status = 'rejected' where status = 'pending'")
 
-    def reset_sandbox(self) -> None:
-        """La API simulada vuelve a sus pedidos iniciales, si lo permite (la de Northwind: un
-        cupón de un caso no bloquea la cortesía del siguiente). La de Acme no cambia."""
+    def start_case(self) -> None:
+        """Antes de cada caso de evals (decisión 040): la API simulada vuelve a sus pedidos
+        iniciales, si lo permite (la de Northwind: un cupón de un caso no bloquea la cortesía del
+        siguiente; la de Acme no cambia), y una aprobación que quedó pendiente no bloquea el
+        mismo pedido en el caso siguiente."""
         reset = getattr(getattr(self.acme, "app", None), "state", None)
         if reset is not None and hasattr(reset, "reset"):
             reset.reset()
+        with tenant_scope(self.conn, self.seed.tenant_id):
+            self.conn.execute("update approvals set status = 'rejected' where status = 'pending'")
 
     def acme_order(self, order_id: str) -> dict[str, Any]:
         data: dict[str, Any] = self.acme.get(f"/orders/{order_id}").json()
