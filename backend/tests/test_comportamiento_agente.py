@@ -241,6 +241,25 @@ def test_cancelar_pendiente_se_ofrece_solo_con_algo_pendiente() -> None:
 
 
 # -- 4. los casos de evals en inglés de cada comportamiento -----------------------------------
+def test_el_texto_esperado_no_depende_del_tipo_de_espacio() -> None:
+    """gpt-oss-20b escribe fechas con un espacio angosto (U+202F): igual cuentan."""
+    from app.agent.loop import AgentResult
+
+    case = {
+        "id": "x",
+        "esperado": {
+            "accion": "responder",
+            "ejecutadas": [],
+            "fuentes": [],
+            "pide_verificacion": False,
+            "texto_excluye": [],
+            "texto_incluye": [["november 14"]],
+        },
+    }
+    said = AgentResult(uuid.uuid4(), "responder", "It arrives on November 14th.", None)
+    assert runner.grade(case, said, set()).checks["texto"] is True
+
+
 def test_los_casos_de_comportamiento_se_resuelven_con_el_modelo_simulado(
     conn: psycopg.Connection,
 ) -> None:
