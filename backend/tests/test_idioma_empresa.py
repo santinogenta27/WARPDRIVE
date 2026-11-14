@@ -426,7 +426,7 @@ def test_la_empresa_elige_el_idioma_en_configuracion(web: dict[str, object]) -> 
     assert '<option value="en" selected>English</option>' in client.get("/panel/configuracion").text
     bad = client.post("/panel/configuracion/idioma", data={"idioma": "fr", "csrf": token.group(1)})
     assert i18n.tenant_language(conn, company.tenant_id) == "en"  # type: ignore[attr-defined]
-    assert "Elegí un idioma" in bad.text
+    assert "Choose a language from the list." in bad.text  # el panel ya está en inglés
 
 
 def test_el_chat_de_una_empresa_en_ingles(web: dict[str, object]) -> None:

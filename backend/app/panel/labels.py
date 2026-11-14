@@ -4,6 +4,8 @@ herramientas ("Reembolso · Pedido 1005 · $35.000")."""
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from app.panel import english
+
 # Etiquetas del clasificador que no son tipos de caso de la empresa.
 SPECIAL = {
     "conversacion_general": "Conversación general",
@@ -54,20 +56,56 @@ _ORDERS = {"order_id", "pedido_id", "id_pedido", "numero_de_pedido"}
 _PARAMS = {"address": "Dirección", "direccion": "Dirección", "reason": "Motivo", "motivo": "Motivo"}
 
 
+# Panel en inglés (decisión 037).
+SPECIAL_EN = {
+    "conversacion_general": "General conversation",
+    "consulta_general": "General question",
+    "derivar_humano": "Asked to talk to a person",
+    "pedido_no_permitido": "Request not allowed",
+    "amenaza_legal": "Threat of a complaint or legal action",
+    "otro": "Other topic",
+}
+ACTIONS_EN = {
+    "iniciar_reembolso": "Refund",
+    "cancelar_pedido": "Cancellation",
+    "actualizar_direccion": "Address change",
+    "consultar_pedido": "Order lookup",
+    "iniciar_cambio": "Exchange",
+    "ofrecer_cupon": "Coupon",
+    "ofrecer_envio_express": "Express shipping",
+}
+_PARAMS_EN = {
+    "address": "Address",
+    "direccion": "Address",
+    "reason": "Reason",
+    "motivo": "Reason",
+    "new_size": "New size",
+    "percent": "Discount",
+    "item_sku": "Item",
+    "new_sku": "New item",
+}
+
+
 def money(value: object) -> str:
-    """`35000` -> `$35.000` (pesos, sin centavos). Lo que no es un número, tal cual."""
+    """`35000` -> `$35.000` (pesos, sin centavos). En inglés, `$1,250.50`. Lo que no es un
+    número, tal cual."""
     try:
         amount = Decimal(str(value))
     except (InvalidOperation, ValueError):
         return str(value)
+    if english.english():
+        return f"${amount:,.2f}".removesuffix(".00")
     return "$" + f"{amount:,.0f}".replace(",", ".")
 
 
 def tool_label(name: str | None) -> str:
     """Nombre legible de una herramienta: `iniciar_reembolso` -> `Reembolso`."""
+    en = english.english()
     if not name:
-        return "Acción"
-    if name in ACTIONS:
+        return "Action" if en else "Acción"
+    if en and name in ACTIONS_EN:
+        return ACTIONS_EN[name]
+    if name in ACTIONS and not en:
         return ACTIONS[name]
     for verb in _LEADING_VERBS:
         if name.startswith(verb) and len(name) > len(verb):
@@ -84,20 +122,30 @@ def action_label(tool: str | None, params: dict[str, Any] | None) -> str:
         low = item[0].lower()
         return 0 if low in _ORDERS else 2 if low in _AMOUNTS else 1
 
+    en = english.english()
     for key, value in sorted((params or {}).items(), key=rank):
         low = key.lower()
         if low in _ORDERS:
-            parts.append(f"Pedido {value}")
+            parts.append(f"{'Order' if en else 'Pedido'} {value}")
         elif low in _AMOUNTS:
             parts.append(money(value))
+        elif en and low == "percent":
+            parts.append(f"{value}% off")
         else:
-            parts.append(f"{_PARAMS.get(low) or type_label(low)}: {value}")
+            names = _PARAMS_EN if en else _PARAMS
+            parts.append(f"{names.get(low) or type_label(low)}: {value}")
     return " · ".join(parts)
 
 
 def type_label(name: str | None) -> str:
+    en = english.english()
     if not name:
-        return "Sin clasificar"
+        return "Unclassified" if en else "Sin clasificar"
+    if en and name in SPECIAL_EN:
+        return SPECIAL_EN[name]
+    if en:  # los nombres de una empresa en inglés ya están en inglés: `where_is_my_order`
+        text = " ".join(w for w in name.replace("-", "_").split("_") if w)
+        return text[:1].upper() + text[1:]
     if name in SPECIAL:
         return SPECIAL[name]
     words = [ACCENTS.get(w, w) for w in name.replace("-", "_").split("_") if w]

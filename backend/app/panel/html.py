@@ -5,6 +5,8 @@ import html
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
+from app.panel import english
+
 if TYPE_CHECKING:
     from app.panel.auth import Session
 
@@ -103,7 +105,8 @@ ARGENTINA = timezone(timedelta(hours=-3))
 
 def local_time(value: datetime | str, fmt: str = "%d/%m %H:%M") -> str:
     moment = datetime.fromisoformat(value) if isinstance(value, str) else value
-    return moment.astimezone(ARGENTINA).strftime(fmt)
+    shown = moment.astimezone(ARGENTINA).strftime(fmt)
+    return english.english_date(shown, fmt) if english.english() else shown
 
 
 def page(
@@ -119,6 +122,8 @@ def page(
     segundos para volver a cargar la página sola (avance del onboarding)."""
     company = session.company if session and session.company else "Enterprise Data AI"
     admin = bool(session and session.admin)
+    if english.english():  # el panel de una empresa en inglés (decisión 037)
+        title = english.translate_text(title)
     items = NAV + (ADMIN_NAV if admin else [])
     links = "".join(
         f'<a href="/panel/{slug}" class="{"on" if slug == active else ""}">{label}</a>'
@@ -136,8 +141,8 @@ def page(
         else "Enterprise Data AI"
     )
     reload = f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else ""
-    return f"""<!doctype html>
-<html lang="es"><head><meta charset="utf-8">
+    markup = f"""<!doctype html>
+<html lang="{"en" if english.english() else "es"}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">{reload}
 <title>{esc(title)} · {esc(company)}</title><style>{CSS}</style></head>
@@ -146,6 +151,7 @@ def page(
 <main>{body}</main>
 <footer>{footer}</footer>
 <script>{NO_DOUBLE_SUBMIT}</script></body></html>"""
+    return english.translate_html(markup) if english.english() else markup
 
 
 # Doble clic en Enviar o Aprobar: el segundo envío del mismo formulario no sale (el servidor
@@ -165,14 +171,23 @@ STATUS = {
 
 
 RESOLVED_BY = {"agent": "por el asistente", "human": "con una persona"}
+STATUS_EN = {
+    "escalated": "Handed off",
+    "waiting_approval": "Waiting for approval",
+    "open": "Open",
+    "resolved": "Resolved",
+}
+RESOLVED_BY_EN = {"agent": "by the assistant", "human": "with a person"}
 
 
 def status_badge(status: str, resolved_by: str | None = None, reopened: bool = False) -> str:
     """Estado del caso. Un resuelto dice quién lo resolvió (la unidad de cobro es el caso
     resuelto por el asistente)."""
-    label = STATUS.get(status, status)
-    if status == "resolved" and resolved_by in RESOLVED_BY:
-        label = f"{label} {RESOLVED_BY[resolved_by]}"
+    en = english.english()
+    statuses, who = (STATUS_EN, RESOLVED_BY_EN) if en else (STATUS, RESOLVED_BY)
+    label = statuses.get(status, status)
+    if status == "resolved" and resolved_by in who:
+        label = f"{label} {who[resolved_by]}"
     if reopened:  # el cliente volvió por el mismo tema: ya no cuenta para el cobro
-        label = f"{label} · reabierto"
+        label = f"{label} · {'reopened' if en else 'reabierto'}"
     return f'<span class="badge {esc(status)}">{esc(label)}</span>'

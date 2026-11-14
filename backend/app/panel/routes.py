@@ -27,7 +27,7 @@ from app.cases.closing import close_inactive
 from app.companies.connection import ClientFactory, http_client
 from app.db.connection import connect, tenant_scope
 from app.llm.embedder import Embedder
-from app.panel import auth
+from app.panel import auth, english
 from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
 from app.panel.labels import action_label, money, type_label
 from app.panel.notify import notify_customer
@@ -171,6 +171,7 @@ class Ctx:
 def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None) -> Ctx | Response:
     """Puerta de entrada de cada ruta del panel. Sin sesión, va al login. Con `form` (un POST
     que cambia algo), exige además el token anti-CSRF. Devuelve la empresa de la sesión."""
+    english.set_language("es")
     session = _session(request, deps)
     if session is None:
         return _to_login()
@@ -178,17 +179,22 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
         return _forbidden()
     if session.tenant_id is None:
         return _no_tenant()
-    if not session.admin and not _company_exists(deps, session.tenant_id):
+    active, language = _company(deps, session.tenant_id)
+    if not session.admin and not active:
         return _to_login()  # la empresa fue borrada: su sesión deja de servir
+    # El panel habla el idioma de la empresa (decisión 037): vale para todo este pedido.
+    english.set_language(language)
     return Ctx(session, session.tenant_id, auth.csrf_token(session.token))
 
 
-def _company_exists(deps: PanelDeps, tenant_id: uuid.UUID) -> bool:
+def _company(deps: PanelDeps, tenant_id: uuid.UUID) -> tuple[bool, str]:
+    """(¿la empresa existe y está activa?, su idioma)."""
     with deps.connection() as conn, tenant_scope(conn, tenant_id):
         row = conn.execute(
-            "select 1 from tenants where id = %s and status = 'active'", (tenant_id,)
+            "select status = 'active', settings ->> 'language' from tenants where id = %s",
+            (tenant_id,),
         ).fetchone()
-    return row is not None
+    return (bool(row[0]), i18n.normalize(row[1])) if row else (False, "es")
 
 
 def _money(value: Any) -> str:
@@ -203,9 +209,17 @@ def _login_page(error: str = "") -> str:
         else '<p class="muted small">Falta configurar PANEL_EMAIL y PANEL_PASSWORD.</p>'
     )
     alert = f'<p style="color:var(--bad)">{esc(error)}</p>' if error else ""
+    # Antes de entrar no se sabe la empresa: el idioma se elige acá (decisión 037).
+    other = (
+        '<a href="/panel/login">Español</a>'
+        if english.english()
+        else '<a href="/panel/login?lang=en">English</a>'
+    )
     body = f"""<div class="card" style="max-width:400px;margin:40px auto">
-<h1>Ingresar al panel</h1><p class="lead">Panel del equipo de atención.</p>{alert}{note}
+<div class="row"><h1 class="grow">Ingresar al panel</h1><span class="small">{other}</span></div>
+<p class="lead">Panel del equipo de atención.</p>{alert}{note}
 <form method="post" action="/panel/login">
+<input type="hidden" name="lang" value="{"en" if english.english() else "es"}">
 <label for="email">Email</label><input id="email" name="email" type="email" required
  autocomplete="username">
 <label for="password">Clave</label><input id="password" name="password" type="password" required
@@ -221,12 +235,14 @@ def home(request: Request, deps: Deps) -> Response:
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_form() -> HTMLResponse:
+def login_form(lang: str = "") -> HTMLResponse:
+    english.set_language(lang)
     return HTMLResponse(_login_page())
 
 
 @router.post("/login")
 def login(request: Request, form: Form, deps: Deps) -> Response:
+    english.set_language(form.get("lang", ""))
     email, password = form.get("email", "").strip().lower(), form.get("password", "")
     if auth.too_many_failures(email):
         message = "Demasiados intentos. Probá de nuevo en unos minutos."
