@@ -11,17 +11,21 @@ from typing import Any
 
 import psycopg
 
+from app import i18n
 from app.db.connection import tenant_scope
 
-QUESTION = "¿Pudimos resolver tu consulta? Respondé *sí* o *no*. Si querés, contanos por qué."
-THANKS = "¡Gracias por contarnos! Si necesitás algo más, escribime cuando quieras."
-SORRY = "Gracias por avisarnos, y disculpá. "  # sigue el aviso de que lo atiende una persona
+# Los textos al cliente, en los dos idiomas, están en app/i18n.py (decisión 036).
+QUESTION = i18n.MESSAGES["es"]["csat_question"]
+THANKS = i18n.MESSAGES["es"]["csat_thanks"]
+SORRY = i18n.MESSAGES["es"]["csat_sorry"]  # sigue el aviso de que lo atiende una persona
 NOT_RESOLVED = "El cliente respondió que su consulta no se resolvió."
 ANSWER_HOURS = 24  # después, un "sí" suelto ya no se toma como respuesta
 
-# "sí" o "no" al principio. Después, nada, o un comentario separado por un signo. "si compro
-# hoy…" (condicional, sin tilde y sin signo) es otra consulta.
-_ANSWER = re.compile(r"^\s*(s[ií]+|no+|\U0001F44D|\U0001F44E)(?![\w])(.*)$", re.I | re.S)
+# "sí" o "no" al principio (o "yes", "yep", "nope" en inglés). Después, nada, o un comentario
+# separado por un signo. "si compro hoy…" (condicional, sin tilde y sin signo) es otra consulta.
+_ANSWER = re.compile(
+    r"^\s*(s[ií]+|no+|yes|yeah|yep|nope|\U0001F44D|\U0001F44E)(?![\w])(.*)$", re.I | re.S
+)
 _SEPARATOR = re.compile(r"^\s*[,.;:!…-]+\s*")
 
 
@@ -31,12 +35,13 @@ def parse(text: str) -> tuple[bool, str] | None:
     if match is None:
         return None
     word, rest = match.group(1).lower(), match.group(2)
-    yes = word.startswith("s") or word == "\U0001f44d"
+    english = word in ("yes", "yeah", "yep")
+    yes = word.startswith("s") or english or word == "\U0001f44d"
     if not rest.strip(" \t\n!.¡"):
         return yes, ""
     if _SEPARATOR.match(rest):
         return yes, _SEPARATOR.sub("", rest, count=1).strip()
-    if yes and "í" not in word:
+    if yes and "í" not in word and not english:
         return None  # "si compro hoy, ¿cuándo llega?"
     # "No me sirvió la respuesta": el comentario es el mensaje entero.
     return yes, text.strip()

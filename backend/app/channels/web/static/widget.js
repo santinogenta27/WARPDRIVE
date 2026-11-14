@@ -15,6 +15,44 @@
   var KEY = "edai-chat-" + (slug || "demo");
   var canal = slug ? "?canal=" + encodeURIComponent(slug) : "";
 
+  // Textos en el idioma de la empresa (decisión 036). Hasta leer la configuración, el de
+  // data-lang o el de la página.
+  var TEXTS = {
+    es: {
+      assistant: "Asistente virtual", offline: "Sin conexión", fresh: "Empezar una conversación nueva",
+      close: "Cerrar el chat", log: "Conversación", message: "Mensaje", placeholder: "Escribí tu consulta…",
+      send: "Enviar", chatWith: "Chat con ", openWith: "Abrir el chat con ", closeWith: "Cerrar el chat con ",
+      unread: " sin leer", team: function (n) { return "Equipo de " + n; }, notSent: "No se envió. ",
+      retry: "Reintentar", suggestions: "Preguntas frecuentes", loading: "Cargando el chat…",
+      typing: "Escribiendo…", offlineBar: "Sin conexión. Revisá tu internet para seguir.",
+      left: function (r) { return r === 1 ? "Te queda 1 mensaje" : "Te quedan " + r + " mensajes"; },
+      noConnect: "No pudimos conectar con el asistente.",
+      askReset: "¿Empezar una conversación nueva? Esta se borra de este dispositivo.",
+      yesReset: "Sí, empezar", cancel: "Cancelar", unavailable: "Este chat no está disponible en este sitio.",
+      noLoad: "No pudimos cargar el chat.", answers: "Respuestas rápidas",
+      greeting: function (n) { return "¡Hola! Soy el asistente virtual de " + n + ". ¿En qué te puedo ayudar?"; },
+      domain: "Este dominio no está en la lista de dominios permitidos del chat. Agregalo en el panel, en Configuración."
+    },
+    en: {
+      assistant: "Virtual assistant", offline: "Offline", fresh: "Start a new conversation",
+      close: "Close the chat", log: "Conversation", message: "Message", placeholder: "Type your message…",
+      send: "Send", chatWith: "Chat with ", openWith: "Open the chat with ", closeWith: "Close the chat with ",
+      unread: " unread", team: function (n) { return n + " team"; }, notSent: "Not sent. ",
+      retry: "Retry", suggestions: "Suggested questions", loading: "Loading the chat…",
+      typing: "Typing…", offlineBar: "You're offline. Check your connection to continue.",
+      left: function (r) { return r === 1 ? "1 message left" : r + " messages left"; },
+      noConnect: "We couldn't reach the assistant.",
+      askReset: "Start a new conversation? This one will be cleared from this device.",
+      yesReset: "Yes, start over", cancel: "Cancel", unavailable: "This chat isn't available on this site.",
+      noLoad: "We couldn't load the chat.", answers: "Quick replies",
+      greeting: function (n) { return "Hi! I'm the virtual assistant for " + n + ". How can I help you today?"; },
+      domain: "This domain isn't on the chat's list of allowed domains. Add it in the dashboard, under Settings."
+    }
+  };
+  var pick = function (value) { return /^en/i.test(value || "") ? "en" : "es"; };
+  var lang = pick(attr("lang", document.documentElement.lang));
+  var T = TEXTS[lang];
+
   var CSS = `
 :host{all:initial}
 *{box-sizing:border-box}
@@ -194,17 +232,17 @@ transition-duration:.01ms!important}
       ICONS.chat + ICONS.close + '<span class="badge" hidden></span></button>') +
     '<section class="panel" id="panel" role="' + (embedded ? "region" : "dialog") + '" aria-label="Chat">' +
     '<div class="top"><header><div class="logo" aria-hidden="true"></div><div class="title"><b></b>' +
-    '<span><i aria-hidden="true"></i><em style="font-style:normal">Asistente virtual</em></span></div>' +
-    '<button class="icon fresh" type="button" aria-label="Empezar una conversación nueva" hidden>' + ICONS.fresh + "</button>" +
-    (embedded ? "" : '<button class="icon shut" type="button" aria-label="Cerrar el chat">' + ICONS.close.replace(' class="i-close"', "") + "</button>") +
+    '<span><i aria-hidden="true"></i><em style="font-style:normal"></em></span></div>' +
+    '<button class="icon fresh" type="button" hidden>' + ICONS.fresh + "</button>" +
+    (embedded ? "" : '<button class="icon shut" type="button">' + ICONS.close.replace(' class="i-close"', "") + "</button>") +
     "</header>" +
     '<div class="bar" role="status" hidden></div></div>' +
-    '<div class="log" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Conversación"></div>' +
+    '<div class="log" role="log" aria-live="polite" aria-relevant="additions" tabindex="0"></div>' +
     '<div class="thumb" aria-hidden="true"></div>' +
-    '<div class="composer"><label class="sr" for="msg">Mensaje</label>' +
-    '<textarea id="msg" rows="1" maxlength="1000" placeholder="Escribí tu consulta…" enterkeyhint="send"></textarea>' +
-    '<button class="send" type="button" aria-label="Enviar" disabled>' + ICONS.send + "</button></div>" +
-    '<div class="ended" hidden><button class="btn" type="button">Empezar una conversación nueva</button></div>' +
+    '<div class="composer"><label class="sr" for="msg"></label>' +
+    '<textarea id="msg" rows="1" maxlength="1000" enterkeyhint="send"></textarea>' +
+    '<button class="send" type="button" disabled>' + ICONS.send + "</button></div>" +
+    '<div class="ended" hidden><button class="btn" type="button"></button></div>' +
     '<div class="foot"></div></section></div>';
 
   var $ = function (selector) { return shadow.querySelector(selector); };
@@ -215,6 +253,19 @@ transition-duration:.01ms!important}
   var bar = $(".bar"), ended = $(".ended"), foot = $(".foot"), fresh = $(".fresh");
   var top = $(".top"), thumb = $(".thumb");
   var note = attr("note", "");
+
+  // Los textos fijos del panel, en el idioma vigente.
+  function applyTexts() {
+    $(".title em").textContent = navigator.onLine === false ? T.offline : T.assistant;
+    fresh.setAttribute("aria-label", T.fresh);
+    if ($(".shut")) $(".shut").setAttribute("aria-label", T.close);
+    log.setAttribute("aria-label", T.log);
+    $(".composer label").textContent = T.message;
+    input.placeholder = T.placeholder;
+    send.setAttribute("aria-label", T.send);
+    ended.querySelector("button").textContent = T.fresh;
+  }
+  applyTexts();
 
   var cfg = null, open = embedded, busy = false, typing = null, unread = 0, lastFocus = null;
   var state = load() || blank();
@@ -297,8 +348,9 @@ transition-duration:.01ms!important}
   }, { passive: true });
   function brand() {
     var logo = $(".logo");
+    if (cfg.lang && pick(cfg.lang) !== lang) { lang = pick(cfg.lang); T = TEXTS[lang]; applyTexts(); }
     $(".title b").textContent = cfg.name;
-    panel.setAttribute("aria-label", "Chat con " + cfg.name);
+    panel.setAttribute("aria-label", T.chatWith + cfg.name);
     if (launcher) setLauncherLabel();
     logo.textContent = "";
     if (cfg.logo) {
@@ -311,8 +363,8 @@ transition-duration:.01ms!important}
     paint();
   }
   function setLauncherLabel() {
-    var label = (open ? "Cerrar el chat con " : "Abrir el chat con ") + cfg.name;
-    launcher.setAttribute("aria-label", unread && !open ? label + " (" + unread + " sin leer)" : label);
+    var label = (open ? T.closeWith : T.openWith) + cfg.name;
+    launcher.setAttribute("aria-label", unread && !open ? label + " (" + unread + T.unread + ")" : label);
     launcher.setAttribute("aria-expanded", String(open));
     badge.hidden = !unread || open;
     badge.textContent = unread > 9 ? "9+" : String(unread);
@@ -320,13 +372,13 @@ transition-duration:.01ms!important}
   function renderItem(item) {
     if (item.kind === "notice") { log.appendChild(el("div", "note", item.text)); return; }
     var row = el("div", "row " + item.kind + (item.failed ? " failed" : ""));
-    if (item.kind === "human") row.appendChild(el("div", "who", "Equipo de " + cfg.name));
+    if (item.kind === "human") row.appendChild(el("div", "who", T.team(cfg.name)));
     var bubble = el("div", "bubble");
     bubble.innerHTML = format(item.text);
     bubble.title = new Date(item.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     row.appendChild(bubble);
     if (item.failed) {
-      var meta = el("div", "meta", "No se envió. "), retry = el("button", "link", "Reintentar");
+      var meta = el("div", "meta", T.notSent), retry = el("button", "link", T.retry);
       retry.type = "button";
       retry.addEventListener("click", function () { submit(item.text, item); });
       meta.appendChild(retry);
@@ -334,35 +386,42 @@ transition-duration:.01ms!important}
     }
     log.appendChild(row);
   }
-  function add(kind, text) {
+  function add(kind, text, replies) {
     var item = { kind: kind, text: text, ts: Date.now() };
+    if (replies && replies.length) item.replies = replies;
     state.items.push(item);
     save();
-    var chips = $(".chips");
-    if (chips) chips.remove();
+    var shown = $(".chips");
+    if (shown) shown.remove();
     renderItem(item);
+    if (item.replies) chips(item.replies, T.answers);
     fresh.hidden = false;
     if (!open && kind !== "user") { unread += 1; setLauncherLabel(); }
     scrollDown();
     return item;
+  }
+  // Botones bajo el último mensaje: las preguntas sugeridas o las respuestas rápidas (sí / no a
+  // la pregunta de satisfacción).
+  function chips(texts, label) {
+    var box = el("div", "chips");
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-label", label);
+    texts.forEach(function (text) {
+      var chip = el("button", "chip", text);
+      chip.type = "button";
+      chip.addEventListener("click", function () { submit(text); });
+      box.appendChild(chip);
+    });
+    log.appendChild(box);
   }
   function renderAll() {
     log.textContent = "";
     log.removeAttribute("aria-busy");
     renderItem({ kind: "agent", text: cfg.greeting, ts: state.items.length ? state.items[0].ts : Date.now() });
     state.items.forEach(renderItem);
-    if (!state.items.length && cfg.suggestions.length) {
-      var box = el("div", "chips");
-      box.setAttribute("role", "group");
-      box.setAttribute("aria-label", "Preguntas frecuentes");
-      cfg.suggestions.forEach(function (text) {
-        var chip = el("button", "chip", text);
-        chip.type = "button";
-        chip.addEventListener("click", function () { submit(text); });
-        box.appendChild(chip);
-      });
-      log.appendChild(box);
-    }
+    var last = state.items[state.items.length - 1];
+    if (!state.items.length && cfg.suggestions.length) chips(cfg.suggestions, T.suggestions);
+    else if (last && last.replies && !state.locked) chips(last.replies, T.answers);
     fresh.hidden = !state.items.length;
     refresh();
     scrollDown();
@@ -383,13 +442,15 @@ transition-duration:.01ms!important}
   }
   function showLoading() {
     log.setAttribute("aria-busy", "true");
-    log.innerHTML = '<span class="sr">Cargando el chat…</span><div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    log.innerHTML = '<span class="sr"></span><div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    log.querySelector(".sr").textContent = T.loading;
     form.hidden = true;
   }
   function showTyping() {
     if (typing) return;
     typing = el("div", "row agent");
-    typing.innerHTML = '<div class="bubble typing"><span class="sr">Escribiendo…</span><i></i><i></i><i></i></div>';
+    typing.innerHTML = '<div class="bubble typing"><span class="sr"></span><i></i><i></i><i></i></div>';
+    typing.querySelector(".sr").textContent = T.typing;
     log.appendChild(typing);
     scrollDown();
   }
@@ -410,15 +471,15 @@ transition-duration:.01ms!important}
   function refresh() {
     var offline = navigator.onLine === false;
     root.toggleAttribute("data-offline", offline);
-    $(".title em").textContent = offline ? "Sin conexión" : "Asistente virtual";
-    if (offline) setBar("Sin conexión. Revisá tu internet para seguir.");
+    $(".title em").textContent = offline ? T.offline : T.assistant;
+    if (offline) setBar(T.offlineBar);
     else if (bar.getAttribute("data-kind") !== "confirm") setBar("");
     form.hidden = !!state.locked;
     ended.hidden = !state.locked;
     input.disabled = offline;
     send.disabled = busy || offline || !input.value.trim();
     var r = state.remaining, left = "";
-    if (r !== null && r <= 5 && r > 0 && !state.locked) left = r === 1 ? "Te queda 1 mensaje" : "Te quedan " + r + " mensajes";
+    if (r !== null && r <= 5 && r > 0 && !state.locked) left = T.left(r);
     foot.textContent = [left, note].filter(Boolean).join(" · ");
   }
   function autosize() {
@@ -495,7 +556,7 @@ transition-duration:.01ms!important}
     post(text, false).then(function (response) {
       return readEvents(response, function (name, data) {
         if (name === "typing") showTyping();
-        else if (name === "message") { answered = true; hideTyping(); add("agent", data.text); }
+        else if (name === "message") { answered = true; hideTyping(); add("agent", data.text, data.replies); }
         else if (name === "done") {
           var today = typeof data.remaining_today === "number" ? data.remaining_today : data.remaining;
           state.remaining = Math.min(data.remaining, today);
@@ -508,7 +569,7 @@ transition-duration:.01ms!important}
           add("notice", data.message);
         } else if (name === "error") failure = data.message;
       });
-    }).catch(function () { failure = failure || "No pudimos conectar con el asistente."; }).then(function () {
+    }).catch(function () { failure = failure || T.noConnect; }).then(function () {
       hideTyping();
       busy = false;
       if (failure && !answered) {  // el mensaje no se descontó: se puede reintentar
@@ -586,9 +647,9 @@ transition-duration:.01ms!important}
   }
   function askReset() {
     bar.setAttribute("data-kind", "confirm");
-    setBar("¿Empezar una conversación nueva? Esta se borra de este dispositivo.", [
-      ["Sí, empezar", reset],
-      ["Cancelar", function () { bar.removeAttribute("data-kind"); refresh(); fresh.focus(); }]
+    setBar(T.askReset, [
+      [T.yesReset, reset],
+      [T.cancel, function () { bar.removeAttribute("data-kind"); refresh(); fresh.focus(); }]
     ]);
     bar.querySelector("button").focus();
   }
@@ -623,8 +684,8 @@ transition-duration:.01ms!important}
       return r.json();
     }).then(function (data) {
       if (!data.allowed) {
-        console.warn("[Enterprise Data AI] Este dominio no está en la lista de dominios permitidos del chat. Agregalo en el panel, en Configuración.");
-        if (embedded) showState("Este chat no está disponible en este sitio.");
+        console.warn("[Enterprise Data AI] " + T.domain);
+        if (embedded) showState(T.unavailable);
         else host.remove();
         return;
       }
@@ -635,7 +696,7 @@ transition-duration:.01ms!important}
       root.setAttribute("data-ready", "");
       if (embedded) fit();
     }).catch(function () {
-      if (embedded) showState("No pudimos cargar el chat.", "Reintentar", start);
+      if (embedded) showState(T.noLoad, T.retry, start);
       else setTimeout(start, 15000);  // el sitio sigue igual; se reintenta sin molestar
     });
   }
@@ -649,7 +710,7 @@ transition-duration:.01ms!important}
     toggle: function () { setOpen(!open); },
     setBrand: function (changes) {
       if (!cfg) return;
-      if (changes.name) { cfg.name = changes.name; cfg.greeting = "¡Hola! Soy el asistente virtual de " + changes.name + ". ¿En qué te puedo ayudar?"; }
+      if (changes.name) { cfg.name = changes.name; cfg.greeting = T.greeting(changes.name); }
       if (/^#[0-9a-f]{6}$/i.test(changes.accent || "")) cfg.accent = changes.accent;
       if ("logo" in changes) cfg.logo = changes.logo;
       if (changes.suggestions) cfg.suggestions = changes.suggestions;

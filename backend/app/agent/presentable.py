@@ -12,7 +12,8 @@ from typing import Any
 
 _CHECKS = [
     ("JSON", re.compile(r'^\s*(?:```|[{\[])|"\w+"\s*:')),
-    ("metadatos", re.compile(r"(?i)\b(?:fuentes|factual|acci[oó]n|sources)\s*:")),
+    # En español y en inglés (decisión 036): "Fuentes: [...]", "Sources: [...] action: ...".
+    ("metadatos", re.compile(r"(?i)\b(?:fuentes|factual|acci[oó]n|sources|action)\s*:")),
     ("marcas del modelo", re.compile(r"<\|\w+\|>")),
     # Nombres de herramientas (consultar_pedido): el texto para el cliente no tiene guiones bajos
     # fuera de un email.

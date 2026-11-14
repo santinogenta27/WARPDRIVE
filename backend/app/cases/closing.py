@@ -15,18 +15,28 @@ import uuid
 
 import psycopg
 
+from app import i18n
 from app.audit import log as audit_log
 from app.db.connection import tenant_scope
 
 INACTIVE_HOURS = 24
-CLOSING_MESSAGE = "¡De nada! Si necesitás algo más, escribime cuando quieras."
+CLOSING_MESSAGE = i18n.MESSAGES["es"]["closing"]
 HUMAN_KINDS = ["human_reply", "escalated"]
 
 _THANKS = (
     r"(?:(?:muchas|mil)\s+)?gracias|genial|perfecto|listo|joya|excelente|b[aá]rbaro|buen[ií]simo"
 )
 _DONE = r"eso\s+era\s+todo|nada\s+m[aá]s|ya\s+est[aá]|(?:est[aá]\s+)?resuelto|solucionado"
-_PART = rf"(?:{_THANKS}|{_DONE})"
+# En inglés (decisión 036): "thanks", "thank you so much", "that's all", "all good".
+_THANKS_EN = (
+    r"(?:thanks|thank\s+you|thx|ty)(?:\s+(?:so|very)\s+much|\s+a\s+lot)?|great|perfect"
+    r"|awesome|excellent|wonderful|appreciate\s+it"
+)
+_DONE_EN = (
+    r"that'?s\s+(?:all|it|everything)|all\s+(?:good|set|sorted)|nothing\s+else|(?:it'?s\s+)?"
+    r"(?:resolved|solved|sorted)"
+)
+_PART = rf"(?:{_THANKS}|{_DONE}|{_THANKS_EN}|{_DONE_EN})"
 CONFIRMATION = re.compile(rf"^\s*¡?{_PART}(?:[\s,!.¡]+{_PART})*[\s!.]*$", re.IGNORECASE)
 
 

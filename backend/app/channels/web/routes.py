@@ -40,6 +40,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
+from app import i18n
 from app.agent.loop import Agent
 from app.channels.base import InboundMessage, InvalidSignature
 from app.channels.inbound import handle_inbound
@@ -62,22 +63,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MESSAGE_LIMIT = 20  # por sesión (spec: demo pública)
-LIMIT_MESSAGES = {
-    "session": f"Llegaste al límite de {MESSAGE_LIMIT} mensajes de esta conversación. "
-    "¡Gracias por probar la demo!",
-    "ip": "Llegaste al límite de uso diario de la demo desde tu conexión. "
-    "Volvé a probar mañana. ¡Gracias!",
-    "daily": "La demo llegó a su límite de uso por hoy. Volvé a probar mañana. ¡Gracias!",
-}
-# En el chat de una empresa (su página o el widget en su sitio) no se habla de "la demo".
-COMPANY_LIMIT_MESSAGES = {
-    "session": f"Llegaste al límite de {MESSAGE_LIMIT} mensajes de esta conversación. "
-    "Podés empezar una nueva.",
-    "ip": "Llegaste al límite de mensajes por hoy desde tu conexión. Volvé a escribirnos mañana.",
-    "daily": "El chat llegó a su límite de mensajes por hoy. Volvé a escribirnos mañana.",
-}
-ERROR_MESSAGE = "Tuvimos un problema para responderte. Probá de nuevo en un rato."
-FORBIDDEN = "Este sitio no está habilitado para usar el chat."
+
+
+def limit_message(scope: str, *, demo: bool, language: str = "es") -> str:
+    """El aviso de un límite, en el idioma de la empresa (decisión 036). En el chat de una
+    empresa (su página o el widget en su sitio) no se habla de "la demo"."""
+    return i18n.text(language, f"limit_{'demo_' if demo else ''}{scope}", limit=MESSAGE_LIMIT)
+
+
+LIMIT_MESSAGES = {s: limit_message(s, demo=True) for s in ("session", "ip", "daily")}
+COMPANY_LIMIT_MESSAGES = {s: limit_message(s, demo=False) for s in ("session", "ip", "daily")}
+ERROR_MESSAGE = i18n.MESSAGES["es"]["chat_error"]
+FORBIDDEN = i18n.MESSAGES["es"]["forbidden"]
 
 
 class LimitReached(Exception):
@@ -243,17 +240,31 @@ DEMO_NOTE = (
     "Demo · Acme Store es una tienda ficticia. Para ver un pedido, verificate con "
     "lucia@example.com."
 )
+NO_JS = {
+    "es": "Para usar el chat hace falta JavaScript.",
+    "en": "You need JavaScript to use the chat.",
+}
 
 
-def _shell(name: str, slug: str, note: str, accent: str) -> HTMLResponse:
+def _shell(
+    name: str, slug: str, note: str, accent: str, language: str = "es", *, plain: bool = False
+) -> HTMLResponse:
     """La página del chat: un marco que carga `/widget.js` en modo página. Es el mismo widget
-    que se instala en el sitio de un cliente, así las dos se ven iguales."""
+    que se instala en el sitio de un cliente, así las dos se ven iguales. `plain`: sin el
+    nombre de la empresa en el título (no se pudo cargar)."""
     text = (STATIC / "page.html").read_text(encoding="utf-8")
+    title = (
+        i18n.text(language, "page_title_plain")
+        if plain
+        else i18n.text(language, "page_title", empresa=name)
+    )
     values = {
-        "title": f"{name} · Atención al cliente",
+        "title": title,
         "slug": slug,
         "note": note,
         "accent": accent.lstrip("#"),
+        "lang": i18n.normalize(language),
+        "nojs": NO_JS[i18n.normalize(language)],
     }
     for key, value in values.items():
         text = text.replace("{{" + key + "}}", html.escape(value, quote=True))
@@ -281,8 +292,8 @@ def page(deps: Deps) -> HTMLResponse:
         tenant_id = _channel_tenant(conn, slug)
         found = widget.load(conn, tenant_id) if tenant_id else None
     if found is None:  # sin `make demo-setup`: el widget explica que el chat no está disponible
-        return _shell("Atención al cliente", slug, DEMO_NOTE, widget.DEFAULT_ACCENT)
-    return _shell(found.name, slug, DEMO_NOTE, found.accent)
+        return _shell("", slug, DEMO_NOTE, widget.DEFAULT_ACCENT, plain=True)
+    return _shell(found.name, slug, DEMO_NOTE, found.accent, found.language)
 
 
 @router.get("/c/{slug}", response_class=HTMLResponse, include_in_schema=False)
@@ -294,7 +305,8 @@ def company_chat(slug: str, deps: Deps) -> HTMLResponse:
         if tenant_id is None:
             raise HTTPException(status_code=404, detail="Chat inexistente")
         found = widget.load(conn, tenant_id)
-    return _shell(found.name, slug, f"Chat de {found.name}", found.accent)
+    note = i18n.text(found.language, "page_note", empresa=found.name)
+    return _shell(found.name, slug, note, found.accent, found.language)
 
 
 # -- widget instalable (decisión 031) --------------------------------------------------------
@@ -362,10 +374,11 @@ def widget_config(request: Request, deps: Deps, canal: str = "") -> JSONResponse
             "name": found.name,
             "accent": found.accent,
             "logo": f"/chat/widget/logo/{slug}?v={version}" if found.has_logo else None,
-            "greeting": widget.greeting(found.name),
+            "greeting": widget.greeting(found.name, found.language),
             "suggestions": list(found.suggestions)
             or (DEMO_SUGGESTIONS if slug == _slug(deps, "") else []),
             "limit": MESSAGE_LIMIT,
+            "lang": found.language,
         },
         headers=headers,
     )
@@ -414,14 +427,15 @@ def create_session(
 
 def _precheck(
     deps: WebDeps, token: str, ip_hash: str, request: Request
-) -> tuple[str | None, str, uuid.UUID, dict[str, str]]:
+) -> tuple[str | None, str, uuid.UUID, dict[str, str], str]:
     """(límite alcanzado antes de abrir el stream, o None; dirección del chat de la sesión; su
-    empresa; encabezados CORS). `OriginNotAllowed` si el sitio no está habilitado."""
+    empresa; encabezados CORS; su idioma). `OriginNotAllowed` si el sitio no está habilitado."""
     with deps.connection() as conn:
         tenant_id, address = _route(conn, token)
-        cors = _cors(request, widget.load(conn, tenant_id).domains)
+        found = widget.load(conn, tenant_id)
+        cors = _cors(request, found.domains)
         scope = _exceeded(deps, _usage(conn, tenant_id, token, ip_hash, lock=False))
-        return scope, address, tenant_id, cors
+        return scope, address, tenant_id, cors, found.language
 
 
 def _process(
@@ -472,9 +486,9 @@ def _event(name: str, data: dict[str, Any]) -> str:
     return f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _limit_event(scope: str, demo: bool = True) -> str:
-    messages = LIMIT_MESSAGES if demo else COMPANY_LIMIT_MESSAGES
-    return _event("limit", {"scope": scope, "message": messages[scope]})
+def _limit_event(scope: str, demo: bool = True, language: str = "es") -> str:
+    message = limit_message(scope, demo=demo, language=language)
+    return _event("limit", {"scope": scope, "message": message})
 
 
 async def _stream(
@@ -484,12 +498,13 @@ async def _stream(
     token: str,
     ip_hash: str,
     tenant_id: uuid.UUID,
+    language: str = "es",
 ) -> AsyncIterator[str]:
     yield _event("typing", {})
     try:
         remaining = await run_in_threadpool(_process, deps, channel, messages, token, ip_hash)
     except LimitReached as limit:
-        yield _limit_event(limit.scope, channel.address == deps.address)
+        yield _limit_event(limit.scope, channel.address == deps.address, language)
         return
     except Exception as error:
         logger.exception("El chat web no pudo responder")
@@ -502,11 +517,20 @@ async def _stream(
             persist=deps.record_error,
             detail=type(error).__name__,
         )
-        yield _event("error", {"message": ERROR_MESSAGE})
+        yield _event("error", {"message": i18n.text(language, "chat_error")})
         return
     for text in channel.outbox:
-        yield _event("message", {"text": text})
+        yield _event("message", {"text": text, **quick_replies(text)})
     yield _event("done", remaining)
+
+
+def quick_replies(text: str) -> dict[str, list[str]]:
+    """Botones de respuesta rápida para la pregunta de satisfacción (decisión 033): el widget
+    los muestra bajo el mensaje y, al tocarlos, manda ese texto como si se hubiera escrito."""
+    for lang, answers in (("es", ["Sí", "No"]), ("en", ["Yes", "No"])):
+        if i18n.text(lang, "csat_question") in text:
+            return {"replies": answers}
+    return {}
 
 
 async def _only(chunk: str) -> AsyncIterator[str]:
@@ -557,7 +581,7 @@ async def post_message(request: Request, deps: Deps) -> StreamingResponse:
     ip_hash = _ip_hash(client_ip(deps.client_ip, request.headers, peer))
     try:
         token = session_token(body)
-        scope, address, tenant_id, cors = await run_in_threadpool(
+        scope, address, tenant_id, cors, language = await run_in_threadpool(
             _precheck, deps, token, ip_hash, request
         )
         channel = WebChannel(address)  # el chat de la empresa de la sesión
@@ -568,7 +592,7 @@ async def post_message(request: Request, deps: Deps) -> StreamingResponse:
         raise HTTPException(status_code=403, detail=FORBIDDEN) from error
     headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no", **cors}
     if scope is not None:  # sin correr el agente
-        stream = _only(_limit_event(scope, address == deps.address))
+        stream = _only(_limit_event(scope, address == deps.address, language))
     else:
-        stream = _stream(deps, channel, messages, token, ip_hash, tenant_id)
+        stream = _stream(deps, channel, messages, token, ip_hash, tenant_id, language)
     return StreamingResponse(stream, media_type="text/event-stream", headers=headers)

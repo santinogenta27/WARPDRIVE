@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 import psycopg
 
+from app import i18n
 from app.db.connection import tenant_scope
 
 DEFAULT_ACCENT = "#1e3a5f"
@@ -41,13 +42,14 @@ class WidgetSettings:
     suggestions: tuple[str, ...]
     has_logo: bool
     updated_at: datetime | None
+    language: str = "es"  # el de la empresa (decisión 036)
 
 
 def load(conn: psycopg.Connection, tenant_id: uuid.UUID) -> WidgetSettings:
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
             "select t.name, w.display_name, w.accent, w.domains, w.suggestions,"
-            " w.logo is not null, w.updated_at from tenants t"
+            " w.logo is not null, w.updated_at, t.settings ->> 'language' from tenants t"
             " left join widget_settings w on w.tenant_id = t.id where t.id = %s",
             (tenant_id,),
         ).fetchone()
@@ -59,6 +61,7 @@ def load(conn: psycopg.Connection, tenant_id: uuid.UUID) -> WidgetSettings:
         suggestions=tuple(row[4] or ()),
         has_logo=bool(row[5]),
         updated_at=row[6],
+        language=i18n.normalize(row[7]),
     )
 
 
@@ -177,8 +180,8 @@ def origin_allowed(origin: str | None, host: str, domains: tuple[str, ...]) -> b
     return False
 
 
-def greeting(name: str) -> str:
-    return f"¡Hola! Soy el asistente virtual de {name}. ¿En qué te puedo ayudar?"
+def greeting(name: str, language: str = "es") -> str:
+    return i18n.text(language, "greeting", empresa=name)
 
 
 def snippet(base_url: str, slug: str) -> str:
