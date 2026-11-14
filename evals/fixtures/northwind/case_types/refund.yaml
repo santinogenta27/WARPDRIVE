@@ -3,10 +3,12 @@ objetivo: Refund a delivered order of the customer to the original payment metho
 datos_necesarios: [order_id]
 herramientas: [consultar_pedido, iniciar_reembolso]
 condiciones:
-  - Look up the order first. Only delivered orders can be refunded.
-  - Refund the order total unless the customer asks for a specific item; don't ask for the
+  - Look up the order and, if it was delivered, start the refund with iniciar_reembolso for the
+    order total, unless the customer asks for a specific item or amount. Don't ask for the
     reason.
-  - Refunds over $100 need the approval of a member of the team; the system asks for it. Tell
-    the customer the refund is under review and that they'll get a message here.
+  - Call iniciar_reembolso for any amount. Refunds over $100 need the approval of a member of
+    the team, and the system asks for it by itself when you call the tool. Don't hand off
+    because of the amount.
+  - If the refund is under review, tell the customer and that they'll get a message here.
   - If the order hasn't arrived yet, explain it and offer the options for late orders.
 cierre: Confirm the amount and when the money shows up (5 to 7 business days).

@@ -41,6 +41,7 @@ from northwind_api import OPENAPI_PATH, canonical, create_app
 
 SPEC: dict[str, Any] = json.loads(Path(OPENAPI_PATH).read_text(encoding="utf-8"))
 ADDRESS = {"address": "500 Pine St, Seattle, WA 98101"}
+SIZE_L = {"item_sku": "NW-MCS-NVY-M", "new_size": "L"}
 
 # (método, ruta del contrato, ruta concreta, cuerpo, headers, código esperado)
 EXAMPLES: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str], int]] = [
@@ -57,6 +58,33 @@ EXAMPLES: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str], int]]
     ("post", "/orders/{order_id}/refunds", "/orders/NW-4528/refunds", {"amount": 213}, {}, 201),
     ("post", "/orders/{order_id}/refunds", "/orders/NW-9999/refunds", {"amount": 9}, {}, 404),
     ("post", "/orders/{order_id}/refunds", "/orders/NW-4521/refunds", {"amount": 9}, {}, 409),
+    # Hito 8, tarea 4 (decisión 039): cambio, cupón y envío express.
+    ("post", "/orders/{order_id}/exchanges", "/orders/NW-4533/exchanges", SIZE_L, {}, 201),
+    ("post", "/orders/{order_id}/exchanges", "/orders/NW-9999/exchanges", SIZE_L, {}, 404),
+    ("post", "/orders/{order_id}/exchanges", "/orders/NW-4521/exchanges", SIZE_L, {}, 409),
+    ("post", "/orders/{order_id}/coupons", "/orders/NW-4521/coupons", {"percent": 10}, {}, 201),
+    ("post", "/orders/{order_id}/coupons", "/orders/NW-9999/coupons", {"percent": 10}, {}, 404),
+    (
+        "post",
+        "/orders/{order_id}/express-shipping",
+        "/orders/NW-4521/express-shipping",
+        None,
+        {},
+        201,
+    ),
+    (
+        "post",
+        "/orders/{order_id}/express-shipping",
+        "/orders/NW-9999/express-shipping",
+        None,
+        {},
+        404,
+    ),
+]
+# Una sola cortesía por pedido: después de un cupón, ni otro cupón ni el envío express.
+COURTESY_CONFLICTS = [
+    ("post", "/orders/{order_id}/coupons", {"percent": 10}),
+    ("post", "/orders/{order_id}/express-shipping", None),
 ]
 
 
@@ -86,6 +114,19 @@ def test_la_api_responde_segun_su_contrato(
     Draft202012Validator({**schema, "components": SPEC["components"]}).validate(response.json())
 
 
+@pytest.mark.parametrize(("method", "path", "body"), COURTESY_CONFLICTS)
+def test_una_segunda_cortesia_para_el_mismo_pedido_es_un_conflicto(
+    method: str, path: str, body: dict[str, Any] | None
+) -> None:
+    client = TestClient(create_app())
+    assert client.post("/orders/NW-4521/coupons", json={"percent": 5}).status_code == 201
+    response = client.request(method.upper(), path.replace("{order_id}", "NW-4521"), json=body)
+    assert response.status_code == 409
+    documented = _resolve(SPEC["paths"][path][method]["responses"]["409"])
+    schema = documented["content"]["application/json"]["schema"]
+    Draft202012Validator({**schema, "components": SPEC["components"]}).validate(response.json())
+
+
 def test_todas_las_respuestas_documentadas_estan_probadas() -> None:
     documented = {
         (method, path, int(code))
@@ -93,7 +134,9 @@ def test_todas_las_respuestas_documentadas_estan_probadas() -> None:
         for method, operation in operations.items()
         for code in operation["responses"]
     }
-    assert documented == {(m, p, s) for m, p, _, _, _, s in EXAMPLES}
+    tested = {(m, p, s) for m, p, _, _, _, s in EXAMPLES}
+    tested |= {(m, p, 409) for m, p, _ in COURTESY_CONFLICTS}
+    assert documented == tested
 
 
 @pytest.mark.parametrize("written", ["NW-4521", "nw-4521", "NW4521", "#4521", "4521", " nw 4521 "])
@@ -139,6 +182,29 @@ def embedder(conn: psycopg.Connection) -> VoyageEmbedder:
         recorder=PostgresUsageRecorder(conn),
         api_key="sim",
         http_client=httpx.Client(transport=voyage_transport()),
+    )
+
+
+def _without_the_demo_northwind(conn: psycopg.Connection) -> None:
+    """Estos tests crean su propio Northwind. La base de desarrollo es compartida y puede tener
+    el de la demo (`make demo-setup`): dentro de la transacción del test, que se revierte, le
+    sacan la marca, el chat y el email del panel para que no choquen con el nuevo."""
+    rows = conn.execute(
+        "select id from tenants where settings ->> 'demo' = %s", (northwind.DEMO_KEY,)
+    ).fetchall()
+    for (tenant,) in rows:
+        with tenant_scope(conn, tenant):
+            conn.execute(
+                "update channels set phone_number_id = phone_number_id || ':otro'"
+                " where tenant_id = %s",
+                (tenant,),
+            )
+            conn.execute(
+                "update users set email = email || '.otro' where tenant_id = %s", (tenant,)
+            )
+    conn.execute(
+        "update tenants set settings = settings - 'demo' where settings ->> 'demo' = %s",
+        (northwind.DEMO_KEY,),
     )
 
 
@@ -217,9 +283,7 @@ def test_el_reembolso_sobre_100_usd_pide_aprobacion_y_el_menor_se_hace(
 def test_regenerar_no_duplica_y_conserva_la_clave(
     conn: psycopg.Connection, embedder: VoyageEmbedder
 ) -> None:
-    conn.execute(
-        "update tenants set settings = settings - 'demo' where settings ->> 'demo' = 'northwind'"
-    )
+    _without_the_demo_northwind(conn)
     first = northwind.ensure_northwind(conn, embedder, password="clave-de-northwind-demo")
     assert first.created and first.password == "clave-de-northwind-demo"
 
@@ -244,9 +308,7 @@ def test_regenerar_no_duplica_y_conserva_la_clave(
 # -- 3. el chat y el panel de Northwind --------------------------------------------------------
 @pytest.fixture
 def web(conn: psycopg.Connection, embedder: VoyageEmbedder) -> Iterator[TestClient]:
-    conn.execute(
-        "update tenants set settings = settings - 'demo' where settings ->> 'demo' = 'northwind'"
-    )
+    _without_the_demo_northwind(conn)
     northwind.ensure_northwind(conn, embedder, password="clave-de-northwind-demo")
     stack = build_simulated_stack(conn, company="northwind")
     app.dependency_overrides[web_deps] = lambda: WebDeps(

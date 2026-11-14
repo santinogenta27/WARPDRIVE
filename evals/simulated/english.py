@@ -17,6 +17,9 @@ _UPSET = re.compile(
     r"(?i)\b(?:ridiculous|unacceptable|frustrat\w*|angry|upset|annoyed|terrible|worst|furious"
     r"|disappointed|still (?:hasn'?t|not)|where the hell|fed up|seriously)\b|!!|\?!"
 )
+_EXCHANGE = re.compile(r"exchange|swap|another size|different size|bigger|smaller", re.I)
+_PERCENT = re.compile(r"(\d{1,3})\s*%")
+_SIZE = re.compile(r"\b(?:size|an?|in)\s+(XS|XL|S|M|L|\d{1,2})\b(?!')", re.I)
 _MONTHS = "January February March April May June July August September October November December"
 _STOP = {"what", "your", "the", "and", "for", "you", "can", "how", "does", "with", "this"}
 
@@ -158,6 +161,8 @@ class EnglishAgent:
         reply: Reply,
     ) -> list[dict[str, Any]]:
         order_id = call_input.get("order_id")
+        if "alternativas" in result:  # el guardián rechazó algo fuera de la política
+            return reply(self.allowed_instead(call_input, result))
         if "error" in result:
             if name == "consultar_pedido":
                 return reply(
@@ -190,6 +195,8 @@ class EnglishAgent:
                 f"Done! I started a refund of {money(data.get('amount'))} for order {order_id}. "
                 "It goes back to your original payment method."
             )
+        if name in self.DONE:
+            return reply(self.DONE[name](data))
         if name != "consultar_pedido":
             return reply("Done.")
         status = str(data.get("status"))
@@ -229,7 +236,78 @@ class EnglishAgent:
                 f"Order {order_id} has already shipped, so it can't be cancelled. Once it "
                 "arrives you can return it for free."
             )
+        if _EXCHANGE.search(low) and "iniciar_cambio" in tool_names:
+            return self.exchange(order_id, data, message, reply)
+        percent = _PERCENT.search(message)
+        if percent and "ofrecer_cupon" in tool_names:
+            call = {"order_id": order_id, "percent": int(percent.group(1))}
+            return [self.tool_use("ofrecer_cupon", call)]
+        if "express" in low and "ofrecer_envio_express" in tool_names:
+            return [self.tool_use("ofrecer_envio_express", {"order_id": order_id})]
         return reply(self.order_status(order_id, data))
+
+    def exchange(
+        self, order_id: Any, data: dict[str, Any], message: str, reply: Reply
+    ) -> list[dict[str, Any]]:
+        items = data.get("items") or []
+        if data.get("status") != "delivered" or not items:
+            return reply(
+                f"Order {order_id} hasn't been delivered yet. Once it arrives, you have 30 days "
+                "to exchange it for free."
+            )
+        size = _SIZE.search(message)
+        if size is None:
+            return reply(
+                f"Sure! Which size would you like instead of {items[0]['size']} for your "
+                f"{items[0]['name']}?",
+                factual=False,
+            )
+        call = {"order_id": order_id, "item_sku": items[0]["sku"], "new_size": size.group(1)}
+        return [self.tool_use("iniciar_cambio", {**call, "new_size": call["new_size"].upper()})]
+
+    @staticmethod
+    def allowed_instead(call_input: dict[str, Any], result: dict[str, Any]) -> str:
+        """Lo que la política permite, cuando el guardián rechazó un pedido fuera de ella."""
+        top = result.get("maximo_permitido")
+        others = {a.get("herramienta") for a in result.get("alternativas") or []}
+        asked = call_input.get("percent")
+        options = [f"a {top}% coupon for your next order"]
+        if "ofrecer_envio_express" in others:
+            options.append("free express shipping on your next order")
+        return (
+            f"I'm sorry, I can't offer {asked}% off: our courtesy coupons go up to {top}%. "
+            f"What I can do is give you {' or '.join(options)}. Which would you prefer?"
+        )
+
+    @staticmethod
+    def _exchanged(data: dict[str, Any]) -> str:
+        before, after = data["from_item"], data["to_item"]
+        new = f"size {after['size']}" if after["name"] == before["name"] else after["name"]
+        if after["name"] != before["name"]:
+            new += f" (size {after['size']})"
+        text = (
+            f"Done! I started the exchange of your {before['name']} (size {before['size']}) for "
+            f"{new}. We emailed you a prepaid return label, and the new item ships as soon as "
+            "the carrier scans your return."
+        )
+        difference = float(data.get("price_difference") or 0)
+        if difference > 0:
+            text += f" The new item costs {money(difference)} more."
+        elif difference < 0:
+            text += f" We'll refund you the difference of {money(-difference)}."
+        return text
+
+    DONE: dict[str, Callable[[dict[str, Any]], str]] = {
+        "iniciar_cambio": _exchanged,
+        "ofrecer_cupon": lambda data: (
+            f"Done! Here's your coupon {data['code']}: {data['percent']}% off your next order, "
+            f"valid for {data['valid_days']} days."
+        ),
+        "ofrecer_envio_express": lambda data: (
+            f"Done! Your next order ships express for free with the code {data['code']}, valid "
+            f"for {data['valid_days']} days."
+        ),
+    }
 
     @staticmethod
     def order_status(order_id: Any, data: dict[str, Any]) -> str:

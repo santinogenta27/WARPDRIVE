@@ -221,7 +221,7 @@ def contract_check(
     return ContractResult(True, f"{result.status_code} según contrato")
 
 
-REVIEWED_LIMITS = ("max_amount", "approval_over", "amount_from")
+REVIEWED_LIMITS = ("max_amount", "approval_over", "amount_from", "alternatives")
 
 
 def store_tools(

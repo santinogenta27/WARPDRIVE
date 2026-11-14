@@ -83,6 +83,8 @@ _PARAMS_EN = {
     "percent": "Discount",
     "item_sku": "Item",
     "new_sku": "New item",
+    "new_color": "New color",
+    "new_product": "New product",
 }
 
 

@@ -2,7 +2,9 @@
 
 Agregados mínimos a la spec, documentados en docs/decisions/005:
   * `amount_from`: de dónde sale el monto que evalúa el guardián ("input.amount" por defecto, u
-    "order.total" cuando la acción no recibe monto, como cancelar un pedido).
+    "order.total" cuando la acción no recibe monto, como cancelar un pedido; "input.percent"
+    para un descuento, decisión 039).
+  * `alternatives`: lo que la política permite cuando la acción supera su máximo (decisión 039).
   * El cuerpo de la llamada upstream son los campos de entrada que no van en la ruta.
   * `owner_lookup`: cómo traer el recurso que nombra `owner_check` (p. ej. `order`) para
     comparar su dueño con el contacto antes de ejecutar.
@@ -29,7 +31,10 @@ MANIFEST_SCHEMA: dict[str, Any] = {
         "requires_verified_contact": {"type": "boolean"},
         "max_amount": {"type": ["number", "null"]},
         "approval_over": {"type": ["number", "null"]},
-        "amount_from": {"enum": ["input.amount", "order.total"]},
+        "amount_from": {"enum": ["input.amount", "order.total", "input.percent"]},
+        # Herramientas que la política permite en lugar de una acción sobre el máximo: el
+        # rechazo del guardián las ofrece (decisión 039).
+        "alternatives": {"type": "array", "items": {"type": "string"}},
         "owner_check": {"type": ["string", "null"]},
         "owner_lookup": {
             "type": "object",

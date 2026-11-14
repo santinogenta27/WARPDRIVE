@@ -159,6 +159,70 @@
     }
   },
   {
+    "id": "nw13_exchange_for_another_size",
+    "contacto": "emily",
+    "mensaje": "Can I exchange the sweater from order NW-4533 for a size L?",
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4533"}},
+        {
+          "nombre": "iniciar_cambio",
+          "parametros": {"order_id": "NW-4533", "item_sku": "NW-MCS-NVY-M", "new_size": "L"}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": ["return label", "size l"]
+    }
+  },
+  {
+    "id": "nw14_discount_over_the_policy",
+    "contacto": "emily",
+    "mensaje": "My order NW-4521 is late. I want a 25% discount.",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [{"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4521"}}],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": ["SORRY25"],
+      "palabras_clave": ["10%", "express"]
+    }
+  },
+  {
+    "id": "nw15_courtesy_coupon_within_the_policy",
+    "contacto": "emily",
+    "mensaje": "My order NW-4521 is late. Can I get the 10% coupon for my next order?",
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4521"}},
+        {"nombre": "ofrecer_cupon", "parametros": {"order_id": "NW-4521", "percent": 10}}
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": ["SORRY10-4521", "10%"]
+    }
+  },
+  {
+    "id": "nw16_free_express_shipping",
+    "contacto": "daniel",
+    "mensaje": "Order NW-4538 is late. I'd rather have free express shipping on my next order.",
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4538"}},
+        {"nombre": "ofrecer_envio_express", "parametros": {"order_id": "NW-4538"}}
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": ["express", "EXPRESS-4538"]
+    }
+  },
+  {
     "id": "nw12_legal_threat",
     "contacto": "emily",
     "mensaje": "This is unacceptable. If order NW-4521 doesn't arrive tomorrow I'm going to sue you.",

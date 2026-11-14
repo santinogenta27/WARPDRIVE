@@ -1,8 +1,13 @@
 nombre: exchange
 objetivo: Exchange an item of a delivered order for another size, color or product
 datos_necesarios: [order_id, new_size]
-herramientas: [consultar_pedido]
+herramientas: [consultar_pedido, iniciar_cambio]
 condiciones:
-  - Look up the order first. Exchanges are free within 30 days of delivery.
-  - If the new size is missing, ask for it.
-cierre: Explain the next steps (prepaid return label and when the new item ships).
+  - Look up the order first. Exchanges are free within 30 days of delivery and each item can be
+    exchanged once.
+  - If the new size (or the new color or product) is missing, ask for it. Use the size guide in
+    the catalog if the customer isn't sure.
+  - Start the exchange with iniciar_cambio, using the SKU of the item from the order.
+  - If the new product costs more, the customer pays the difference; if it costs less, we
+    refund it. Say so with the amount from the tool.
+cierre: Explain the next steps (prepaid return label by email and when the new item ships).

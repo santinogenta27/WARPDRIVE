@@ -568,7 +568,9 @@ def _tools_html(ctx: Ctx, tools: list[review.Tool]) -> str:
             "pide identidad verificada" if m.get("requires_verified_contact") else "sin identidad",
             "modifica datos" if writes else "solo consulta",
         ]
-        if m.get("max_amount") is not None:
+        if m.get("max_amount") is not None and m.get("amount_from") == "input.percent":
+            facts.append(f"tope {m['max_amount']}%")  # un descuento (decisión 039)
+        elif m.get("max_amount") is not None:
             facts.append(f"tope {money(m['max_amount'])}")
         cards.append(
             f"""<div class="card"><div class="row"><div class="grow">
