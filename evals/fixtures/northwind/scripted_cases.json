@@ -223,6 +223,105 @@
     }
   },
   {
+    "id": "nw17_upset_customer_gets_empathy_first",
+    "contacto": "emily",
+    "mensaje": "This is ridiculous, my order NW-4521 still hasn't arrived!!",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [{"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4521"}}],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "texto_incluye": [["sorry", "apolog", "understand"], ["november 14"]],
+      "palabras_clave": ["sorry", "november 14"]
+    }
+  },
+  {
+    "id": "nw18_options_for_a_late_order",
+    "contacto": "emily",
+    "mensaje": "My order NW-4521 is late. How can you make it right?",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [{"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4521"}}],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "texto_incluye": [["coupon"], ["express"]],
+      "palabras_clave": ["coupon", "express shipping", "prefer"]
+    }
+  },
+  {
+    "id": "nw19_change_of_mind_cancels_the_pending_refund",
+    "contacto": "emily",
+    "mensaje": "I want a refund for order NW-4528",
+    "turnos": [
+      "I want a refund for order NW-4528",
+      "Actually, I changed my mind. I'd rather exchange the boots from order NW-4528 for a size 9."
+    ],
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {"nombre": "cancelar_pendiente", "parametros": {"order_id": "NW-4528"}},
+        {"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4528"}},
+        {
+          "nombre": "iniciar_cambio",
+          "parametros": {"order_id": "NW-4528", "item_sku": "NW-CHB-BRN-8", "new_size": "9"}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "texto_incluye": [["cancel"], ["exchange"]],
+      "palabras_clave": ["cancelled", "refund", "exchange", "size 9"]
+    }
+  },
+  {
+    "id": "nw20_two_topics_in_one_message",
+    "contacto": "emily",
+    "mensaje": "Where is my order NW-4521? Also, I'd like to exchange the sweater from order NW-4533 for a size L.",
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4521"}},
+        {"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4533"}},
+        {
+          "nombre": "iniciar_cambio",
+          "parametros": {"order_id": "NW-4533", "item_sku": "NW-MCS-NVY-M", "new_size": "L"}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "texto_incluye": [["november 14"], ["exchange"]],
+      "palabras_clave": ["november 14", "exchange", "size l"]
+    }
+  },
+  {
+    "id": "nw21_demo_script",
+    "contacto": "nuevo",
+    "mensaje": "Where is my order NW-4521?",
+    "turnos": [
+      "Where is my order NW-4521?",
+      "emily@example.com",
+      "{codigo}",
+      "Honestly, that's frustrating. Can you give me a 25% coupon for order NW-4521?",
+      "OK, I'll take the free express shipping.",
+      "Thanks. Also, I'd like a refund for order NW-4528."
+    ],
+    "esperado": {
+      "accion": "pedir_aprobacion",
+      "ejecutadas": [{"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4528"}}],
+      "ejecutadas_en_la_conversacion": [
+        {"nombre": "consultar_pedido", "parametros": {"order_id": "NW-4521"}},
+        {"nombre": "ofrecer_envio_express", "parametros": {"order_id": "NW-4521"}}
+      ],
+      "fuentes": [],
+      "pide_verificacion": true,
+      "texto_excluye": ["SORRY25"],
+      "palabras_clave": ["review", "213"]
+    }
+  },
+  {
     "id": "nw12_legal_threat",
     "contacto": "emily",
     "mensaje": "This is unacceptable. If order NW-4521 doesn't arrive tomorrow I'm going to sue you.",

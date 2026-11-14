@@ -194,6 +194,18 @@ PHRASES: dict[str, str] = {
     "Ya hay una solicitud pendiente de aprobación para el mismo recurso.": (
         "There's already a pending approval for the same resource."
     ),
+    # conducta del agente (decisión 040)
+    "Pidió empatía antes de responder": "Asked for empathy before answering",
+    "Atendió un segundo tema": "Handled a second topic",
+    "Cliente molesto, sin empatía.": "Upset customer, no empathy.",
+    "afirma una acción que ninguna herramienta hizo en este turno": (
+        "it states an action no tool performed in this turn"
+    ),
+    "Hay una solicitud pendiente para el mismo recurso en este caso.": (
+        "There's a pending request for the same resource in this case."
+    ),
+    "Cancelada por el cliente.": "Cancelled by the customer.",
+    "No había nada pendiente.": "There was nothing pending.",
     "Pidió verificar a un contacto verificado.": "It asked a verified contact to verify again.",
     "afirmación factual sin fuente ni herramienta": "factual claim without a source or a tool",
     "respuesta vacía": "empty answer",

@@ -48,6 +48,7 @@ ACTIONS = {
     "cancelar_pedido": "Cancelación",
     "actualizar_direccion": "Cambio de dirección",
     "consultar_pedido": "Consulta de pedido",
+    "cancelar_pendiente": "Cancelación de lo pendiente",  # decisión 040
 }
 # Verbos con los que suele empezar una herramienta que crea algo: "crear_nota" -> "Nota".
 _LEADING_VERBS = ("iniciar_", "crear_", "generar_", "registrar_", "emitir_")
@@ -73,6 +74,7 @@ ACTIONS_EN = {
     "iniciar_cambio": "Exchange",
     "ofrecer_cupon": "Coupon",
     "ofrecer_envio_express": "Express shipping",
+    "cancelar_pendiente": "Pending request cancelled",
 }
 _PARAMS_EN = {
     "address": "Address",

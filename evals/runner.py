@@ -28,7 +28,7 @@ import json
 import os
 import sys
 import warnings
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -173,6 +173,24 @@ def grade(case: dict[str, Any], result: AgentResult, high_risk: set[str]) -> Cas
         # esperada (gpt-oss-120b, docs/calidad.md).
         "presentable": problem(result.message) is None,
     }
+    # Hito 8 (decisión 040), solo en los casos que los definen:
+    # `texto_incluye`: grupos de palabras; de cada grupo, la respuesta trae al menos una.
+    # `ejecutadas_en_la_conversacion`: herramientas que se ejecutaron en algún turno.
+    # Espacios normalizados: gpt-oss-20b escribe "November 14" (espacio angosto).
+    low = " ".join(result.message.lower().split())
+    if "texto_incluye" in expected:
+        checks["texto"] = all(
+            any(word.lower() in low for word in group) for group in expected["texto_incluye"]
+        )
+    if "ejecutadas_en_la_conversacion" in expected:
+        every = [
+            {"nombre": t.name, "parametros": t.input}
+            for t in getattr(result, "all_tool_calls", result.tool_calls)
+            if t.status == "executed"
+        ]
+        checks["conversacion"] = all(
+            wanted in every for wanted in expected["ejecutadas_en_la_conversacion"]
+        )
     critical: list[str] = []
     if any(word in result.message for word in expected["texto_excluye"]):
         critical.append("dato_de_otro_cliente")
@@ -265,13 +283,25 @@ def send_case(stack: SimulatedStack, case: dict[str, Any]) -> AgentResult:
         stack.add_contact(label)
     result: AgentResult | None = None
     requested = False
+    calls = []
     for text in case.get("turnos") or [case["mensaje"]]:
         if "{codigo}" in text:
             text = text.replace("{codigo}", stack.last_code())
         result = stack.send(label, text)
         requested = requested or result.verification_requested
+        calls += result.tool_calls
     assert result is not None
-    return replace(result, verification_requested=requested)
+    final = {f.name: getattr(result, f.name) for f in fields(AgentResult)}
+    return ConversationResult(
+        **{**final, "verification_requested": requested}, all_tool_calls=calls
+    )
+
+
+@dataclass
+class ConversationResult(AgentResult):
+    """El resultado del último turno, con las herramientas de todos los turnos."""
+
+    all_tool_calls: list[Any] = field(default_factory=list)
 
 
 def _load_progress(progress: Path | None) -> dict[str, CaseResult]:
@@ -303,6 +333,7 @@ def run_evals(
             continue
         if pause and results:
             time.sleep(pause)
+        stack.start_case()  # cada caso con los pedidos en su estado inicial
         agent_result = send_case(stack, case)
         graded = grade(case, agent_result, high_risk)
         graded.judge = judge(stack, case, agent_result, company)
@@ -382,7 +413,7 @@ def record_history(
     prompt y el modelo: la página Métricas del panel lo muestra (decisión 028). Los evals corren
     en una transacción que se revierte, así que esto usa una conexión propia. Sin empresa de
     demo en la base (el CI), no guarda nada."""
-    from app.agent.prompt import ENGLISH_SUFFIX, SYSTEM_PROMPT_VERSION
+    from app.agent.prompt import CONDUCT_VERSION, ENGLISH_SUFFIX, SYSTEM_PROMPT_VERSION
     from app.db.connection import connect
     from app.demo import northwind
     from app.demo.acme import find_demo_tenant
@@ -399,7 +430,9 @@ def record_history(
             target,
             tenant_id,
             mode=mode,
-            prompt_version=SYSTEM_PROMPT_VERSION + (ENGLISH_SUFFIX if company != "acme" else ""),
+            # En inglés, la traducción más las reglas de conducta (decisión 040).
+            prompt_version=SYSTEM_PROMPT_VERSION
+            + (f"{ENGLISH_SUFFIX}+{CONDUCT_VERSION}" if company != "acme" else ""),
             model=model,
             scores={
                 **report.scores(),

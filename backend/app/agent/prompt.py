@@ -5,6 +5,7 @@ import html
 from pathlib import Path
 from typing import Any
 
+from app.policy.guardian import CANCEL_PENDING
 from app.rag.search import SearchResult
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
@@ -17,6 +18,9 @@ PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 SYSTEM_PROMPT_VERSION = "system_v5"
 # Empresas en inglés (decisión 036): la traducción de la misma versión, no una versión nueva.
 ENGLISH_SUFFIX = "_en"
+# Reglas de conducta (decisión 040): empatía, opciones, cambio de idea, dos temas y no afirmar
+# acciones que no hizo una herramienta. Se suman al prompt en inglés.
+CONDUCT_VERSION = "conduct_v1_en"
 
 TONES = {
     "rioplatense": (
@@ -104,12 +108,20 @@ def _escape(text: str) -> str:
     return html.escape(text, quote=False)
 
 
+def conduct_rules() -> str:
+    """Reglas de conducta del Hito 8 (decisión 040), aparte de la traducción del prompt: por ahora
+    solo en inglés, así el prompt en español y la línea base de Acme no cambian."""
+    return (PROMPTS_DIR / f"{CONDUCT_VERSION}.txt").read_text(encoding="utf-8").strip()
+
+
 def system_prompt(company: str, tone: str, case_type_instructions: str) -> str:
     name = SYSTEM_PROMPT_VERSION + (ENGLISH_SUFFIX if is_english(tone) else "")
     template = (PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
     fixed = template.replace("{empresa}", company).replace(
         "{tono}", TONES.get(tone, TONES["rioplatense"])
     )
+    if is_english(tone):
+        fixed = f"{fixed.rstrip()}\n{conduct_rules()}"
     return f"{fixed}\n<tipo_de_caso>\n{case_type_instructions.strip()}\n</tipo_de_caso>"
 
 
@@ -128,14 +140,47 @@ def user_turn(
     )
 
 
+def cancel_pending_tool(english: bool) -> dict[str, Any]:
+    """Herramienta interna para un cambio de idea (decisión 040): cancela lo que el caso tiene
+    pendiente de aprobación. La ejecuta el guardián; se ofrece solo si hay algo pendiente."""
+    return {
+        "name": CANCEL_PENDING,
+        "description": (
+            "Cancels a request of this conversation that is still waiting for a person's "
+            "approval, when the customer changes their mind. Use it before doing something else "
+            "with the same order."
+            if english
+            else "Cancela una solicitud de esta conversación que espera la aprobación de una "
+            "persona, cuando el cliente cambia de idea. Usala antes de hacer otra cosa con el "
+            "mismo pedido."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "order_id": {
+                    "type": "string",
+                    "description": "The order of the pending request"
+                    if english
+                    else "El pedido de la solicitud pendiente",
+                }
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+    }
+
+
 def tool_definitions(
     manifests: list[dict[str, Any]],
     finals: tuple[str, ...] = ("responder", "derivar"),
     *,
     english: bool = False,
+    pending: bool = False,
 ) -> list[dict[str, Any]]:
+    """`pending`: el caso tiene algo pendiente de aprobación; se suma `cancelar_pendiente`."""
     business = [
         {"name": m["name"], "description": m["description"], "input_schema": m["input_schema"]}
         for m in manifests
     ]
-    return business + [t for t in _final_tools(english) if t["name"] in finals]
+    extra = [cancel_pending_tool(english)] if pending else []
+    return business + extra + [t for t in _final_tools(english) if t["name"] in finals]

@@ -28,6 +28,10 @@ DecisionStatus = Literal["executed", "denied", "approval_required", "failed"]
 NOT_FOUND_FOR_CONTACT = "No hay un recurso con ese identificador entre los del contacto."
 UNVERIFIED_REASON = "El contacto no está verificado."  # el agente pide la verificación
 ALREADY_PENDING_REASON = "Ya hay una solicitud pendiente de aprobación para el mismo recurso."
+# Cambio de idea (decisión 040): con una solicitud pendiente en el caso, otra acción sobre el
+# mismo recurso espera a que se cancele la pendiente con esta herramienta interna.
+CANCEL_PENDING = "cancelar_pendiente"
+CHANGED_MIND_REASON = "Hay una solicitud pendiente para el mismo recurso en este caso."
 _HIDDEN_FIELDS = {"customer_phone"}  # el modelo no necesita el teléfono en claro
 
 
@@ -149,6 +153,9 @@ class Guardian:
         if isinstance(checked, GuardDecision):
             return checked
         manifest, resources = checked
+        waiting = self._pending_in_case(tenant_id, case_id, manifest, tool_input)
+        if waiting is not None:
+            return waiting
         decision = self._apply_risk_policy(
             tenant_id=tenant_id,
             case_id=case_id,
@@ -187,6 +194,74 @@ class Guardian:
         if decision is not None:
             return decision
         return self._run(manifest, tool_input, case_id, resources)
+
+    def _pending_in_case(
+        self,
+        tenant_id: uuid.UUID,
+        case_id: uuid.UUID,
+        manifest: dict[str, Any],
+        tool_input: dict[str, Any],
+    ) -> GuardDecision | None:
+        """Cambio de idea: si el caso tiene una solicitud pendiente sobre el mismo recurso (el
+        pedido) y la acción nueva es otra herramienta, no se hace hasta cancelar la pendiente.
+        La misma herramienta sigue como antes: reusa la aprobación pendiente del caso."""
+        if manifest["upstream"]["method"] == "GET":
+            return None
+        key = _resource_key(manifest, tool_input)
+        if key is None:
+            return None
+        with tenant_scope(self._conn, tenant_id):
+            row = self._conn.execute(
+                "select t.name, a.params from approvals a join tools t on t.id = a.tool_id"
+                " where a.case_id = %s and a.resource_key = %s and a.status = 'pending'"
+                " and t.name <> %s limit 1",
+                (case_id, key, manifest["name"]),
+            ).fetchone()
+        if row is None:
+            return None
+        return GuardDecision(
+            "denied",
+            {
+                "error": (
+                    f"Hay una solicitud pendiente de aprobación para el mismo pedido ({row[0]}). "
+                    f"Si el cliente cambió de idea, cancelala primero con {CANCEL_PENDING} y "
+                    "después hacé lo nuevo; si no, preguntale qué prefiere."
+                ),
+                "pendiente": {"herramienta": row[0], "parametros": row[1]},
+            },
+            reason=CHANGED_MIND_REASON,
+        )
+
+    def cancel_pending(
+        self, tenant_id: uuid.UUID, case_id: uuid.UUID, tool_input: dict[str, Any]
+    ) -> GuardDecision:
+        """El cliente cambió de idea: cancela las solicitudes pendientes de aprobación del caso
+        (las de un pedido si viene `order_id`). Quedan rechazadas, así nadie las ejecuta
+        después, y el caso vuelve a abierto. Solo toca las de este caso."""
+        order = tool_input.get("order_id")
+        with tenant_scope(self._conn, tenant_id):
+            rows = self._conn.execute(
+                "update approvals a set status = 'rejected', decided_at = now() from tools t"
+                " where t.id = a.tool_id and a.case_id = %s and a.status = 'pending'"
+                " and (%s::text is null or a.params ->> 'order_id' = %s::text)"
+                " returning a.id, t.name, a.params",
+                (case_id, order, order),
+            ).fetchall()
+            if rows:
+                self._conn.execute(
+                    "update cases set status = 'open', updated_at = now()"
+                    " where id = %s and status = 'waiting_approval'",
+                    (case_id,),
+                )
+        cancelled = [
+            {"aprobacion": str(r[0]), "herramienta": r[1], "parametros": r[2]} for r in rows
+        ]
+        return GuardDecision(
+            "executed",
+            {"ok": True, "canceladas": cancelled},
+            reason="Cancelada por el cliente." if rows else "No había nada pendiente.",
+            side_effect=bool(rows),
+        )
 
     def _precheck(
         self,
