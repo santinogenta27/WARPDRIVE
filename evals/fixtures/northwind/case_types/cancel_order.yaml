@@ -1,0 +1,8 @@
+nombre: cancel_order
+objetivo: Cancel an order that hasn't shipped yet
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido, cancelar_pedido]
+condiciones:
+  - Look up the order first. If it already shipped, explain that it can't be cancelled and that
+    it can be returned for free once it arrives.
+cierre: Confirm the cancellation and that the payment is released.

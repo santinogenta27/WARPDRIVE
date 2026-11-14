@@ -1,0 +1,233 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Northwind Outfitters — Orders API (simulated)",
+    "version": "1.0.0",
+    "description": "Fictional API of the Northwind Outfitters demo store. Synthetic data for development, CI and demos."
+  },
+  "paths": {
+    "/customers": {
+      "get": {
+        "operationId": "buscarClientes",
+        "summary": "Customers with a registered email (case-insensitive); empty list if none",
+        "parameters": [
+          {"name": "email", "in": "query", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Customers found",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CustomerList"}}}
+          }
+        }
+      }
+    },
+    "/orders": {
+      "get": {
+        "operationId": "listarPedidos",
+        "summary": "A customer's orders by phone number",
+        "parameters": [
+          {"name": "customer_phone", "in": "query", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "The customer's orders",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/OrderList"}}}
+          }
+        }
+      }
+    },
+    "/orders/{order_id}": {
+      "get": {
+        "operationId": "consultarPedido",
+        "summary": "Looks up the status, items, carrier, tracking and estimated delivery (including any delay) of an order of the verified customer",
+        "parameters": [{"$ref": "#/components/parameters/OrderId"}],
+        "responses": {
+          "200": {
+            "description": "Order",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Order"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/orders/{order_id}/address": {
+      "patch": {
+        "operationId": "actualizarDireccion",
+        "summary": "Updates the shipping address of an order of the verified customer that hasn't shipped yet",
+        "parameters": [{"$ref": "#/components/parameters/OrderId"}],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/AddressChange"}}}
+        },
+        "responses": {
+          "200": {
+            "description": "Updated order",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Order"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/orders/{order_id}/cancel": {
+      "post": {
+        "operationId": "cancelarPedido",
+        "summary": "Cancels an order of the verified customer before it ships",
+        "parameters": [
+          {"$ref": "#/components/parameters/OrderId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled order",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Order"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/orders/{order_id}/refunds": {
+      "post": {
+        "operationId": "iniciarReembolso",
+        "summary": "Starts a refund to the original payment method for a delivered order of the verified customer",
+        "parameters": [
+          {"$ref": "#/components/parameters/OrderId"},
+          {"$ref": "#/components/parameters/IdempotencyKey"}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RefundRequest"}}}
+        },
+        "responses": {
+          "201": {
+            "description": "Refund started (or the existing one for the same idempotency key)",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Refund"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "OrderId": {"name": "order_id", "in": "path", "required": true, "description": "Order number, for example NW-4521", "schema": {"type": "string"}},
+      "IdempotencyKey": {"name": "Idempotency-Key", "in": "header", "required": false, "schema": {"type": "string"}}
+    },
+    "responses": {
+      "NotFound": {
+        "description": "Order not found",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      },
+      "Conflict": {
+        "description": "The operation doesn't apply to the order's current status",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {"code": {"type": "string"}, "message": {"type": "string"}},
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "sku": {"type": "string"},
+          "name": {"type": "string"},
+          "size": {"type": "string"},
+          "color": {"type": "string"},
+          "quantity": {"type": "integer", "minimum": 1},
+          "unit_price": {"type": "number", "minimum": 0}
+        },
+        "required": ["sku", "name", "size", "color", "quantity", "unit_price"],
+        "additionalProperties": false
+      },
+      "Delay": {
+        "type": "object",
+        "properties": {
+          "reason": {"type": "string"},
+          "new_estimated_delivery": {"type": "string", "format": "date"}
+        },
+        "required": ["reason", "new_estimated_delivery"],
+        "additionalProperties": false
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "customer_phone": {"type": "string"},
+          "customer_name": {"type": "string"},
+          "status": {"type": "string", "enum": ["paid", "shipped", "delivered", "cancelled"]},
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/Item"}},
+          "total": {"type": "number", "minimum": 0},
+          "currency": {"type": "string", "const": "USD"},
+          "shipping_address": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "shipped_at": {"type": ["string", "null"], "format": "date-time"},
+          "delivered_at": {"type": ["string", "null"], "format": "date-time"},
+          "estimated_delivery": {"type": ["string", "null"], "format": "date"},
+          "carrier": {"type": ["string", "null"]},
+          "tracking_number": {"type": ["string", "null"]},
+          "delay": {"oneOf": [{"$ref": "#/components/schemas/Delay"}, {"type": "null"}]}
+        },
+        "required": [
+          "id", "customer_phone", "customer_name", "status", "items", "total", "currency",
+          "shipping_address", "created_at", "shipped_at", "delivered_at", "estimated_delivery",
+          "carrier", "tracking_number", "delay"
+        ],
+        "additionalProperties": false
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "email": {"type": "string"},
+          "phone": {"type": "string"}
+        },
+        "required": ["id", "name", "email", "phone"],
+        "additionalProperties": false
+      },
+      "CustomerList": {
+        "type": "object",
+        "properties": {"customers": {"type": "array", "items": {"$ref": "#/components/schemas/Customer"}}},
+        "required": ["customers"],
+        "additionalProperties": false
+      },
+      "OrderList": {
+        "type": "object",
+        "properties": {"orders": {"type": "array", "items": {"$ref": "#/components/schemas/Order"}}},
+        "required": ["orders"],
+        "additionalProperties": false
+      },
+      "AddressChange": {
+        "type": "object",
+        "properties": {"address": {"type": "string", "minLength": 5}},
+        "required": ["address"],
+        "additionalProperties": false
+      },
+      "RefundRequest": {
+        "type": "object",
+        "properties": {"amount": {"type": "number", "exclusiveMinimum": 0, "description": "Amount in USD"}},
+        "required": ["amount"],
+        "additionalProperties": false
+      },
+      "Refund": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "order_id": {"type": "string"},
+          "amount": {"type": "number"},
+          "currency": {"type": "string", "const": "USD"},
+          "status": {"type": "string", "enum": ["requested"]},
+          "created_at": {"type": "string", "format": "date-time"}
+        },
+        "required": ["id", "order_id", "amount", "currency", "status", "created_at"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -36,3 +36,4 @@ jobs:
       - run: make lint PYTHON=python
       - run: make test PYTHON=python
       - run: make evals PYTHON=python
+      - run: make evals-en PYTHON=python

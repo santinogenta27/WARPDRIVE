@@ -1,0 +1,34 @@
+{
+  "name": "Northwind Outfitters",
+  "description": "Fictional online store of durable outdoor clothing, based in Portland, Oregon. Demo company in English.",
+  "language": "en",
+  "tone": "english",
+  "chat_slug": "northwind-outfitters",
+  "panel_user": "demo@northwind.example",
+  "widget": {
+    "accent": "#2f5d50",
+    "suggestions": [
+      "Where is my order NW-4521?",
+      "What's your return policy?",
+      "Can I exchange a sweater for another size?",
+      "I'd like to talk to a person"
+    ]
+  },
+  "case_types": [
+    {"name": "where_is_my_order", "active": true},
+    {"name": "refund", "active": true},
+    {"name": "exchange", "active": true},
+    {"name": "change_shipping_address", "active": true},
+    {"name": "cancel_order", "active": true},
+    {"name": "warranty_claim", "active": true}
+  ],
+  "contacts": [
+    {"label": "emily", "phone": "+15555550101", "verified": true},
+    {"label": "daniel", "phone": "+15555550102", "verified": true},
+    {"label": "sophia", "phone": "+15555550103", "verified": false}
+  ],
+  "tool_limits": {
+    "iniciar_reembolso": {"risk": "medium", "approval_over": 100, "max_amount": 1000},
+    "cancelar_pedido": {"approval_over": 500, "amount_from": "order.total"}
+  }
+}

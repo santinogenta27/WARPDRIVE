@@ -594,6 +594,13 @@ def _plain(value: Any) -> str:
 
 def _system_html(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> str:
     badge, label = MODES[mode]
+    if mode == "demo" and found is not None and found.base_url != system.DEMO_BASE_URL:
+        # Otra empresa de demo (Northwind, decisión 038): su propia API simulada.
+        return (
+            f'<div class="card"><span class="badge {badge}">Sistema de demo (API simulada)</span>'
+            '<p class="muted small">Esta empresa usa la API simulada de la demo: sus herramientas '
+            "llegan a pedidos de prueba, nunca a un sistema real.</p></div>"
+        )
     if mode == "demo":
         return (
             f'<div class="card"><span class="badge {badge}">{label}</span><p class="muted small">'

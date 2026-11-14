@@ -15,6 +15,7 @@ from typing import Any
 
 import httpx2
 
+from simulated import english
 from simulated.voyage import tokens
 
 INVENTED = "¡Sí, claro! Lo hacemos sin ningún problema y sin costo."
@@ -88,6 +89,18 @@ class SimulatedClaude:
 
     # -- agente ----------------------------------------------------------------------------
     def _agent(self, body: dict[str, Any], tool_names: set[str]) -> list[dict[str, Any]]:
+        if english.is_english(body):  # empresa en inglés (decisión 038)
+            found = _tool_results(body["messages"])
+            fixed = any(name == "responder" for name, _, _ in found) or any(
+                isinstance(m["content"], str) for m in body["messages"][1:] if m["role"] == "user"
+            )
+            return english.EnglishAgent(self.mode, self._tool_use).decide(
+                body,
+                tool_names,
+                [r for r in found if r[0] not in {"responder", "derivar"}],
+                fixed,
+                lambda data: _loose_text(self.mode, data, fixed),
+            )
         first = body["messages"][0]["content"]
         message = html.unescape(_tag(first, "mensaje_cliente"))
         low = message.lower()
@@ -352,17 +365,34 @@ _RULES = [
     (r"factura", "facturacion"),
     (r"sucursal|horario|abren|domingo|sábado|sabado|feriado", "horarios_y_sucursales"),
     (r"pedido|llega|envío|envio", "donde_esta_mi_pedido"),
-    # Inglés, con los tipos de Acme (en los tests de idioma Acme atiende en inglés).
+    # Inglés, con los tipos de Northwind (decisión 038) y de Acme (en los tests de idioma Acme
+    # atiende en inglés). Una pregunta de políticas sin número de pedido es consulta general.
+    (r"\baddress\b", "change_shipping_address"),
     (r"\baddress\b", "cambiar_direccion"),
+    (r"\bcancel", "cancel_order"),
+    (r"\brefund|money back", "refund"),
     (r"\brefund", "reembolso"),
+    (r"exchange|another size|different size|swap|size [a-z0-9]+ instead", "exchange"),
+    (r"defect|broken|ripped|torn|warranty claim|zipper", "warranty_claim"),
     (r"\bopen\b|sunday|hours|store", "horarios_y_sucursales"),
+    (r"\border\b|arrive|where is|late|package|tracking|deliver", "where_is_my_order"),
     (r"\border\b|arrive|where is", "donde_esta_mi_pedido"),
 ]
+# Preguntas sobre las políticas sin un pedido puntual (en inglés): consulta general.
+_POLICY = re.compile(
+    r"policy|how long|how much|shipping cost|free shipping|do you ship|size guide|what size"
+    r"|warranty cover|coupons?\b|discounts?\b|price|hours|store|international",
+    re.I,
+)
 
 
 def _classify(body: dict[str, Any]) -> str:
     text = html.unescape(_tag(body["messages"][0]["content"], "mensaje_cliente")).lower()
     enum = set(body["tools"][0]["input_schema"]["properties"]["tipo"]["enum"])
+    english_prompt = str(body.get("system") or "").startswith("You classify")
+    if english_prompt and _POLICY.search(text) and not english.order_ids(text):
+        if not re.search(r"\b(a person|a human|representative|ignore)\b", text):
+            return "consulta_general"
     for pattern, label in _RULES:
         if re.search(pattern, text) and label in enum:
             return label

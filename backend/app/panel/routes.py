@@ -88,6 +88,12 @@ def _production_deps() -> PanelDeps:
     from app.companies.worker import kick
     from app.config import load_dotenv
     from app.demo.acme import find_demo_tenant, shared_acme
+    from app.demo.northwind import shared_northwind
+
+    def reset_sandboxes() -> None:  # las APIs simuladas de las empresas de demo
+        shared_acme.cache_clear()
+        shared_northwind.cache_clear()
+
     from app.llm.client import PostgresUsageRecorder
     from app.llm.factory import embedder_from_env
 
@@ -102,7 +108,7 @@ def _production_deps() -> PanelDeps:
         # pedido). Las demás empresas: su sistema, o el modo simulado hasta que lo activen.
         guardian=build_guardian,
         report_tenant=row[0] if row else None,
-        reset_sandbox=shared_acme.cache_clear,
+        reset_sandbox=reset_sandboxes,
         embedder=lambda conn: embedder_from_env(PostgresUsageRecorder(conn)),
         kick_worker=kick,
     )
@@ -166,6 +172,11 @@ class Ctx:
     session: auth.Session
     tenant_id: uuid.UUID
     csrf: str
+    demo: bool = False  # una empresa de demo (Acme o Northwind): se puede reiniciar
+
+    @property
+    def can_reset(self) -> bool:
+        return self.session.admin or self.demo
 
 
 def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None) -> Ctx | Response:
@@ -179,22 +190,23 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
         return _forbidden()
     if session.tenant_id is None:
         return _no_tenant()
-    active, language = _company(deps, session.tenant_id)
+    active, language, demo = _company(deps, session.tenant_id)
     if not session.admin and not active:
         return _to_login()  # la empresa fue borrada: su sesión deja de servir
     # El panel habla el idioma de la empresa (decisión 037): vale para todo este pedido.
     english.set_language(language)
-    return Ctx(session, session.tenant_id, auth.csrf_token(session.token))
+    return Ctx(session, session.tenant_id, auth.csrf_token(session.token), demo=demo)
 
 
-def _company(deps: PanelDeps, tenant_id: uuid.UUID) -> tuple[bool, str]:
-    """(¿la empresa existe y está activa?, su idioma)."""
+def _company(deps: PanelDeps, tenant_id: uuid.UUID) -> tuple[bool, str, bool]:
+    """(¿la empresa existe y está activa?, su idioma, ¿es una empresa de demo?)."""
     with deps.connection() as conn, tenant_scope(conn, tenant_id):
         row = conn.execute(
-            "select status = 'active', settings ->> 'language' from tenants where id = %s",
+            "select status = 'active', settings ->> 'language', settings ->> 'demo'"
+            " from tenants where id = %s",
             (tenant_id,),
         ).fetchone()
-    return (bool(row[0]), i18n.normalize(row[1])) if row else (False, "es")
+    return (bool(row[0]), i18n.normalize(row[1]), bool(row[2])) if row else (False, "es", False)
 
 
 def _money(value: Any) -> str:
@@ -476,7 +488,7 @@ color:inherit"><div class="grow"><div class="row" style="gap:8px">
         )
         or '<div class="card empty">Todavía no hay conversaciones.</div>'
     )
-    reset = '<a class="btn" href="/panel/reiniciar">Reiniciar demo</a>' if ctx.session.admin else ""
+    reset = '<a class="btn" href="/panel/reiniciar">Reiniciar demo</a>' if ctx.can_reset else ""
     body = f"""<div class="row"><h1 class="grow">Casos</h1>{reset}</div>
 <p class="lead">Conversaciones con su estado: primero las derivadas
 a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
@@ -490,14 +502,15 @@ def reset_form(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
         return ctx
-    if not ctx.session.admin:  # solo la empresa de demo se reinicia
+    if not ctx.can_reset:  # solo una empresa de demo se reinicia
         return _forbidden("Solo el operador de la demo puede reiniciarla.")
+    api = "de Acme" if ctx.session.admin else "simulada"
     body = f"""<div class="card" style="max-width:560px;margin:24px auto">
 <h1>Reiniciar demo</h1>
 <p>Deja el panel limpio para empezar una demo nueva:</p>
 <ul><li>Las conversaciones de prueba se archivan: salen del panel y del chat.</li>
 <li>Las aprobaciones pendientes se rechazan, así no se ejecutan después.</li>
-<li>Los pedidos de la API de Acme vuelven a su estado inicial.</li></ul>
+<li>Los pedidos de la API {api} vuelven a su estado inicial.</li></ul>
 <p class="muted small">La auditoría de cada caso queda guardada e íntegra: es de solo
 inserción y no se borra.</p>
 <form method="post" action="/panel/reiniciar" class="row">
@@ -512,7 +525,7 @@ def reset_demo(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
     if isinstance(ctx, Response):
         return ctx
-    if not ctx.session.admin:
+    if not ctx.can_reset:
         return _forbidden("Solo el operador de la demo puede reiniciarla.")
     with deps.connection() as conn:
         archive_cases(conn, ctx.tenant_id, _user_id(conn, ctx.tenant_id, ctx.session.email))

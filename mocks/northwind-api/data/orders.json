@@ -1,0 +1,120 @@
+[
+  {
+    "id": "NW-4521",
+    "customer_phone": "+15555550101",
+    "customer_name": "Emily Carter",
+    "status": "shipped",
+    "items": [
+      {"sku": "NW-TRJ-BLU-M", "name": "Trail Runner Jacket", "size": "M", "color": "Lake Blue", "quantity": 1, "unit_price": 149.0}
+    ],
+    "total": 149.0,
+    "currency": "USD",
+    "shipping_address": "418 Alder St, Portland, OR 97205",
+    "created_at": "2026-11-03T10:12:00-08:00",
+    "shipped_at": "2026-11-04T16:40:00-08:00",
+    "delivered_at": null,
+    "estimated_delivery": "2026-11-09",
+    "carrier": "UPS Ground",
+    "tracking_number": "1Z9A4F210377451236",
+    "delay": {
+      "reason": "Weather delay at the carrier's Denver hub",
+      "new_estimated_delivery": "2026-11-14"
+    }
+  },
+  {
+    "id": "NW-4528",
+    "customer_phone": "+15555550101",
+    "customer_name": "Emily Carter",
+    "status": "delivered",
+    "items": [
+      {"sku": "NW-CHB-BRN-8", "name": "Leather Chelsea Boots", "size": "8", "color": "Walnut", "quantity": 1, "unit_price": 189.0},
+      {"sku": "NW-WBN-GRY-OS", "name": "Wool Beanie", "size": "One size", "color": "Heather Gray", "quantity": 1, "unit_price": 24.0}
+    ],
+    "total": 213.0,
+    "currency": "USD",
+    "shipping_address": "418 Alder St, Portland, OR 97205",
+    "created_at": "2026-10-28T09:05:00-08:00",
+    "shipped_at": "2026-10-29T14:20:00-08:00",
+    "delivered_at": "2026-11-02T12:31:00-08:00",
+    "estimated_delivery": "2026-11-02",
+    "carrier": "UPS Ground",
+    "tracking_number": "1Z9A4F210377450981",
+    "delay": null
+  },
+  {
+    "id": "NW-4533",
+    "customer_phone": "+15555550101",
+    "customer_name": "Emily Carter",
+    "status": "delivered",
+    "items": [
+      {"sku": "NW-MCS-NVY-M", "name": "Merino Crew Sweater", "size": "M", "color": "Navy", "quantity": 1, "unit_price": 89.0}
+    ],
+    "total": 89.0,
+    "currency": "USD",
+    "shipping_address": "418 Alder St, Portland, OR 97205",
+    "created_at": "2026-11-01T18:22:00-08:00",
+    "shipped_at": "2026-11-02T11:00:00-08:00",
+    "delivered_at": "2026-11-06T15:47:00-08:00",
+    "estimated_delivery": "2026-11-06",
+    "carrier": "USPS Priority",
+    "tracking_number": "9405511899223345678912",
+    "delay": null
+  },
+  {
+    "id": "NW-4540",
+    "customer_phone": "+15555550102",
+    "customer_name": "Daniel Brooks",
+    "status": "shipped",
+    "items": [
+      {"sku": "NW-CFP-OLV-32", "name": "Canvas Field Pants", "size": "32", "color": "Olive", "quantity": 1, "unit_price": 74.0}
+    ],
+    "total": 74.0,
+    "currency": "USD",
+    "shipping_address": "77 Harbor View Rd, Seattle, WA 98109",
+    "created_at": "2026-11-09T08:15:00-08:00",
+    "shipped_at": "2026-11-10T13:05:00-08:00",
+    "delivered_at": null,
+    "estimated_delivery": "2026-11-14",
+    "carrier": "USPS Priority",
+    "tracking_number": "9405511899223345699021",
+    "delay": null
+  },
+  {
+    "id": "NW-4545",
+    "customer_phone": "+15555550102",
+    "customer_name": "Daniel Brooks",
+    "status": "paid",
+    "items": [
+      {"sku": "NW-ADV-BLK-L", "name": "Alpine Down Vest", "size": "L", "color": "Black", "quantity": 1, "unit_price": 129.0}
+    ],
+    "total": 129.0,
+    "currency": "USD",
+    "shipping_address": "77 Harbor View Rd, Seattle, WA 98109",
+    "created_at": "2026-11-11T20:40:00-08:00",
+    "shipped_at": null,
+    "delivered_at": null,
+    "estimated_delivery": "2026-11-18",
+    "carrier": null,
+    "tracking_number": null,
+    "delay": null
+  },
+  {
+    "id": "NW-4550",
+    "customer_phone": "+15555550103",
+    "customer_name": "Sophia Nguyen",
+    "status": "delivered",
+    "items": [
+      {"sku": "NW-OTE-WHT-S", "name": "Everyday Organic Tee", "size": "S", "color": "White", "quantity": 2, "unit_price": 28.0}
+    ],
+    "total": 56.0,
+    "currency": "USD",
+    "shipping_address": "2150 Larkin St, San Francisco, CA 94109",
+    "created_at": "2026-10-30T12:00:00-08:00",
+    "shipped_at": "2026-10-31T10:30:00-08:00",
+    "delivered_at": "2026-11-04T17:12:00-08:00",
+    "estimated_delivery": "2026-11-04",
+    "carrier": "USPS Priority",
+    "tracking_number": "9405511899223345601234",
+    "delay": null
+  }
+]

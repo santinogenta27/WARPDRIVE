@@ -30,10 +30,16 @@ def shared_provider() -> LLMProvider:
 
 
 def build_guardian(conn: psycopg.Connection, tenant_id: uuid.UUID) -> "Guardian":
+    from app.demo import northwind
     from app.demo.acme import shared_acme
     from app.policy.guardian import Guardian
 
-    runtime, _ = runtime_for(conn, tenant_id, demo=shared_acme)
+    runtime, _ = runtime_for(
+        conn,
+        tenant_id,
+        demo=shared_acme,
+        demos={northwind.BASE_URL: northwind.shared_northwind},
+    )
     return Guardian(conn, runtime)
 
 
