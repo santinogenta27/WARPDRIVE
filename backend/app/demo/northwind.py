@@ -86,7 +86,13 @@ def shared_northwind() -> TestClient:
 
 def _settings() -> dict[str, Any]:
     data = company()
-    return {"language": data["language"], "tone": data["tone"], "demo": DEMO_KEY}
+    # La vista "detrás de escena" (decisión 041) está apagada por defecto; la demo la prende.
+    return {
+        "language": data["language"],
+        "tone": data["tone"],
+        "demo": DEMO_KEY,
+        "behind_the_scenes": bool(data.get("behind_the_scenes")),
+    }
 
 
 def configure(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:

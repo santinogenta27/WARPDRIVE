@@ -5,6 +5,7 @@
   "tone": "english",
   "chat_slug": "northwind-outfitters",
   "panel_user": "demo@northwind.example",
+  "behind_the_scenes": true,
   "widget": {
     "accent": "#2f5d50",
     "suggestions": [

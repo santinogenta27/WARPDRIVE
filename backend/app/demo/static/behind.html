@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>{{title}}</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23{{accent}}'/%3E%3Cpath d='M9 11.5A2.5 2.5 0 0 1 11.5 9h9a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5H15l-4 3v-3.2A2.5 2.5 0 0 1 9 17.5z' fill='white'/%3E%3C/svg%3E">
+<style>
+  /* Vista "detrás de escena" (decisión 041): el sitio de la tienda con su widget a la izquierda
+     y, a la derecha, el panel en vivo. Mismo lenguaje visual que el widget: vidrio, aro de luz
+     en el borde, radios amplios y el color de la empresa. */
+  :root {
+    --accent: #{{accent}};
+    --bg: #f3f4f6; --ink: #12151a; --muted: #5d6470; --faint: #8b919b;
+    --surface: 255,255,255; --line: rgba(18,21,26,.09); --soft: rgba(18,21,26,.05);
+    --rim: rgba(255,255,255,.95); --rim-low: rgba(255,255,255,.3);
+    --ok: #0f8a4a; --ok-bg: rgba(18,161,80,.1); --no: #b42318; --no-bg: rgba(217,45,32,.09);
+    --warn: #8a4a06; --warn-bg: rgba(180,83,9,.1);
+    --shadow: 0 1px 2px rgba(15,23,42,.06), 0 14px 30px -14px rgba(15,23,42,.2), 0 50px 110px -30px rgba(15,23,42,.35);
+    --site: #e9ece8; --site-ink: #1d2a24;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0c0d10; --ink: #f1f2f4; --muted: #a4aab4; --faint: #7c828c;
+      --surface: 23,25,30; --line: rgba(255,255,255,.1); --soft: rgba(255,255,255,.06);
+      --rim: rgba(255,255,255,.26); --rim-low: rgba(255,255,255,.05);
+      --ok: #4ade80; --ok-bg: rgba(74,222,128,.12); --no: #f87171; --no-bg: rgba(248,113,113,.12);
+      --warn: #f5c56b; --warn-bg: rgba(251,191,36,.12);
+      --shadow: 0 1px 2px rgba(0,0,0,.35), 0 16px 34px -14px rgba(0,0,0,.6), 0 54px 120px -26px rgba(0,0,0,.9);
+      --site: #151a18; --site-ink: #e6ece8;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  }
+  /* -- el sitio de la tienda ------------------------------------------------------------- */
+  .site { position: relative; height: 100vh; height: 100dvh; overflow: auto; background: var(--site); color: var(--site-ink); }
+  .nav { display: flex; align-items: center; gap: 28px; padding: 22px 36px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; font-size: 17px; }
+  .brand i { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: grid; place-items: center;
+    color: #fff; font-style: normal; font-size: 15px; }
+  .nav a { color: inherit; opacity: .72; text-decoration: none; font-size: 14px; }
+  .nav .grow { flex: 1; }
+  .hero { margin: 4px 36px 0; border-radius: 26px; padding: 56px 44px 64px; color: #fff; position: relative; overflow: hidden;
+    background:
+      radial-gradient(120% 90% at 85% 10%, color-mix(in srgb, var(--accent) 55%, #fff 0%) 0%, transparent 60%),
+      linear-gradient(160deg, color-mix(in srgb, var(--accent) 92%, #000) 0%, color-mix(in srgb, var(--accent) 55%, #0b1210) 100%); }
+  .hero::after { content: ""; position: absolute; inset: auto -10% -45% 35%; height: 120%;
+    background: radial-gradient(closest-side, rgba(255,255,255,.18), transparent); transform: rotate(-12deg); }
+  .hero small { text-transform: uppercase; letter-spacing: .14em; font-size: 11.5px; opacity: .8; }
+  .hero h1 { font-size: clamp(30px, 3.3vw, 46px); line-height: 1.05; letter-spacing: -.025em; margin: 10px 0 12px; max-width: 16ch; }
+  .hero p { margin: 0; max-width: 38ch; opacity: .85; }
+  .shelf { padding: 30px 36px 120px; max-width: calc(100% - 420px); }
+  .shelf h2 { font-size: 15px; letter-spacing: -.005em; margin: 0 0 14px; }
+  .grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+  .peaks { position: absolute; right: 0; bottom: 0; width: 58%; height: 100%; opacity: .5; pointer-events: none; }
+  .card { border-radius: 18px; background: rgba(255,255,255,.55); border: 1px solid rgba(0,0,0,.05); padding: 10px 10px 12px; }
+  @media (prefers-color-scheme: dark) { .card { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.06); } }
+  .swatch { aspect-ratio: 1 / 1; border-radius: 12px; margin-bottom: 10px;
+    background: linear-gradient(150deg, var(--c1), var(--c2)); box-shadow: inset 0 0 0 1px rgba(0,0,0,.04); }
+  .card b { display: block; font-size: 13.5px; font-weight: 600; }
+  .card span { font-size: 13px; opacity: .7; }
+  .chat { position: absolute; right: 28px; bottom: 28px; width: 380px; height: min(640px, calc(100dvh - 56px)); }
+  .site-note { position: absolute; left: 36px; bottom: 22px; font-size: 12px; opacity: .55; }
+  /* -- el panel en vivo ------------------------------------------------------------------ */
+  .behind { position: relative; height: 100vh; height: 100dvh; display: flex; flex-direction: column;
+    background: rgba(var(--surface), .96); border-left: 1px solid var(--line); }
+  .behind::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(80% 40% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%); }
+  .head { position: relative; padding: 22px 22px 14px; border-bottom: 1px solid var(--line); }
+  .head h2 { margin: 0; font-size: 16.5px; letter-spacing: -.01em; display: flex; align-items: center; gap: 9px; }
+  .live { width: 8px; height: 8px; border-radius: 50%; background: #12a150; box-shadow: 0 0 0 0 rgba(18,161,80,.5);
+    animation: pulse 1.8s ease-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .live { animation: none; } }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 8px rgba(18,161,80,0); } 100% { box-shadow: 0 0 0 0 rgba(18,161,80,0); } }
+  .head p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+  .state { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .feed { position: relative; flex: 1; overflow: auto; padding: 16px 16px 28px; scrollbar-width: thin; }
+  .empty { margin: 40px 18px; text-align: center; color: var(--muted); font-size: 14px; }
+  .turn { position: relative; border-radius: 20px; padding: 14px 14px 12px; margin-bottom: 14px;
+    background: rgba(var(--surface), .9); border: 1px solid var(--line); box-shadow: var(--shadow); animation: rise .35s ease-out; }
+  .turn::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+    background: linear-gradient(180deg, var(--rim), var(--rim-low) 34%, var(--rim-low) 72%, var(--rim));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .turn { animation: none; } }
+  .turn h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .09em; color: var(--faint);
+    display: flex; justify-content: space-between; font-weight: 600; }
+  .row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 6px 0; border-top: 1px solid var(--soft); font-size: 13.5px; }
+  .row:first-of-type { border-top: 0; }
+  .k { color: var(--muted); font-size: 12.5px; padding-top: 2px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 9px; font-size: 12.5px;
+    background: var(--soft); margin: 0 4px 4px 0; white-space: nowrap; }
+  .chip.accent { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--ink); }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); }
+  .chip.no { background: var(--no-bg); color: var(--no); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn); }
+  .tool { border-radius: 14px; background: var(--soft); padding: 9px 10px; margin-bottom: 8px; }
+  .tool b { font-size: 13.5px; }
+  .mono { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--muted); word-break: break-word; }
+  .rules { list-style: none; margin: 7px 0 0; padding: 0; }
+  .rules li { display: flex; gap: 7px; align-items: baseline; font-size: 12.5px; padding: 1px 0; }
+  .rules i { font-style: normal; width: 14px; text-align: center; font-weight: 700; }
+  .rules .y i { color: var(--ok); } .rules .n i { color: var(--no); } .rules .s { color: var(--faint); }
+  .rules .h i, .rules .h span { color: var(--warn); }
+  .alt { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+  .meta { display: flex; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--faint); }
+  .meta b { color: var(--muted); font-weight: 600; }
+  .foot { padding: 10px 22px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); }
+  @media (max-width: 1100px) {
+    body { grid-template-columns: 1fr; height: auto; }
+    .site, .behind { height: auto; min-height: 100vh; }
+    .shelf { max-width: none; }
+    .chat { position: relative; right: auto; bottom: auto; margin: 0 16px 24px; width: auto; height: 600px; }
+  }
+</style>
+</head>
+<body>
+<section class="site" aria-label="{{name}}">
+  <nav class="nav"><span class="brand"><i aria-hidden="true">{{initial}}</i>{{name}}</span>
+    <span class="grow"></span>{{links}}</nav>
+  <header class="hero"><small>{{kicker}}</small><h1>{{headline}}</h1><p>{{tagline}}</p>
+    <svg class="peaks" viewBox="0 0 600 300" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+      <path d="M0 300 L120 170 L190 225 L300 90 L390 190 L450 140 L600 260 L600 300 Z" fill="rgba(255,255,255,.10)"/>
+      <path d="M90 300 L230 150 L300 205 L420 70 L520 180 L600 120 L600 300 Z" fill="rgba(255,255,255,.08)"/>
+      <path d="M380 108 L420 70 L452 106 L436 100 L420 112 L404 100 Z" fill="rgba(255,255,255,.35)"/>
+      <circle cx="510" cy="70" r="26" fill="rgba(255,255,255,.18)"/>
+    </svg></header>
+  <div class="shelf">{{shelf}}</div>
+  <div class="chat" id="chat"></div>
+  <span class="site-note">{{site_note}}</span>
+</section>
+<aside class="behind" id="behind" aria-live="polite">
+  <div class="head"><h2><span class="live" aria-hidden="true"></span><span data-t="title"></span></h2>
+    <p data-t="subtitle"></p><div class="state" id="state"></div></div>
+  <div class="feed" id="feed"><p class="empty" data-t="empty"></p></div>
+  <div class="foot" data-t="foot"></div>
+</aside>
+<script src="/widget.js" data-chat="{{slug}}" data-mode="inline" data-target="#chat" data-lang="{{lang}}"></script>
+<script>
+(function () {
+  "use strict";
+  var slug = "{{slug}}", lang = document.documentElement.lang === "en" ? "en" : "es";
+  var T = {
+    en: {
+      title: "Behind the scenes", subtitle: "Live: what the assistant does with each message.",
+      empty: "Write in the chat to see each step here.",
+      foot: "Read-only. Customer messages and personal data aren't shown: they stay in the chat.",
+      message: "Message", intent: "Intent", also: "Also", identity: "Identity", searched: "Searched",
+      tools: "Tools", checks: "Checks", cited: "Sources", approval: "Approval", result: "Result",
+      verified: "Verified", notVerified: "Not verified", none: "None",
+      email_requested: "Asked for the purchase email", code_sent: "Code sent by email",
+      code_failed: "The code couldn't be sent", wrong: "Wrong code", locked: "Locked", expired: "Code expired",
+      executed: "Ran", approval_required: "Needs approval", denied: "Blocked by the policy guard",
+      failed: "The store's system refused it", pending: "Waiting for a person",
+      approved: "Approved by a person", rejected: "Rejected or cancelled",
+      offered: "Offered instead", upTo: "up to", cancelled: function (n) { return n + " cancelled"; },
+      actions: { responder: "Answered", ejecutar: "Acted and answered", pedir_aprobacion: "Asked a person to approve",
+        derivar: "Handed off to a person" },
+      rejected_check: { grounding_rejected: "Rewrote an answer", format_rejected: "Rewrote an answer",
+        tone_rejected: "Asked for empathy first" },
+      latency: "Latency", cost: "Cost", tokens: "tokens",
+      caseStatus: { open: "Open", waiting_approval: "Waiting for approval", escalated: "With a person", resolved: "Resolved" }
+    },
+    es: {
+      title: "Detrás de escena", subtitle: "En vivo: qué hace el asistente con cada mensaje.",
+      empty: "Escribí en el chat para ver acá cada paso.",
+      foot: "Solo lectura. Los mensajes y los datos personales del cliente no se muestran: quedan en el chat.",
+      message: "Mensaje", intent: "Intención", also: "También", identity: "Identidad", searched: "Buscó",
+      tools: "Herramientas", checks: "Controles", cited: "Fuentes", approval: "Aprobación", result: "Resultado",
+      verified: "Verificado", notVerified: "Sin verificar", none: "Ninguna",
+      email_requested: "Pidió el email de la compra", code_sent: "Envió un código por email",
+      code_failed: "No se pudo enviar el código", wrong: "Código incorrecto", locked: "Bloqueado", expired: "Código vencido",
+      executed: "Se ejecutó", approval_required: "Necesita aprobación", denied: "La frenó el guardián",
+      failed: "El sistema de la empresa la rechazó", pending: "Esperando a una persona",
+      approved: "Aprobada por una persona", rejected: "Rechazada o cancelada",
+      offered: "Ofreció en su lugar", upTo: "hasta", cancelled: function (n) { return n + " cancelada(s)"; },
+      actions: { responder: "Respondió", ejecutar: "Actuó y respondió", pedir_aprobacion: "Pidió aprobación a una persona",
+        derivar: "Derivó a una persona" },
+      rejected_check: { grounding_rejected: "Reescribió una respuesta", format_rejected: "Reescribió una respuesta",
+        tone_rejected: "Pidió empatía primero" },
+      latency: "Latencia", cost: "Costo", tokens: "tokens",
+      caseStatus: { open: "Abierto", waiting_approval: "Esperando aprobación", escalated: "Con una persona", resolved: "Resuelto" }
+    }
+  }[lang];
+  document.querySelectorAll("[data-t]").forEach(function (n) { n.textContent = T[n.getAttribute("data-t")]; });
+
+  var feed = document.getElementById("feed"), state = document.getElementById("state");
+  var last = "";
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function chip(text, kind) { return el("span", "chip" + (kind ? " " + kind : ""), text); }
+  function row(label, content) {
+    var r = el("div", "row"), v = el("div");
+    r.appendChild(el("div", "k", label));
+    (Array.isArray(content) ? content : [content]).forEach(function (c) { if (c) v.appendChild(c); });
+    r.appendChild(v);
+    return r;
+  }
+  function session() {
+    try { return (JSON.parse(localStorage.getItem("edai-chat-" + slug) || "null") || {}).session || null; }
+    catch (e) { return null; }
+  }
+  function params(p) {
+    var keys = Object.keys(p || {});
+    if (!keys.length) return "";
+    return keys.map(function (k) { return k + ": " + (typeof p[k] === "string" ? p[k] : JSON.stringify(p[k])); }).join(" · ");
+  }
+  function tool(t) {
+    var box = el("div", "tool"), head = el("div");
+    head.appendChild(el("b", null, t.label + " "));
+    var kind = { executed: "ok", approval_required: "warn", denied: "no", failed: "no" }[t.status] || "";
+    head.appendChild(chip(t.cancelled != null ? T.cancelled(t.cancelled) : (T[t.status] || t.status), kind));
+    box.appendChild(head);
+    var p = params(t.params);
+    if (p) box.appendChild(el("div", "mono", t.name + " · " + p));
+    else box.appendChild(el("div", "mono", t.name));
+    var list = el("ul", "rules");
+    (t.rules || []).forEach(function (r) {
+      var li = el("li", r.hold ? "h" : r.ok === true ? "y" : r.ok === false ? "n" : "s");
+      li.appendChild(el("i", null, r.hold ? "!" : r.ok === true ? "✓" : r.ok === false ? "✕" : "·"));
+      li.appendChild(el("span", null, r.label));
+      list.appendChild(li);
+    });
+    box.appendChild(list);
+    if (t.alternatives && t.alternatives.length) {
+      box.appendChild(el("div", "alt", T.offered + ": " + t.alternatives.map(function (a) {
+        return a.max != null ? a.tool + " (" + T.upTo + " " + a.max + "%)" : a.tool;
+      }).join(" · ")));
+    }
+    if (t.error) box.appendChild(el("div", "alt", t.error));
+    return box;
+  }
+  function turn(t, i) {
+    var card = el("article", "turn");
+    var h = el("h3");
+    h.appendChild(el("span", null, T.message + " " + (i + 1)));
+    var when = t.at ? new Date(t.at) : null;
+    h.appendChild(el("span", null, when ? when.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""));
+    card.appendChild(h);
+    if (t.intent) {
+      var intents = [chip(t.intent.label, "accent")];
+      if (t.second_topic) intents.push(chip(T.also + ": " + t.second_topic.label, "accent"));
+      card.appendChild(row(T.intent, intents));
+    }
+    var identity = [chip(t.verified ? T.verified : T.notVerified, t.verified ? "ok" : "")];
+    (t.verification || []).forEach(function (v) { if (v.kind !== "verified") identity.push(chip(T[v.kind] || v.kind)); });
+    card.appendChild(row(T.identity, identity));
+    if (t.searched && t.searched.length) card.appendChild(row(T.searched, t.searched.map(function (s) { return chip(s); })));
+    if (t.tools && t.tools.length) card.appendChild(row(T.tools, t.tools.map(tool)));
+    if (t.checks && t.checks.length) {
+      card.appendChild(row(T.checks, t.checks.map(function (c) {
+        var box = el("div", "alt");
+        box.appendChild(chip(T.rejected_check[c.kind] || c.kind, "warn"));
+        box.appendChild(document.createTextNode(" " + c.reason));
+        return box;
+      })));
+    }
+    if (t.sources && t.sources.length) card.appendChild(row(T.cited, t.sources.map(function (s) { return chip(s, "accent"); })));
+    if (t.approval) {
+      var a = t.approval.status;
+      card.appendChild(row(T.approval, chip(T[a] || a, a === "pending" ? "warn" : a === "approved" ? "ok" : "no")));
+    }
+    if (t.action) card.appendChild(row(T.result, chip(T.actions[t.action] || t.action)));
+    var meta = el("div", "meta");
+    if (t.latency_ms) meta.appendChild(el("span", null, T.latency + " " + (t.latency_ms / 1000).toFixed(1) + " s"));
+    meta.appendChild(el("span", null, T.cost + " $" + Number(t.cost_usd || 0).toFixed(4)));
+    if (t.tokens) meta.appendChild(el("span", null, t.tokens.toLocaleString(lang) + " " + T.tokens));
+    card.appendChild(meta);
+    return card;
+  }
+  function render(data) {
+    var key = JSON.stringify(data);
+    if (key === last) return;
+    last = key;
+    var nearBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 80;
+    feed.textContent = "";
+    state.textContent = "";
+    var turns = (data && data.turns) || [];
+    if (!turns.length) { feed.appendChild(el("p", "empty", T.empty)); return; }
+    if (data.case) {
+      var s = data.case.status;
+      state.appendChild(chip(T.caseStatus[s] || s, s === "waiting_approval" ? "warn" : s === "escalated" ? "no" : "ok"));
+      if (data.case.type) state.appendChild(chip(data.case.type.label, "accent"));
+    }
+    turns.forEach(function (t, i) { feed.appendChild(turn(t, i)); });
+    if (nearBottom || turns.length) feed.scrollTop = feed.scrollHeight;
+  }
+  var busy = false;
+  function tick() {
+    var s = session();
+    if (!s) { render({ turns: [] }); return; }
+    if (busy || document.hidden) return;
+    busy = true;
+    fetch("/demo/" + encodeURIComponent(slug) + "/live?session=" + encodeURIComponent(s), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data) render(data); })
+      .catch(function () {})
+      .then(function () { busy = false; });
+  }
+  tick();
+  setInterval(tick, 1500);
+})();
+</script>
+</body>
+</html>
