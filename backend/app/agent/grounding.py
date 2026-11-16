@@ -98,10 +98,16 @@ def _plain(number: str) -> str:
     return number.lstrip("0") or "0"
 
 
+# Qué control rechazó la respuesta, sin los datos (decisión 045): lo muestra "Behind the scenes".
+INVALID_SOURCE, NO_SOURCE, NUMBER, DATE = "fuente_inexistente", "sin_fuente", "numero", "fecha"
+KINDS = (INVALID_SOURCE, NO_SOURCE, NUMBER, DATE)
+
+
 @dataclass(frozen=True)
 class GroundingVerdict:
     ok: bool
     reason: str = ""
+    kind: str = ""  # uno de KINDS si no pasó
 
 
 def check_grounding(
@@ -124,9 +130,11 @@ def check_grounding(
         sources = [s for s in sources if s in documents]
     invalid = [s for s in sources if s not in documents]
     if invalid:
-        return GroundingVerdict(False, f"cita fuentes que no estaban en los documentos: {invalid}")
+        return GroundingVerdict(
+            False, f"cita fuentes que no estaban en los documentos: {invalid}", INVALID_SOURCE
+        )
     if factual and not sources and not tool_backed:
-        return GroundingVerdict(False, "afirmación factual sin fuente ni herramienta")
+        return GroundingVerdict(False, "afirmación factual sin fuente ni herramienta", NO_SOURCE)
     sources_text = " ".join([*documents.values(), *evidence])
     known = {
         _plain(n)
@@ -139,9 +147,9 @@ def check_grounding(
     numbers = _numbers(_ON_THE_HOUR.sub(r"\1", _LIST_MARKER.sub("", message)), language)
     unsupported = sorted({n for n in numbers if _plain(n) not in known})
     if unsupported:
-        return GroundingVerdict(False, f"datos sin respaldo en las fuentes: {unsupported}")
+        return GroundingVerdict(False, f"datos sin respaldo en las fuentes: {unsupported}", NUMBER)
     dates = _written_dates(message) - _evidence_dates(sources_text)
     if dates:
         shown = [f"{day:02d}/{month:02d}" for month, day in sorted(dates)]
-        return GroundingVerdict(False, f"fechas sin respaldo en las fuentes: {shown}")
+        return GroundingVerdict(False, f"fechas sin respaldo en las fuentes: {shown}", DATE)
     return GroundingVerdict(True)

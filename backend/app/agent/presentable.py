@@ -21,10 +21,14 @@ _CHECKS = [
 ]
 
 
+EMPTY = "respuesta vacía"
+ISSUES = (EMPTY, *(name for name, _ in _CHECKS))  # lo que puede devolver `problem`
+
+
 def problem(message: str) -> str | None:
     """Por qué el mensaje no se le puede mandar al cliente, o None si se puede."""
     if not message.strip():
-        return "respuesta vacía"
+        return EMPTY
     for name, pattern in _CHECKS:
         if pattern.search(message):
             return name

@@ -160,7 +160,10 @@ Escribí: **`Thanks. Also, I'd like a refund for order NW-4528.`**
 ## Si algo sale distinto
 
 - **El asistente respondió el 25 % sin llamar a la herramienta del cupón.** Es lo más común: lee la política de descuentos y no intenta el 25 %. Si llama a la herramienta, el guardián la frena. El panel muestra entonces **Coupon** con ✕ en "Up to 10%" y "Offered instead: Coupon (up to 10%) · Express shipping". Las dos variantes sirven para el video.
-- **"I'm passing you to a member of our team"** en lugar de una respuesta: el modelo falló dos veces el control de fundamento o de conducta. El panel muestra el motivo en **Checks**. Reiniciá la demo (paso 4 y 5 de "Antes de grabar") y repetí. Pasó en las pruebas antes de los arreglos de la tarea 5 y no volvió a pasar en las últimas dos corridas completas.
+- **"I'm passing you to a member of our team"** en lugar de una respuesta: el panel muestra el motivo en la fila **Why** del mensaje, en una línea (decisión 045).
+  - "Answer blocked by grounding check: …": el modelo falló dos veces un control.
+  - "The agent chose to hand off…": el modelo eligió derivar. Si una herramienta ya había devuelto los datos, antes se le pidió una vez que respondiera con ellos ("Reconsidered a handoff" en **Checks**). Pasó el 16/11 con NW-4521 y es lo que arregla la decisión 045.
+  - En cualquier caso: reiniciá la demo (pasos 4 y 5 de "Antes de grabar") y repetí.
 - **"We couldn't reach the assistant" o "We ran into a problem":** se agotó la cuota de Groq o el límite de mensajes. Esperá un minuto o revisá `WEB_CHAT_IP_DAILY_LIMIT`.
 - **El código no aparece en la terminal:** buscá `[Mailer de consola` en la salida de `make api`. Vence a los 10 minutos.
 - **El código no llega al email:**
