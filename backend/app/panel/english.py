@@ -222,6 +222,9 @@ PHRASES: dict[str, str] = {
     "Cancelada por el cliente.": "Cancelled by the customer.",
     "No había nada pendiente.": "There was nothing pending.",
     "Pidió verificar a un contacto verificado.": "It asked a verified contact to verify again.",
+    "Quiso derivar con los datos de una herramienta ya disponibles.": (
+        "It tried to hand off with a tool's data already in hand."
+    ),
     "afirmación factual sin fuente ni herramienta": "factual claim without a source or a tool",
     "respuesta vacía": "empty answer",
     "metadatos": "metadata",

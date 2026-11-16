@@ -295,8 +295,8 @@
       actions: { responder: "Answered", ejecutar: "Acted and answered", pedir_aprobacion: "Asked a person to approve",
         derivar: "Handed off to a person" },
       rejected_check: { grounding_rejected: "Rewrote an answer", format_rejected: "Rewrote an answer",
-        tone_rejected: "Asked for empathy first" },
-      latency: "Latency", cost: "Cost", tokens: "tokens",
+        tone_rejected: "Asked for empathy first", handoff_rejected: "Reconsidered a handoff" },
+      why: "Why", latency: "Latency", cost: "Cost", tokens: "tokens",
       time: { base: "Database", modelo: "Model", espera: "Waiting for Groq", busqueda: "Search", herramientas: "Tools",
         verificaciones: "Checks", email: "Email" },
       queries: function (n) { return n + (n === 1 ? " query" : " queries"); },
@@ -319,8 +319,8 @@
       actions: { responder: "Respondió", ejecutar: "Actuó y respondió", pedir_aprobacion: "Pidió aprobación a una persona",
         derivar: "Derivó a una persona" },
       rejected_check: { grounding_rejected: "Reescribió una respuesta", format_rejected: "Reescribió una respuesta",
-        tone_rejected: "Pidió empatía primero" },
-      latency: "Latencia", cost: "Costo", tokens: "tokens",
+        tone_rejected: "Pidió empatía primero", handoff_rejected: "Reconsideró una derivación" },
+      why: "Motivo", latency: "Latencia", cost: "Costo", tokens: "tokens",
       time: { base: "Base de datos", modelo: "Modelo", espera: "Esperando a Groq", busqueda: "Búsqueda",
         herramientas: "Herramientas", verificaciones: "Controles", email: "Email" },
       queries: function (n) { return n + (n === 1 ? " consulta" : " consultas"); },
@@ -412,6 +412,8 @@
       card.appendChild(row(T.approval, chip(T[a] || a, a === "pending" ? "warn" : a === "approved" ? "ok" : "no")));
     }
     if (t.action) card.appendChild(row(T.result, chip(T.actions[t.action] || t.action)));
+    // Por qué derivó, en una línea y sin datos del cliente (decisión 045).
+    if (t.action === "derivar" && t.handoff) card.appendChild(row(T.why, el("span", null, t.handoff)));
     var meta = el("div", "meta");
     if (t.latency_ms) meta.appendChild(el("span", null, T.latency + " " + (t.latency_ms / 1000).toFixed(1) + " s"));
     meta.appendChild(el("span", null, T.cost + " $" + Number(t.cost_usd || 0).toFixed(4)));

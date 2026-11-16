@@ -44,7 +44,9 @@ class SimulatedClaude:
     # "modifica_sin_consultar" (como gpt-oss-20b: cambia la dirección sin consultar el pedido y,
     # ante la regla del negocio, deriva; sigue el prompt si este lo indica), "json_suelto" (escribe
     # como texto el JSON de responder), "metadatos" y "vacio" (texto con "Fuentes: ... factual:"
-    # o vacío; con "_una_vez", corregido responde bien).
+    # o vacío; con "_una_vez", corregido responde bien). En inglés, lo visto con Groq el
+    # 16/11/2026 (decisión 045): "deriva_tras_consultar" (con el pedido consultado, deriva hasta
+    # que se le pide responder con los datos) y "deriva_siempre_tras_consultar".
     mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
@@ -91,7 +93,8 @@ class SimulatedClaude:
     def _agent(self, body: dict[str, Any], tool_names: set[str]) -> list[dict[str, Any]]:
         if english.is_english(body):  # empresa en inglés (decisión 038)
             found = _tool_results(body["messages"])
-            fixed = any(name == "responder" for name, _, _ in found) or any(
+            # Una respuesta o una derivación corregidas (decisión 045), o una corrección en texto.
+            fixed = any(name in ("responder", "derivar") for name, _, _ in found) or any(
                 isinstance(m["content"], str) for m in body["messages"][1:] if m["role"] == "user"
             )
             return english.EnglishAgent(self.mode, self._tool_use).decide(

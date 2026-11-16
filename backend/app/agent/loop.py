@@ -201,6 +201,39 @@ CORRECTIONS = {
         ),
     },
 }
+# Derivar con los datos ya en la mano (decisión 045): en la demo, gpt-oss-20b consultó el pedido
+# y, en lugar de dar su estado, derivó. Se le pide una sola vez que responda con esos datos; si
+# vuelve a derivar, se deriva.
+HANDOFF_REJECTED_REASON = "Quiso derivar con los datos de una herramienta ya disponibles."
+HANDOFF_CORRECTIONS = {
+    "es": (
+        "Derivación rechazada: una herramienta ya devolvió los datos de este pedido. Respondé al "
+        "cliente con responder, usando esos datos y los documentos. Derivá solo si el cliente "
+        "pidió una persona o si es un problema que tus herramientas no resuelven; en ese caso, "
+        "volvé a usar derivar."
+    ),
+    "en": (
+        "Hand-off rejected: a tool already returned the data for this request. Answer the "
+        "customer with responder, using that data and the documents. Hand off only if the "
+        "customer asked for a person or it's a problem your tools can't solve; if so, use "
+        "derivar again."
+    ),
+}
+# Por qué se derivó un caso (decisión 045): va en la auditoría como `causa` ({"tipo": ...,
+# "detalle": ...}), sin datos del cliente, y "Behind the scenes" lo muestra en una línea.
+HANDOFF_CAUSES = (
+    "pidio_persona",
+    "amenaza_legal",
+    "tipo_inactivo",
+    "no_resuelto",
+    "rechazo_modelo",
+    "formato",  # detalle: el problema de presentable.ISSUES
+    "reverificar",
+    "accion_sin_herramienta",
+    "fundamento",  # detalle: el control de grounding.KINDS
+    "limite_pasos",
+    "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
+)
 _FIXED_VERIFICATION = (
     "Para darte datos de tu pedido necesito verificar",
     "Si ese email está",
@@ -275,6 +308,7 @@ class _Turn:
     grounding_retries: int = 0
     format_retries: int = 0  # respuestas vacías o con JSON o metadatos (presentable.py)
     tone_retries: int = 0  # cliente molesto y respuesta sin empatía (conduct.py)
+    handoff_retries: int = 0  # derivó con los datos de una herramienta (decisión 045)
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
@@ -449,7 +483,7 @@ class Agent:
         # Dijo que no: el caso se reabre (ya no se cobra) y lo atiende una persona.
         billing.reopen(self._conn, tenant_id, case_id)
         turn.prefix = turn.say("csat_sorry")
-        return self._escalate(turn, csat.NOT_RESOLVED)
+        return self._escalate(turn, csat.NOT_RESOLVED, {"tipo": "no_resuelto"})
 
     def _continue_verification(
         self, turn: _Turn, pending: email_code.Verification, company: str, tone: str
@@ -534,7 +568,11 @@ class Agent:
             # Una amenaza de denuncia o de acción legal la atiende una persona, siempre: no
             # depende de lo que decida el modelo (decisión 027).
             self._audit(turn, "classified", {"case_type": LEGAL})
-            return self._escalate(turn, "El cliente amenaza con una denuncia o acción legal.")
+            return self._escalate(
+                turn,
+                "El cliente amenaza con una denuncia o acción legal.",
+                {"tipo": "amenaza_legal"},
+            )
         case_types = self._active_case_types(tenant_id)
         history = self._history(tenant_id, case_id)
         previous = next((t for role, t in reversed(history) if role == "asistente"), None)
@@ -554,7 +592,9 @@ class Agent:
         label = classification.label
         self._audit(turn, "classified", {"case_type": label})
         if label == ASK_FOR_HUMAN:
-            return self._escalate(turn, "El cliente pidió hablar con una persona.")
+            return self._escalate(
+                turn, "El cliente pidió hablar con una persona.", {"tipo": "pidio_persona"}
+            )
         if label == NOT_ALLOWED:  # inyección o datos en masa: negativa fija, sin modelo ni derivar
             return self._finish(turn, "responder", turn.say("refusal"))
         if label == CHAT:  # charla: responde solo, sin documentos, herramientas ni derivación
@@ -566,7 +606,9 @@ class Agent:
             self._set_case_type(tenant_id, case_id, label)
             instructions = case_types[label][1]
         else:
-            return self._escalate(turn, "El tipo de caso no está activo para la empresa.")
+            return self._escalate(
+                turn, "El tipo de caso no está activo para la empresa.", {"tipo": "tipo_inactivo"}
+            )
 
         tool_names = list(yaml.safe_load(instructions).get("herramientas") or [])
         if label in case_types and classification.also in case_types:
@@ -675,7 +717,12 @@ class Agent:
             )
             self._audit_model_call(turn, "agente", response)
             if response.stop_reason == "refusal":
-                return self._give_up(turn, "El modelo no pudo responder este pedido.", chat)
+                return self._give_up(
+                    turn,
+                    "El modelo no pudo responder este pedido.",
+                    chat,
+                    {"tipo": "rechazo_modelo"},
+                )
             final = next(
                 (c for c in response.tool_calls if c.name in prompt.FINAL_TOOL_NAMES), None
             )
@@ -706,7 +753,12 @@ class Agent:
                         turn, "format_rejected", {"reason": issue, "rejected_message": final_input}
                     )
                     if turn.format_retries >= 1:
-                        return self._give_up(turn, f"Respuesta impresentable: {issue}.", chat)
+                        return self._give_up(
+                            turn,
+                            f"Respuesta impresentable: {issue}.",
+                            chat,
+                            {"tipo": "formato", "detalle": issue},
+                        )
                     turn.format_retries += 1
                     if response.tool_calls or response.text.strip():  # sin bloques vacíos
                         messages.append({"role": "assistant", "content": response.content})
@@ -727,7 +779,9 @@ class Agent:
                         },
                     )
                     if turn.grounding_retries >= 1:
-                        return self._give_up(turn, "Volvió a pedir la verificación.", chat)
+                        return self._give_up(
+                            turn, "Volvió a pedir la verificación.", chat, {"tipo": "reverificar"}
+                        )
                     turn.grounding_retries += 1
                     messages.append({"role": "assistant", "content": response.content})
                     messages.append(_correction(final_id, CORRECTIONS[turn.lang]["verified"]))
@@ -747,7 +801,10 @@ class Agent:
                         )
                         if turn.grounding_retries >= 1:
                             return self._give_up(
-                                turn, f"Control de fundamento: {conduct.ACTION_CLAIM_REASON}.", chat
+                                turn,
+                                f"Control de fundamento: {conduct.ACTION_CLAIM_REASON}.",
+                                chat,
+                                {"tipo": "accion_sin_herramienta"},
                             )
                         turn.grounding_retries += 1
                         messages.append({"role": "assistant", "content": response.content})
@@ -779,7 +836,10 @@ class Agent:
                         )
                         if turn.grounding_retries >= 1:
                             return self._give_up(
-                                turn, f"Control de fundamento: {verdict.reason}.", chat
+                                turn,
+                                f"Control de fundamento: {verdict.reason}.",
+                                chat,
+                                {"tipo": "fundamento", "detalle": verdict.kind},
                             )
                         turn.grounding_retries += 1
                         messages.append({"role": "assistant", "content": response.content})
@@ -787,6 +847,23 @@ class Agent:
                         continue
                 if final_name == "derivar" and chat is not None:
                     raise _ChatFallback  # en la charla no se deriva
+                if (
+                    final_name == "derivar"
+                    and turn.handoff_retries == 0
+                    and _check(self._has_tool_data, turn)
+                ):
+                    # Derivó con los datos de una herramienta ya en la mano (decisión 045): se
+                    # le pide responder con ellos, una sola vez.
+                    self._audit(
+                        turn,
+                        "handoff_rejected",
+                        {"reason": HANDOFF_REJECTED_REASON, "rejected_handoff": final_input},
+                    )
+                    turn.handoff_retries += 1
+                    if response.tool_calls or response.text.strip():
+                        messages.append({"role": "assistant", "content": response.content})
+                    messages.append(_correction(final_id, HANDOFF_CORRECTIONS[turn.lang]))
+                    continue
                 return self._final_action(turn, final_name, final_input)
 
             messages.append({"role": "assistant", "content": response.content})
@@ -872,7 +949,20 @@ class Agent:
                     }
                 )
             messages.append({"role": "user", "content": results})
-        return self._give_up(turn, f"Se alcanzó el límite de {self._max_steps} pasos.", chat)
+        return self._give_up(
+            turn,
+            f"Se alcanzó el límite de {self._max_steps} pasos.",
+            chat,
+            {"tipo": "limite_pasos"},
+        )
+
+    @staticmethod
+    def _has_tool_data(turn: _Turn) -> bool:
+        """En este turno una herramienta se ejecutó y devolvió datos (sin error), y no hay una
+        aprobación creada (de eso se ocupa `_approval_pending`)."""
+        if any(d.status == "approval_required" for d in turn.decisions):
+            return False
+        return any(d.status == "executed" and "error" not in d.result for d in turn.decisions)
 
     @staticmethod
     def _acted(turn: _Turn) -> bool:
@@ -912,7 +1002,9 @@ class Agent:
         )
         return self._finish(turn, "responder", turn.say("verification"), verification=True)
 
-    def _give_up(self, turn: _Turn, reason: str, chat: str | None) -> AgentResult:
+    def _give_up(
+        self, turn: _Turn, reason: str, chat: str | None, cause: dict[str, Any]
+    ) -> AgentResult:
         """Sin una respuesta válida: deriva, salvo en la charla (mensaje fijo, sin derivar) o si
         el guardián ya creó una aprobación (el pedido queda en revisión, con mensaje fijo)."""
         if chat is not None:
@@ -920,7 +1012,7 @@ class Agent:
         approval = self._approval_pending(turn, reason)
         if approval is not None:
             return approval
-        return self._escalate(turn, reason)
+        return self._escalate(turn, reason, cause)
 
     def _approval_pending(self, turn: _Turn, reason: str) -> AgentResult | None:
         """Si en este turno el guardián creó una aprobación, el resultado es el pedido de
@@ -953,8 +1045,9 @@ class Agent:
     def _final_action(self, turn: _Turn, name: str, data: dict[str, Any]) -> AgentResult:
         if name == "derivar":
             reason = str(data.get("motivo") or "Derivado por el agente.")
+            cause = {"tipo": "agente", "reconsiderada": turn.handoff_retries > 0}
             return self._approval_pending(turn, f"Quiso derivar: {reason}") or self._escalate(
-                turn, reason
+                turn, reason, cause
             )
         message = str(data.get("mensaje") or "").strip()
         sources = [str(s) for s in data.get("fuentes") or []]
@@ -971,7 +1064,8 @@ class Agent:
         return self._finish(turn, action, message, sources=sources)
 
     # -- cierre ----------------------------------------------------------------------------
-    def _escalate(self, turn: _Turn, reason: str) -> AgentResult:
+    def _escalate(self, turn: _Turn, reason: str, cause: dict[str, Any]) -> AgentResult:
+        """`cause`: por qué se derivó, uno de HANDOFF_CAUSES con su detalle (decisión 045)."""
         summary = {
             "intencion": turn.case_type or "desconocida",
             "mensaje_cliente": turn.text,
@@ -988,7 +1082,7 @@ class Agent:
                 " where id = %s",
                 (json.dumps(summary, ensure_ascii=False), turn.case_id),
             )
-        self._audit(turn, "escalated", summary)
+        self._audit(turn, "escalated", {**summary, "causa": cause})
         return self._finish(turn, "derivar", turn.say("escalation"), summary=summary)
 
     def _finish(

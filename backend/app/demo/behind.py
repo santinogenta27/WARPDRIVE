@@ -57,7 +57,86 @@ VERIFICATION_STEPS = {
     "verification_code_sent": "code_sent",
     "verification_code_failed": "code_failed",
 }
-CHECKS = {"grounding_rejected", "format_rejected", "tone_rejected"}
+CHECKS = {"grounding_rejected", "format_rejected", "tone_rejected", "handoff_rejected"}
+
+# Por qué derivó (decisión 045): una línea por causa, armada solo con textos fijos. El motivo que
+# escribe el modelo no se muestra: puede traer cualquier dato del cliente.
+_BLOCKED = {
+    "en": (
+        "Answer blocked by grounding check: ",
+        "Answer blocked by format check: ",
+    ),
+    "es": (
+        "Respuesta frenada por el control de fundamento: ",
+        "Respuesta frenada por el control de formato: ",
+    ),
+}
+HANDOFF_LINES: dict[str, dict[str, str]] = {
+    "en": {
+        "pidio_persona": "The customer asked to talk to a person",
+        "amenaza_legal": "Legal threat: a person always handles it",
+        "tipo_inactivo": "This type of request isn't turned on for the store",
+        "no_resuelto": "The customer said their question wasn't resolved",
+        "rechazo_modelo": "The model couldn't answer this request",
+        "reverificar": "Answer blocked: it asked a verified customer to verify again",
+        "accion_sin_herramienta": (
+            "Answer blocked by grounding check: it claimed an action no tool performed"
+        ),
+        "limite_pasos": "Reached the step limit without a valid answer",
+        "agente": "The agent chose to hand off",
+        "agente_reconsiderada": (
+            "The agent chose to hand off, even after being asked to answer with the tool's data"
+        ),
+    },
+    "es": {
+        "pidio_persona": "El cliente pidió hablar con una persona",
+        "amenaza_legal": "Amenaza legal: la atiende siempre una persona",
+        "tipo_inactivo": "Ese tipo de consulta no está activo en la empresa",
+        "no_resuelto": "El cliente dijo que su consulta no se resolvió",
+        "rechazo_modelo": "El modelo no pudo responder este pedido",
+        "reverificar": "Respuesta frenada: le pidió verificarse a un cliente ya verificado",
+        "accion_sin_herramienta": (
+            "Respuesta frenada por el control de fundamento: afirmó una acción que ninguna "
+            "herramienta hizo"
+        ),
+        "limite_pasos": "Llegó al límite de pasos sin una respuesta válida",
+        "agente": "El agente eligió derivar",
+        "agente_reconsiderada": (
+            "El agente eligió derivar, aun después de que se le pidió responder con los datos de "
+            "la herramienta"
+        ),
+    },
+}
+GROUNDING_DETAILS = {
+    "en": {
+        "fuente_inexistente": "it cited a document it wasn't given",
+        "sin_fuente": "a factual answer with no source or tool",
+        "numero": "a number not in the documents or tool results",
+        "fecha": "a date not in the documents or tool results",
+    },
+    "es": {
+        "fuente_inexistente": "citó un documento que no recibió",
+        "sin_fuente": "una respuesta factual sin fuente ni herramienta",
+        "numero": "un número que no está en los documentos ni en las herramientas",
+        "fecha": "una fecha que no está en los documentos ni en las herramientas",
+    },
+}
+FORMAT_DETAILS = {
+    "en": {
+        "respuesta vacía": "it was empty",
+        "JSON": "it had JSON",
+        "metadatos": "it had metadata",
+        "marcas del modelo": "it had model markers",
+        "nombre de herramienta": "it named a tool",
+    },
+    "es": {
+        "respuesta vacía": "estaba vacía",
+        "JSON": "tenía JSON",
+        "metadatos": "tenía metadatos",
+        "marcas del modelo": "tenía marcas del modelo",
+        "nombre de herramienta": "nombraba una herramienta",
+    },
+}
 
 
 def enabled(conn: psycopg.Connection, tenant_id: uuid.UUID) -> bool:
@@ -95,6 +174,25 @@ def redact_params(params: dict[str, Any] | None) -> dict[str, Any]:
 def _say(text: str) -> str:
     """Los motivos internos están en español: en una empresa en inglés, traducidos."""
     return english.PHRASES.get(text, text) if english.english() else text
+
+
+def handoff_line(cause: Any, *, english: bool) -> str | None:
+    """El motivo de una derivación en una línea, desde la causa que registró el agente. None si
+    no hay causa (un caso de antes de la decisión 045) o si no se conoce."""
+    if not isinstance(cause, dict):
+        return None
+    lang = "en" if english else "es"
+    kind, detail = str(cause.get("tipo") or ""), str(cause.get("detalle") or "")
+    grounding, form = _BLOCKED[lang]
+    if kind == "fundamento":
+        found = GROUNDING_DETAILS[lang].get(detail)
+        return grounding + found if found else None
+    if kind == "formato":
+        found = FORMAT_DETAILS[lang].get(detail)
+        return form + found if found else None
+    if kind == "agente" and cause.get("reconsiderada"):
+        kind = "agente_reconsiderada"
+    return HANDOFF_LINES[lang].get(kind)
 
 
 def _number(value: Any) -> Decimal:
@@ -328,7 +426,7 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
                 turn["approval"] = {"status": approvals.get(str(p["approval_id"]), "pending")}
         elif kind == "escalated":
             turn["action"] = "derivar"
-            turn["handoff"] = _say(str(p.get("motivo") or ""))
+            turn["handoff"] = handoff_line(p.get("causa"), english=english.english())
         elif kind == "model_call":
             turn["cost_usd"] = float(_number(turn["cost_usd"]) + _number(p.get("cost_usd")))
             turn["tokens"] += int(p.get("input_tokens") or 0) + int(p.get("output_tokens") or 0)

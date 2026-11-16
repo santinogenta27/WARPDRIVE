@@ -179,6 +179,13 @@ class EnglishAgent:
         # Dos temas: cada pedido con lo suyo, en una sola respuesta.
         if len(order_ids(message)) >= 2 and "consultar_pedido" in tool_names:
             return self.several(message, results, tool_names, reply)
+        # Como gpt-oss-20b en Render el 16/11/2026 (decisión 045): con el pedido ya consultado,
+        # deriva. "deriva_tras_consultar": hasta que se le pide responder con los datos;
+        # "deriva_siempre_tras_consultar": siempre, haya salido bien la consulta o no.
+        if results and results[-1][0] == "consultar_pedido" and self.mode.startswith("deriva_"):
+            looked_up = "error" not in results[-1][2]
+            if self.mode == "deriva_siempre_tras_consultar" or (looked_up and not corrected):
+                return escalate("Customer request for order status")
         if results:
             name, call_input, result = results[-1]
             if "pendiente" in result and CANCEL in tool_names:
