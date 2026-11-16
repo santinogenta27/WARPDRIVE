@@ -1,0 +1,16 @@
+<svg class="art" viewBox="0 0 400 500" data-art="WCT" aria-hidden="true" focusable="false">
+  <ellipse class="sh" cx="200" cy="442" rx="118" ry="10"/>
+  <path class="strap back" d="M164 200C164 112 236 112 236 200"/>
+  <path class="strap" d="M150 206C150 96 250 96 250 206"/>
+  <path class="b" d="M108 198H292L304 420Q304 430 294 430H106Q96 430 96 420Z"/>
+  <path class="d" d="M108 198H292L293 216H107Z"/>
+  <path class="d o" d="M142 292H258V398Q258 402 254 402H146Q142 402 142 398Z"/>
+  <path class="st" d="M142 300H258"/>
+  <path class="hi" d="M120 232L112 400"/>
+  <rect class="lea" x="140" y="198" width="20" height="42" rx="3"/>
+  <rect class="lea" x="240" y="198" width="20" height="42" rx="3"/>
+  <circle class="m" cx="150" cy="228" r="3.2"/>
+  <circle class="m" cx="250" cy="228" r="3.2"/>
+  <path class="lea" d="M96.6 394L132 430H106Q96 430 96 420Z"/>
+  <path class="lea" d="M303.4 394L268 430H294Q304 430 304 420Z"/>
+</svg>

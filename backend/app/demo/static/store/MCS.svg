@@ -1,0 +1,18 @@
+<svg class="art" viewBox="0 0 400 500" data-art="MCS" aria-hidden="true" focusable="false">
+  <ellipse class="sh" cx="200" cy="446" rx="124" ry="10"/>
+  <path class="b" d="M122 140C100 148 88 170 84 204L66 384L104 390L136 234L140 146Z"/>
+  <path class="b" d="M278 140C300 148 312 170 316 204L334 384L296 390L264 234L260 146Z"/>
+  <path class="d" d="M130 234L104 390L116 391L134 262Z"/>
+  <path class="d" d="M270 234L296 390L284 391L266 262Z"/>
+  <path class="d" d="M68 366L106 372L104 390L66 384Z"/>
+  <path class="d" d="M332 366L294 372L296 390L334 384Z"/>
+  <path class="rib" d="M67 375L105 381" style="stroke-width:17"/>
+  <path class="rib" d="M333 375L295 381" style="stroke-width:17"/>
+  <path class="b" d="M166 112L122 138C128 170 132 204 130 234L130 404Q200 412 270 404L270 234C268 204 272 170 278 138L234 112Q200 132 166 112Z"/>
+  <path class="dd" d="M170 112Q200 98 230 112Q200 126 170 112Z"/>
+  <path class="d" d="M163 113Q200 148 237 113L229 107Q200 134 171 107Z"/>
+  <path class="rib" d="M167 110Q200 141 233 110" style="stroke-width:7"/>
+  <path class="d" d="M130 384Q200 392 270 384V404Q200 412 130 404Z"/>
+  <path class="rib" d="M130 394Q200 402 270 394" style="stroke-width:19"/>
+  <path class="hi" d="M148 160C144 230 144 310 146 374"/>
+</svg>

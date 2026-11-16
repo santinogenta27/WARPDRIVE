@@ -1,0 +1,34 @@
+<svg class="scene" viewBox="0 0 1600 640" preserveAspectRatio="xMinYMax slice" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="hero-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" class="sky-1"/><stop offset=".72" class="sky-2"/>
+    </linearGradient>
+    <path id="hero-pine" d="M0 0L-9 24H-4L-15 46H-8L-20 70H-3V82H3V70H20L8 46H15L4 24H9Z"/>
+  </defs>
+  <rect width="1600" height="640" fill="url(#hero-sky)"/>
+  <circle class="sun" cx="1300" cy="150" r="54"/>
+  <path class="bird" d="M842 128q7-6 13 0q6-6 13 0M886 104q5-4 9 0q5-4 9 0"/>
+  <path class="r1" d="M0 470L150 446L300 458L440 420L560 400L660 330L740 286L800 244L860 270L920 214L990 150L1040 122L1090 168L1150 200L1210 186L1290 236L1380 206L1470 176L1540 196L1600 182V640H0Z"/>
+  <path class="snow" d="M1040 122L1076 156L1062 152L1050 166L1036 150L1022 162L1008 150L990 150Z"/>
+  <path class="snow" d="M800 244L822 258L812 258L802 268L792 256L780 262Z"/>
+  <path class="r2" d="M0 506L120 492L260 500L380 470L500 482L620 430L720 392L800 360L880 384L970 330L1060 296L1150 340L1230 318L1330 272L1420 300L1510 280L1600 296V640H0Z"/>
+  <path class="r3" d="M0 548L160 530L300 540L440 508L580 520L700 488L820 470L960 494L1080 452L1220 470L1360 432L1480 456L1600 440V640H0Z"/>
+  <g class="r5">
+    <use href="#hero-pine" transform="translate(930 404) scale(.9)"/>
+    <use href="#hero-pine" transform="translate(962 420) scale(.7)"/>
+    <use href="#hero-pine" transform="translate(1022 414) scale(.9)"/>
+    <use href="#hero-pine" transform="translate(1052 428) scale(.7)"/>
+    <use href="#hero-pine" transform="translate(1410 396) scale(.8)"/>
+  </g>
+  <path class="r4" d="M0 600C220 560 420 586 640 566C860 546 1060 566 1280 540C1420 524 1520 528 1600 520V640H0Z"/>
+  <g class="r5">
+    <use href="#hero-pine" transform="translate(56 520) scale(1.3)"/>
+    <use href="#hero-pine" transform="translate(96 534) scale(1)"/>
+    <use href="#hero-pine" transform="translate(130 528) scale(1.15)"/>
+    <use href="#hero-pine" transform="translate(168 544) scale(.85)"/>
+    <use href="#hero-pine" transform="translate(760 512) scale(1.1)"/>
+    <use href="#hero-pine" transform="translate(792 526) scale(.85)"/>
+    <use href="#hero-pine" transform="translate(1500 476) scale(1.2)"/>
+    <use href="#hero-pine" transform="translate(1536 490) scale(.9)"/>
+  </g>
+</svg>

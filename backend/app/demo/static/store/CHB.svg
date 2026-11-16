@@ -1,0 +1,18 @@
+<svg class="art" viewBox="0 0 400 500" data-art="CHB" aria-hidden="true" focusable="false">
+  <ellipse class="sh" cx="204" cy="440" rx="146" ry="10"/>
+  <g class="back" transform="translate(-54 -6)">
+    <rect class="d" x="118" y="126" width="22" height="34" rx="5"/>
+    <path class="b" d="M124 146Q164 140 204 146Q211 147 211 154L214 262C216 292 250 312 300 326C334 336 344 358 340 380H118C110 360 108 330 113 300L117 156Q118 146 124 146Z"/>
+    <path class="dd" d="M146 146Q165 143 184 146L171 256Q165 268 159 256Z"/>
+    <path class="sole" d="M110 378H340Q346 378 344 386L340 394H176L172 408H116Q108 408 108 400Z"/>
+  </g>
+  <g transform="translate(0 18)">
+    <rect class="d" x="118" y="126" width="22" height="34" rx="5"/>
+    <path class="b" d="M124 146Q164 140 204 146Q211 147 211 154L214 262C216 292 250 312 300 326C334 336 344 358 340 380H118C110 360 108 330 113 300L117 156Q118 146 124 146Z"/>
+    <path class="dd" d="M146 146Q165 143 184 146L171 256Q165 268 159 256Z"/>
+    <path class="hi" d="M124 170V296"/>
+    <path class="hi" d="M262 314C292 320 318 330 330 348"/>
+    <path class="sole" d="M110 378H340Q346 378 344 386L340 394H176L172 408H116Q108 408 108 400Z"/>
+    <path class="stitch" d="M122 372H330"/>
+  </g>
+</svg>
