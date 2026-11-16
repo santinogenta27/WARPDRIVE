@@ -5,7 +5,7 @@ Arma, desde la auditoría del caso, lo que pasó en cada turno de una conversaci
 - la intención detectada y la verificación;
 - las herramientas llamadas, con sus parámetros y las reglas del guardián que se aplicaron;
 - las fuentes citadas y la aprobación pendiente;
-- la latencia y el costo.
+- la latencia y el costo, con el tiempo de cada paso (decisión 044).
 
 Es solo lectura y sin datos personales:
 
@@ -30,6 +30,7 @@ from app.audit.log import reconstruct_case
 from app.channels.web.channel import token_hash
 from app.contacts import WEB_PREFIX, hash_address
 from app.db.connection import tenant_scope
+from app.obs import timing
 from app.panel import english
 from app.panel.labels import money, tool_label, type_label
 from app.policy import guardian as guard
@@ -236,6 +237,28 @@ def _tool(manifests: dict[str, dict[str, Any]], payload: dict[str, Any]) -> dict
     return found
 
 
+ROLES = {"clasificador": "classifier", "agente": "agent"}
+
+
+def _timing(payload: dict[str, Any]) -> dict[str, Any]:
+    """En qué se fue el tiempo del turno (decisión 044): cada paso y cada llamada al modelo,
+    con su espera por el límite de Groq. Los turnos medidos antes no traen el detalle."""
+    found: dict[str, Any] = {
+        f"{kind}_ms": int(payload.get(f"{kind}_ms") or 0) for kind in (*timing.STEPS, "otros")
+    }
+    found["queries"] = int((payload.get("llamadas") or {}).get(timing.BASE) or 0)
+    found["model_calls"] = [
+        {
+            "name": ROLES.get(str(step.get("nombre")), "model"),
+            "ms": int(step.get("ms") or 0),
+            "wait_ms": int(step.get("espera_ms") or 0),
+        }
+        for step in payload.get("pasos") or []
+        if step.get("paso") == timing.MODEL
+    ]
+    return found
+
+
 def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[str, Any]:
     """Los turnos de la conversación de la sesión, en orden."""
     case = _case(conn, tenant_id, session)
@@ -312,6 +335,7 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
             turn["model_calls"] += 1
         elif kind == "turn_timing":
             turn["latency_ms"] = int(p.get("total_ms") or 0)
+            turn["timing"] = _timing(p)
     return {
         "case": {
             "status": case_status,

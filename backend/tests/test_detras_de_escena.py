@@ -136,6 +136,23 @@ def test_el_panel_muestra_cada_paso_del_caso(web: TestClient, stack: SimulatedSt
     assert data["case"]["status"] == "waiting_approval"
 
 
+def test_el_panel_muestra_en_que_se_fue_el_tiempo(web: TestClient, stack: SimulatedStack) -> None:
+    """Decisión 044: la latencia de cada mensaje, repartida en base, modelo (y la espera por el
+    límite de Groq), búsqueda, herramientas, verificaciones y email."""
+    session = _conversation(web, stack)
+    order = _live(web, session)["turns"][2]
+    timing = order["timing"]
+    for key in ("base", "modelo", "espera", "busqueda", "herramientas", "verificaciones", "email"):
+        assert isinstance(timing[f"{key}_ms"], int) and timing[f"{key}_ms"] >= 0, key
+    assert timing["queries"] > 0
+    # Cada llamada al modelo, con su papel y su duración.
+    calls = timing["model_calls"]
+    assert [c["name"] for c in calls] == ["classifier", "agent", "agent"]
+    assert all(isinstance(c["ms"], int) and isinstance(c["wait_ms"], int) for c in calls)
+    page = web.get(f"/demo/{SLUG}").text
+    assert "Database" in page and "Waiting for Groq" in page
+
+
 def test_las_fuentes_citadas(web: TestClient) -> None:
     session = web.post(f"/chat/session?canal={SLUG}").json()["session"]
     _chat(web, session, "What's your return policy?")

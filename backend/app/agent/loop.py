@@ -9,6 +9,7 @@ pasos) → una de cuatro acciones: responder, ejecutar, pedir_aprobacion o deriv
 import json
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any, Literal
@@ -21,6 +22,7 @@ from app.agent import conduct, presentable, prompt
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
     CHAT,
+    CLASSIFIER_MODEL,
     GENERAL,
     NOT_ALLOWED,
     Classification,
@@ -37,7 +39,7 @@ from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
-from app.mailer import Email, Mailer, MailError, mailer_from_env
+from app.mailer import Mailer, MailError, mailer_from_env
 from app.obs import alerts, timing, tracing
 from app.policy.guardian import (
     ALREADY_PENDING_REASON,
@@ -220,6 +222,17 @@ def _verification_exchange(role: str, text: str) -> bool:
     return False
 
 
+def _check[T](control: Callable[..., T], *args: Any) -> T:
+    """Un control de la respuesta en código, medido como `verificaciones` (decisión 044)."""
+    with timing.step(timing.CHECKS, timing.CHECKS_NAME):
+        return control(*args)
+
+
+def _lacks_empathy(text: str, said: str, language: str) -> bool:
+    """Cliente molesto y respuesta sin empatía (decisión 040)."""
+    return conduct.is_upset(text, language) and not conduct.shows_empathy(said, language)
+
+
 def _wrong_code_message(remaining: int, language: str = "es") -> str:
     if remaining == 1:
         return i18n.text(language, "code_wrong_one")
@@ -335,8 +348,10 @@ class Agent:
         with tenant_scope(self._conn, tenant_id):
             with timing.turn() as timer:
                 result = self._handle(tenant_id, contact_id, text)
-            # Cuánto tardó cada paso (base, modelo, búsqueda, herramientas): decisión 025.
-            summary = timer.summary()
+            # Cuánto tardó cada paso (base, modelo, búsqueda, herramientas): decisión 025. Con
+            # cada llamada y su papel, también en el log del servidor (decisión 044).
+            summary = timer.summary(roles={CLASSIFIER_MODEL: "clasificador", self._model: "agente"})
+            timing.log_turn(result.case_id, summary)
             audit_log.record(self._conn, tenant_id, result.case_id, "turn_timing", summary)
             self._observe(tenant_id, result, timer, summary)
         return result
@@ -445,19 +460,12 @@ class Agent:
             phone = self._guardian.customer_phone(turn.tenant_id, email.group(0))
             code = email_code.send_code(self._conn, turn.tenant_id, pending, phone)
             if phone is not None:
+                letter = email_code.code_email(
+                    to=email.group(0), company=company, code=code, language=turn.lang
+                )
                 try:
-                    self._mailer.send(
-                        Email(
-                            to=email.group(0),
-                            subject=turn.say("email_subject", empresa=company),
-                            body=turn.say(
-                                "email_body",
-                                empresa=company,
-                                code=code,
-                                minutes=email_code.CODE_TTL_MINUTES,
-                            ),
-                        )
-                    )
+                    with timing.step(timing.MAIL, "codigo de verificacion"):
+                        self._mailer.send(letter)
                 except MailError as error:
                     return self._code_not_sent(turn, pending, str(error))
             self._audit(turn, "verification_code_sent", {"registered": phone is not None})
@@ -692,7 +700,7 @@ class Agent:
                 final_name = ""
             if final_name == "responder":
                 # Vacío, JSON o metadatos nunca llegan al cliente: un reintento y después deriva.
-                issue = presentable.problem(str(final_input.get("mensaje") or ""))
+                issue = _check(presentable.problem, str(final_input.get("mensaje") or ""))
                 if issue is not None:
                     self._audit(
                         turn, "format_rejected", {"reason": issue, "rejected_message": final_input}
@@ -705,9 +713,11 @@ class Agent:
                     messages.append(_correction(final_id, CORRECTIONS[turn.lang]["format"]))
                     continue
             if final_name:
-                if final_name == "responder" and self._asks_personal_data(turn, final_input):
+                if final_name == "responder" and _check(
+                    self._asks_personal_data, turn, final_input
+                ):
                     return self._request_verification(turn, str(final_input.get("mensaje")))
-                if final_name == "responder" and self._reverifies(turn, final_input):
+                if final_name == "responder" and _check(self._reverifies, turn, final_input):
                     self._audit(
                         turn,
                         "grounding_rejected",
@@ -726,7 +736,7 @@ class Agent:
                     # Controles de conducta (decisión 040): una acción afirmada sin herramienta
                     # es una respuesta inventada; con el cliente molesto, primero la empatía.
                     said = str(final_input.get("mensaje") or "")
-                    if not self._acted(turn) and conduct.claims_action(said, turn.lang):
+                    if not self._acted(turn) and _check(conduct.claims_action, said, turn.lang):
                         self._audit(
                             turn,
                             "grounding_rejected",
@@ -745,10 +755,8 @@ class Agent:
                             _correction(final_id, conduct.ACTION_CORRECTIONS[turn.lang])
                         )
                         continue
-                    if (
-                        turn.tone_retries == 0
-                        and conduct.is_upset(turn.text, turn.lang)
-                        and not conduct.shows_empathy(said, turn.lang)
+                    if turn.tone_retries == 0 and _check(
+                        _lacks_empathy, turn.text, said, turn.lang
                     ):
                         self._audit(
                             turn,
@@ -762,7 +770,7 @@ class Agent:
                         messages.append({"role": "assistant", "content": response.content})
                         messages.append(_correction(final_id, conduct.TONE_CORRECTIONS[turn.lang]))
                         continue
-                    verdict = self._check_grounding(turn, final_input)
+                    verdict = _check(self._check_grounding, turn, final_input)
                     if not verdict.ok:
                         self._audit(
                             turn,

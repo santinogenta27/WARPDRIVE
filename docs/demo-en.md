@@ -2,11 +2,39 @@
 
 El video muestra a **Northwind Outfitters**, una tienda ficticia de ropa outdoor. A la izquierda están su sitio y su chat; a la derecha, la vista **"detrás de escena"**, con lo que hace el asistente en cada mensaje (decisión 041).
 
-La historia: una clienta con un pedido atrasado se enoja, pide un descuento fuera de la política, elige la alternativa y pide un reembolso grande, que aprueba una persona. Todo es de demo: emails `@example.com` y teléfonos 555-01xx.
+La historia: una clienta con un pedido atrasado se enoja, pide un descuento fuera de la política, elige la alternativa y pide un reembolso grande, que aprueba una persona. Todo es de demo: emails `@example.com` y teléfonos 555-01xx. La única excepción es el email al que llega el código, si lo configurás en Render.
 
 Probado de punta a punta en Chrome el 13 de noviembre de 2026, con el modelo de siempre (`openai/gpt-oss-20b` en Groq). Las capturas están en `docs/img/demo-en/`.
 
 ## Antes de grabar
+
+### En Render: el código a tu email (decisión 043)
+
+En el servicio de Render → **Environment** → **Add Environment Variable**:
+
+| Variable | Valor | Para qué |
+|---|---|---|
+| `NORTHWIND_DEMO_CUSTOMER_EMAIL` | tu email real | Los pedidos del guion (NW-4521 y NW-4528) quedan asociados a ese email. `emily@example.com` sigue andando. |
+| `RESEND_API_KEY` | la clave de Resend (`re_…`) | Envía el código por email. Cómo crearla: `docs/render.md`, "Enviar el código de verificación por email". |
+| `MAIL_FROM` | `Northwind Outfitters <codes@enterprisedataai.com>` | El remitente, de un dominio verificado en Resend. Con ese nombre, el email parece de la tienda. |
+
+- **Guardar:** **Save Changes**. Render redespliega solo. La asociación se arma con el primer mensaje y otra vez con cada **Reset demo**.
+- **Las tres juntas:** sin `RESEND_API_KEY` y `MAIL_FROM`, el código sale en **Logs** (`[Mailer de consola, no se envió]`). Sin `NORTHWIND_DEMO_CUSTOMER_EMAIL`, solo verifica `emily@example.com`, que no recibe emails.
+- **Tu email no va en el repo:** ni en `.env.example`, ni en los docs, ni en los tests. Solo en Render (o en tu `.env` local, que no se sube).
+- **Se ve en el video:** el email se escribe en el chat. Conviene una casilla solo para la demo.
+- **Resend sin dominio verificado:** con `MAIL_FROM=Northwind Outfitters <onboarding@resend.dev>`, Resend solo envía al email de tu cuenta de Resend. Alcanza si es el mismo.
+- **El email:** asunto "Your Northwind Outfitters verification code", el código grande y "It expires in 10 minutes". Si no llega en unos segundos, mirá en spam y en Resend → **Emails**.
+
+**Antes de la primera toma:**
+
+1. Abrí la página y mandá un mensaje de prueba.
+2. Después tocá Reset demo.
+
+El plan gratis de Render duerme el servicio a los 15 minutos sin tráfico y tarda cerca de un minuto en despertar. La base de Neon y el primer embedding también tardan más la primera vez (decisión 044).
+
+**Cuánto tarda cada paso:** Render → **Logs**, una línea `[Latencia]` por mensaje. También abajo de cada mensaje del panel "Behind the scenes", en la línea Database · Model · Waiting for Groq.
+
+### En local
 
 1. **Base y Northwind:** `make demo-setup`. Crea o regenera Acme y Northwind, con la vista "detrás de escena" activada.
    - La clave del panel de Northwind sale de `NORTHWIND_PASSWORD` en `.env`. El usuario es `demo@northwind.example`.
@@ -43,8 +71,8 @@ Los tiempos son del video ya editado. Lo que se escribe va en inglés, tal cual.
 
 1. Tocá la sugerencia **"Where is my order NW-4521?"**.
    - El asistente pide el email de la compra: no da datos de un pedido sin verificar al titular.
-2. Escribí `emily@example.com`. Responde que mandó un código.
-3. Copiá el código de 6 dígitos de la terminal y escribilo.
+2. Escribí el email de `NORTHWIND_DEMO_CUSTOMER_EMAIL` (sin esa variable, `emily@example.com`). Responde que mandó un código.
+3. Copiá el código de 6 dígitos del email (sin Resend, de la terminal o de Logs en Render) y escribilo.
 4. **La respuesta:**
    - el pedido está demorado por clima en Denver;
    - la nueva fecha es el 14 de noviembre;
@@ -135,5 +163,11 @@ Escribí: **`Thanks. Also, I'd like a refund for order NW-4528.`**
 - **"I'm passing you to a member of our team"** en lugar de una respuesta: el modelo falló dos veces el control de fundamento o de conducta. El panel muestra el motivo en **Checks**. Reiniciá la demo (paso 4 y 5 de "Antes de grabar") y repetí. Pasó en las pruebas antes de los arreglos de la tarea 5 y no volvió a pasar en las últimas dos corridas completas.
 - **"We couldn't reach the assistant" o "We ran into a problem":** se agotó la cuota de Groq o el límite de mensajes. Esperá un minuto o revisá `WEB_CHAT_IP_DAILY_LIMIT`.
 - **El código no aparece en la terminal:** buscá `[Mailer de consola` en la salida de `make api`. Vence a los 10 minutos.
+- **El código no llega al email:**
+  - Revisá las tres variables de "En Render".
+  - Mirá Resend → **Emails** y la carpeta de spam.
+  - Si en los Logs aparece `[Mailer de consola`, faltan `RESEND_API_KEY` o `MAIL_FROM`.
+  - Si el asistente responde "We couldn't send you the code", Resend rechazó el envío: el motivo queda en los Logs.
+- **Una respuesta tarda mucho más que otra:** casi siempre es la espera por el límite de tokens por minuto de Groq. Se ve como "Waiting for Groq" en el panel y en la línea `[Latencia]` de los logs. Dejá 30 a 40 segundos entre mensajes o cortá la espera en la edición.
 - **El panel de la derecha da 404 o queda vacío:** la vista está apagada (Panel → Settings → Behind the scenes → Activate), o el chat se abrió en otra pestaña con otra sesión. Usá el chat de la misma página.
 - **Los pedidos ya tienen el envío express o el reembolso de un ensayo anterior:** Reset demo en el panel. Devuelve los pedidos a su estado inicial.

@@ -60,7 +60,13 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def create_app(orders: list[dict[str, Any]] | None = None) -> FastAPI:
+def create_app(
+    orders: list[dict[str, Any]] | None = None,
+    *,
+    extra_customers: list[dict[str, Any]] | None = None,
+) -> FastAPI:
+    """`extra_customers`: customers added to `data/customers.json` (the demo uses one to give a
+    fixture customer a second, real email)."""
     data = orders if orders is not None else json.loads(ORDERS_PATH.read_text(encoding="utf-8"))
     state: dict[str, dict[str, Any]] = {o["id"]: copy.deepcopy(o) for o in data}
     refunds: dict[str, dict[str, Any]] = {}  # by idempotency key
@@ -73,7 +79,7 @@ def create_app(orders: list[dict[str, Any]] | None = None) -> FastAPI:
 
     app = FastAPI(title="Northwind Outfitters — Orders API (simulated)")
     app.openapi = lambda: json.loads(OPENAPI_PATH.read_text(encoding="utf-8"))  # type: ignore[method-assign]
-    customers = json.loads(CUSTOMERS_PATH.read_text(encoding="utf-8"))
+    customers = json.loads(CUSTOMERS_PATH.read_text(encoding="utf-8")) + list(extra_customers or [])
 
     def reset() -> None:
         """Back to the initial orders, with no refunds, exchanges or courtesies (for evals)."""

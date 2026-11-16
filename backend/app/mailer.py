@@ -48,7 +48,8 @@ logger.propagate = False
 class Email:
     to: str
     subject: str
-    body: str
+    body: str  # texto plano: lo que muestra un cliente de correo sin HTML (y el de consola)
+    html: str | None = None
 
 
 class Mailer(Protocol):
@@ -76,16 +77,17 @@ class ResendMailer:
             ConsoleMailer().send(email)
             return
         client = self._http or httpx.Client(timeout=TIMEOUT_SECONDS)
+        payload = {
+            "from": self._sender,
+            "to": [email.to],
+            "subject": email.subject,
+            "text": email.body,
+        }
+        if email.html:
+            payload["html"] = email.html
         try:
             response = client.post(
-                self.URL,
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                json={
-                    "from": self._sender,
-                    "to": [email.to],
-                    "subject": email.subject,
-                    "text": email.body,
-                },
+                self.URL, headers={"Authorization": f"Bearer {self._api_key}"}, json=payload
             )
         except httpx.HTTPError as error:
             raise MailError(f"No se pudo conectar con Resend ({type(error).__name__}).") from None

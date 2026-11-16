@@ -251,6 +251,7 @@
   .alt { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
   .meta { display: flex; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--faint); }
   .meta b { color: var(--muted); font-weight: 600; }
+  .meta.timing { flex-wrap: wrap; gap: 3px 12px; margin-top: 4px; }
   .foot { padding: 10px 22px 14px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--faint); }
   @media (max-width: 1100px) {
     body { grid-template-columns: 1fr; height: auto; }
@@ -296,6 +297,10 @@
       rejected_check: { grounding_rejected: "Rewrote an answer", format_rejected: "Rewrote an answer",
         tone_rejected: "Asked for empathy first" },
       latency: "Latency", cost: "Cost", tokens: "tokens",
+      time: { base: "Database", modelo: "Model", espera: "Waiting for Groq", busqueda: "Search", herramientas: "Tools",
+        verificaciones: "Checks", email: "Email" },
+      queries: function (n) { return n + (n === 1 ? " query" : " queries"); },
+      roles: { classifier: "classifier", agent: "agent", model: "model" },
       caseStatus: { open: "Open", waiting_approval: "Waiting for approval", escalated: "With a person", resolved: "Resolved" }
     },
     es: {
@@ -316,6 +321,10 @@
       rejected_check: { grounding_rejected: "Reescribió una respuesta", format_rejected: "Reescribió una respuesta",
         tone_rejected: "Pidió empatía primero" },
       latency: "Latencia", cost: "Costo", tokens: "tokens",
+      time: { base: "Base de datos", modelo: "Modelo", espera: "Esperando a Groq", busqueda: "Búsqueda",
+        herramientas: "Herramientas", verificaciones: "Controles", email: "Email" },
+      queries: function (n) { return n + (n === 1 ? " consulta" : " consultas"); },
+      roles: { classifier: "clasificador", agent: "agente", model: "modelo" },
       caseStatus: { open: "Abierto", waiting_approval: "Esperando aprobación", escalated: "Con una persona", resolved: "Resuelto" }
     }
   }[lang];
@@ -408,7 +417,28 @@
     meta.appendChild(el("span", null, T.cost + " $" + Number(t.cost_usd || 0).toFixed(4)));
     if (t.tokens) meta.appendChild(el("span", null, t.tokens.toLocaleString(lang) + " " + T.tokens));
     card.appendChild(meta);
+    if (t.timing) card.appendChild(timing(t.timing));
     return card;
+  }
+  function secs(ms) { return (ms / 1000).toFixed(1) + " s"; }
+  // En qué se fue la latencia (decisión 044): la base y el modelo siempre; el resto si pesa.
+  function timing(m) {
+    var line = el("div", "meta timing");
+    function add(key, extra) {
+      var s = el("span");
+      s.appendChild(el("b", null, T.time[key]));
+      s.appendChild(document.createTextNode(" " + secs(m[key + "_ms"] || 0) + (extra ? " (" + extra + ")" : "")));
+      line.appendChild(s);
+    }
+    add("base", T.queries(m.queries || 0));
+    var calls = (m.model_calls || []).map(function (c) {
+      return T.roles[c.name] + " " + secs(Math.max(c.ms - c.wait_ms, 0));
+    });
+    add("modelo", calls.join(" · "));
+    ["espera", "busqueda", "herramientas", "verificaciones", "email"].forEach(function (key) {
+      if ((m[key + "_ms"] || 0) >= 50) add(key);
+    });
+    return line;
   }
   function render(data) {
     var key = JSON.stringify(data);

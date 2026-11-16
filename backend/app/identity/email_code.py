@@ -7,6 +7,7 @@ enviado, para no revelar qué emails existen, y ningún código lo verifica.
 
 import hashlib
 import hmac
+import html
 import re
 import secrets
 import uuid
@@ -15,8 +16,10 @@ from typing import Literal
 
 import psycopg
 
+from app import i18n
 from app.contacts import hash_phone
 from app.db.connection import tenant_scope
+from app.mailer import Email
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 CODE = re.compile(r"(?<!\d)\d{6}(?!\d)")
@@ -33,6 +36,43 @@ class Verification:
     case_id: uuid.UUID
     question: str
     status: str
+
+
+def code_email(*, to: str, company: str, code: str, language: str) -> Email:
+    """El email con el código: asunto, texto plano y HTML con el código grande y la vigencia
+    (decisión 043). HTML con estilos en línea y tablas: así lo muestran Gmail y Outlook."""
+
+    def say(key: str) -> str:
+        return i18n.text(language, key, empresa=company, code=code, minutes=CODE_TTL_MINUTES)
+
+    body = f"{say('email_body')}\n\n{say('email_ignore')}"
+    safe = {key: html.escape(say(key)) for key in ("email_intro", "email_expires", "email_ignore")}
+    font = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+    page = (
+        f'<!doctype html><html lang="{i18n.normalize(language)}"><body style="margin:0;'
+        f'padding:0;background:#f4f4f5">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"'
+        ' style="background:#f4f4f5;padding:32px 16px"><tr><td align="center">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"'
+        ' style="max-width:460px;background:#ffffff;border-radius:16px;'
+        f'border:1px solid #e4e4e7;font-family:{font};color:#18181b">'
+        '<tr><td style="padding:28px 32px 0;font-size:15px;font-weight:600">'
+        f"{html.escape(company)}</td></tr>"
+        '<tr><td style="padding:12px 32px 0;font-size:15px;line-height:1.5;color:#3f3f46">'
+        f"{safe['email_intro']}</td></tr>"
+        '<tr><td style="padding:20px 32px 0"><table role="presentation" width="100%"'
+        ' cellpadding="0" cellspacing="0"><tr>'
+        '<td align="center" style="font-family:ui-monospace,Menlo,Consolas,monospace;'
+        "font-size:34px;font-weight:700;letter-spacing:8px;color:#18181b;background:#f4f4f5;"
+        f'border-radius:12px;padding:18px 0">{html.escape(code)}</td>'
+        "</tr></table></td></tr>"
+        '<tr><td style="padding:16px 32px 0;font-size:14px;font-weight:600;color:#18181b">'
+        f"{safe['email_expires']}</td></tr>"
+        '<tr><td style="padding:12px 32px 28px;font-size:13px;line-height:1.5;color:#71717a">'
+        f"{safe['email_ignore']}</td></tr>"
+        "</table></td></tr></table></body></html>"
+    )
+    return Email(to=to, subject=say("email_subject"), body=body, html=page)
 
 
 def _hash(verification_id: uuid.UUID, code: str) -> str:
