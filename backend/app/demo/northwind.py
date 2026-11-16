@@ -12,6 +12,7 @@ Con `--reset`, además archiva las conversaciones de prueba de Northwind.
 
 import argparse
 import json
+import logging
 import os
 import secrets
 import sys
@@ -29,6 +30,7 @@ from app import i18n
 from app.config import REPO_ROOT
 from app.contacts import hash_phone
 from app.db.connection import tenant_scope
+from app.identity.email_code import EMAIL
 from app.llm.embedder import Embedder
 from app.rag.indexer import index_document
 
@@ -39,6 +41,11 @@ NORTHWIND_DIR = REPO_ROOT / "evals" / "fixtures" / "northwind"
 API_DIR = REPO_ROOT / "mocks" / "northwind-api"
 DEMO_KEY = "northwind"  # tenants.settings.demo
 BASE_URL = "demo:northwind"  # su "sistema": la API simulada en proceso
+# Opcional (decisión 043): un email real que reciba el código de los pedidos del guion. Va solo
+# en el entorno (Render o .env), nunca en el repo.
+DEMO_EMAIL_ENV = "NORTHWIND_DEMO_CUSTOMER_EMAIL"
+SCRIPT_ORDERS = ("NW-4521", "NW-4528")  # los pedidos de docs/demo-en.md
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -67,21 +74,43 @@ def openapi() -> dict[str, Any]:
     return spec
 
 
-def sandbox_client() -> TestClient:
-    """La API simulada de Northwind en proceso (los datos viven en memoria)."""
+def demo_customers(email: str | None) -> list[dict[str, Any]]:
+    """La clienta de los pedidos del guion, con `email` como segundo email (decisión 043): el
+    código de verificación llega a una casilla real y el de los fixtures sigue andando. Vacío si
+    no hay email, si no es un email o si ya es el de un cliente."""
+    wanted = (email or "").strip().lower()
+    if not wanted:
+        return []
+    if not EMAIL.fullmatch(wanted):
+        logger.warning("%s no es un email: se ignora.", DEMO_EMAIL_ENV)
+        return []
+    customers = json.loads((API_DIR / "data" / "customers.json").read_text(encoding="utf-8"))
+    if any(c["email"].lower() == wanted for c in customers):
+        return []
+    orders = json.loads((API_DIR / "data" / "orders.json").read_text(encoding="utf-8"))
+    owners = {o["customer_phone"] for o in orders if o["id"] in SCRIPT_ORDERS}
+    if len(owners) != 1:  # el guion es de una sola clienta
+        raise ValueError(f"Los pedidos del guion no son de un solo cliente: {SCRIPT_ORDERS}")
+    return [{**c, "email": wanted} for c in customers if c["phone"] in owners]
+
+
+def sandbox_client(demo_email: str | None = None) -> TestClient:
+    """La API simulada de Northwind en proceso (los datos viven en memoria). `demo_email`: un
+    segundo email para la clienta del guion (ver `demo_customers`)."""
     mocks = str(API_DIR)
     if mocks not in sys.path:
         sys.path.insert(0, mocks)
     from northwind_api import create_app
 
-    return TestClient(create_app())
+    return TestClient(create_app(extra_customers=demo_customers(demo_email)))
 
 
 @lru_cache(maxsize=1)
 def shared_northwind() -> TestClient:
     """La API simulada que comparten el chat y el panel: lo que se aprueba en el panel se ve
-    después en el pedido que consulta el agente."""
-    return sandbox_client()
+    después en el pedido que consulta el agente. Se arma al primer uso y otra vez después de
+    "Reset demo", con el email de `NORTHWIND_DEMO_CUSTOMER_EMAIL` si está definido."""
+    return sandbox_client(os.environ.get(DEMO_EMAIL_ENV))
 
 
 def _settings() -> dict[str, Any]:
@@ -306,6 +335,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  Clave del panel: {setup.password} (guardala: no se vuelve a mostrar)")
     if args.reset:
         print(f"  {archived} conversaciones archivadas.")
+    if demo_customers(os.environ.get(DEMO_EMAIL_ENV)):
+        # Sin mostrar el email: la salida puede quedar en un log.
+        print(
+            f"  Los pedidos del guion ({', '.join(SCRIPT_ORDERS)}) responden también al email de"
+            f" {DEMO_EMAIL_ENV} (en la API que arranque con esa variable)."
+        )
     return 0
 
 

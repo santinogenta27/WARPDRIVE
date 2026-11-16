@@ -93,6 +93,12 @@ MESSAGES: dict[str, dict[str, str]] = {
             "Tu código para verificar tu identidad en {empresa} es {code}. Vence en {minutes} "
             "minutos."
         ),
+        # el mismo email en HTML (decisión 043)
+        "email_intro": "Usá este código para confirmar que sos vos en el chat de {empresa}:",
+        "email_expires": "Vence en {minutes} minutos.",
+        "email_ignore": (
+            "Si no lo pediste, ignorá este email: sin el código nadie puede ver tus pedidos."
+        ),
         # cierre y CSAT
         "closing": "¡De nada! Si necesitás algo más, escribime cuando quieras.",
         "csat_question": (
@@ -191,6 +197,12 @@ MESSAGES: dict[str, dict[str, str]] = {
         "email_body": (
             "Your code to verify your identity with {empresa} is {code}. It expires in {minutes} "
             "minutes."
+        ),
+        "email_intro": "Use this code to confirm it's you in the {empresa} chat:",
+        "email_expires": "It expires in {minutes} minutes.",
+        "email_ignore": (
+            "If you didn't ask for it, you can ignore this email: no one can see your orders "
+            "without the code."
         ),
         "closing": "You're welcome! If you need anything else, just message me anytime.",
         "csat_question": (

@@ -21,6 +21,7 @@ from jsonschema import Draft202012Validator
 from app.llm.errors import QuotaExhausted
 from app.llm.pricing import PRICES
 from app.llm.types import LLMResponse, TokenUsage, ToolCall
+from app.obs import timing
 
 logger = logging.getLogger(__name__)
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -115,7 +116,7 @@ class GroqTransport:
             except httpx.TransportError:
                 if last:
                     raise
-                self._sleep(self._backoff(attempt))
+                self._wait(self._backoff(attempt))
                 continue
             self._remember(model, response.headers)
             if response.status_code < 400:
@@ -153,14 +154,19 @@ class GroqTransport:
                         daily=False,
                     )
                 response.raise_for_status()
-            self._sleep(min(self._max_wait, wait if wait is not None else self._backoff(attempt)))
+            self._wait(min(self._max_wait, wait if wait is not None else self._backoff(attempt)))
         raise AssertionError("inalcanzable")
+
+    def _wait(self, seconds: float) -> None:
+        """Una espera por el límite o para reintentar: se mide aparte (decisión 044)."""
+        with timing.step(timing.WAIT, "Groq"):
+            self._sleep(seconds)
 
     def _respect_tokens(self, model: str) -> None:
         remaining, reset_at = self._tokens.get(model, (self._min_tokens, 0.0))
         wait = reset_at - self._clock()
         if remaining < self._min_tokens and wait > 0:
-            self._sleep(wait)
+            self._wait(wait)
 
     def _remember(self, model: str, headers: httpx.Headers) -> None:
         remaining = headers.get("x-ratelimit-remaining-tokens")
