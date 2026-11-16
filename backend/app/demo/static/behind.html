@@ -290,7 +290,7 @@
       code_failed: "The code couldn't be sent", wrong: "Wrong code", locked: "Locked", expired: "Code expired",
       executed: "Ran", approval_required: "Needs approval", denied: "Blocked by the policy guard",
       failed: "The store's system refused it", pending: "Waiting for a person",
-      approved: "Approved by a person", rejected: "Rejected or cancelled",
+      approved: "Approved by a person", rejected: "Rejected or cancelled", emailSent: "Confirmation email sent",
       offered: "Offered instead", upTo: "up to", cancelled: function (n) { return n + " cancelled"; },
       actions: { responder: "Answered", ejecutar: "Acted and answered", pedir_aprobacion: "Asked a person to approve",
         derivar: "Handed off to a person" },
@@ -314,7 +314,7 @@
       code_failed: "No se pudo enviar el código", wrong: "Código incorrecto", locked: "Bloqueado", expired: "Código vencido",
       executed: "Se ejecutó", approval_required: "Necesita aprobación", denied: "La frenó el guardián",
       failed: "El sistema de la empresa la rechazó", pending: "Esperando a una persona",
-      approved: "Aprobada por una persona", rejected: "Rechazada o cancelada",
+      approved: "Aprobada por una persona", rejected: "Rechazada o cancelada", emailSent: "Email de confirmación enviado",
       offered: "Ofreció en su lugar", upTo: "hasta", cancelled: function (n) { return n + " cancelada(s)"; },
       actions: { responder: "Respondió", ejecutar: "Actuó y respondió", pedir_aprobacion: "Pidió aprobación a una persona",
         derivar: "Derivó a una persona" },
@@ -409,7 +409,8 @@
     if (t.sources && t.sources.length) card.appendChild(row(T.cited, t.sources.map(function (s) { return chip(s, "accent"); })));
     if (t.approval) {
       var a = t.approval.status;
-      card.appendChild(row(T.approval, chip(T[a] || a, a === "pending" ? "warn" : a === "approved" ? "ok" : "no")));
+      card.appendChild(row(T.approval, [chip(T[a] || a, a === "pending" ? "warn" : a === "approved" ? "ok" : "no"),
+        t.approval.email_sent ? chip(T.emailSent, "ok") : null]));
     }
     if (t.action) card.appendChild(row(T.result, chip(T.actions[t.action] || t.action)));
     // Por qué derivó, en una línea y sin datos del cliente (decisión 045).

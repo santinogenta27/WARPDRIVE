@@ -24,6 +24,7 @@ CUSTOMERS_PATH = HERE / "data" / "customers.json"
 PRODUCTS_PATH = HERE / "data" / "products.json"
 NOT_SHIPPED = {"paid"}
 COURTESY_DAYS = 60  # vigencia del cupón y del envío express gratis
+REFUND_TIME = "5 to 7 business days"  # como dice returns_and_refunds.md
 _ORDER_ID = re.compile(r"^\s*#?\s*(?:nw)?[\s-]*(\d{3,6})\s*$", re.I)
 
 
@@ -157,6 +158,8 @@ def create_app(
             "amount": body.amount,
             "currency": "USD",
             "status": "requested",
+            "payment_method": order["payment_method"],
+            "expected_within": REFUND_TIME,
             "created_at": _now(),
         }
         if idempotency_key is not None:

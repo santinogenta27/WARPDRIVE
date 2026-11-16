@@ -22,11 +22,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
 from app.audit import log as audit_log
+from app.cases import refund_confirmation
 from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
 from app.companies.connection import ClientFactory, http_client
 from app.db.connection import connect, tenant_scope
 from app.llm.embedder import Embedder
+from app.mailer import Mailer, mailer_from_env
 from app.panel import auth, english
 from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
 from app.panel.labels import action_label, money, type_label
@@ -67,6 +69,8 @@ class PanelDeps:
     embedder: Callable[[psycopg.Connection], Embedder] = _no_embedder
     kick_worker: Callable[[], None] = lambda: None
     client_factory: ClientFactory = http_client
+    # El email de confirmación de un reembolso aprobado (decisión 046).
+    mailer: Callable[[], Mailer] = mailer_from_env
 
 
 @contextmanager
@@ -425,6 +429,10 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
                 "decided_by": str(user_id),
             },
         )
+        if outcome.status == "executed" and tool == refund_confirmation.REFUND_TOOL:
+            refund_confirmation.send(
+                conn, deps.mailer(), ctx.tenant_id, approval_id, outcome.result
+            )
     target = back if back.startswith("/panel/") else "/panel/aprobaciones"
     return RedirectResponse(target, status_code=303)
 
@@ -625,6 +633,12 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "approval_decided":
         decision = "Aprobó" if p.get("decision") == "aprobar" else "Rechazó"
         return f"{decision} una persona del equipo", f"“{esc(p.get('text'))}”"
+    if kind == refund_confirmation.SENT:  # decisión 046
+        return "Envió el email de confirmación del reembolso", (
+            f"Referencia <span class=mono>{esc(p.get('reference'))}</span>"
+        )
+    if kind == refund_confirmation.FAILED:
+        return "No se pudo enviar el email de confirmación del reembolso", esc(p.get("motivo"))
     if kind == "case_resolved":
         who = RESOLVED_BY.get(str(p.get("resuelto_por")), "")
         return f"Caso resuelto {who}".strip(), esc(p.get("motivo"))

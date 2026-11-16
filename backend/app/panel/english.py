@@ -129,6 +129,11 @@ PHRASES: dict[str, str] = {
     "Respondió una persona del equipo": "A team member replied",
     "Aprobó una persona del equipo": "A team member approved",
     "Rechazó una persona del equipo": "A team member rejected",
+    "Envió el email de confirmación del reembolso": "Sent the refund confirmation email",
+    "No se pudo enviar el email de confirmación del reembolso": (
+        "The refund confirmation email couldn't be sent"
+    ),
+    "Referencia": "Reference",
     "Caso resuelto": "Case resolved",
     "Caso resuelto por el asistente": "Case resolved by the assistant",
     "Caso resuelto con una persona": "Case resolved with a person",

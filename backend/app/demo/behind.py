@@ -27,6 +27,7 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from app.audit.log import reconstruct_case
+from app.cases import refund_confirmation
 from app.channels.web.channel import token_hash
 from app.contacts import WEB_PREFIX, hash_address
 from app.db.connection import tenant_scope
@@ -366,8 +367,14 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
     manifests = _manifests(conn, tenant_id)
     approvals = _approvals(conn, tenant_id, case_id)
     turns: list[dict[str, Any]] = []
+    by_approval: dict[str, dict[str, Any]] = {}  # aprobación -> el turno que la pidió
     for event in reconstruct_case(conn, tenant_id, case_id):
         kind, p = event.kind, event.payload
+        if kind == refund_confirmation.SENT:  # llega después, al decidir (decisión 046)
+            asked = by_approval.get(str(p.get("approval_id")))
+            if asked is not None and asked["approval"] is not None:
+                asked["approval"]["email_sent"] = True
+            continue
         if kind == "message_received":
             turns.append(
                 {
@@ -413,6 +420,7 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
             if p.get("approval_id"):
                 status = approvals.get(str(p["approval_id"]), "pending")
                 turn["approval"] = {"status": status}
+                by_approval[str(p["approval_id"])] = turn
                 if status == "approved":  # una persona aprobó: el guardián la ejecutó
                     for rule in tool["rules"]:
                         if rule["rule"] == "system":
@@ -424,6 +432,7 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
             turn["sources"] = list(p.get("sources") or [])
             if p.get("approval_id") and turn["approval"] is None:
                 turn["approval"] = {"status": approvals.get(str(p["approval_id"]), "pending")}
+                by_approval[str(p["approval_id"])] = turn
         elif kind == "escalated":
             turn["action"] = "derivar"
             turn["handoff"] = handoff_line(p.get("causa"), english=english.english())

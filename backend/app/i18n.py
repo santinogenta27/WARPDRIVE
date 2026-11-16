@@ -122,6 +122,19 @@ MESSAGES: dict[str, dict[str, str]] = {
         "approval_done": "¡Listo! Aprobamos y realizamos lo que pediste{about}.",
         "about_order": " del pedido {order}",
         "amount_for": " por {amount}",
+        # email de confirmación del reembolso aprobado (decisión 046)
+        "refund_subject": "Tu reembolso está confirmado – pedido {order}",
+        "refund_subject_plain": "Tu reembolso está confirmado",
+        "refund_intro": "Buenas noticias: aprobamos el reembolso{about}.",
+        "refund_amount": "Monto del reembolso",
+        "refund_method": "Se acredita en",
+        "refund_when": "Plazo",
+        "refund_reference": "Referencia",
+        "refund_method_default": "tu medio de pago original",
+        "refund_when_default": "unos días hábiles, según tu banco",
+        "refund_footer": (
+            "Si tenés alguna duda, escribinos por el chat de {empresa} con tu número de referencia."
+        ),
         # chat web
         "unsupported": "Por ahora solo puedo leer mensajes de texto. ¿Me lo escribís?",
         "page_title": "{empresa} · Atención al cliente",
@@ -225,6 +238,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         "approval_done": "All done! We approved and completed your request{about}.",
         "about_order": " for order {order}",
         "amount_for": " of {amount}",
+        "refund_subject": "Your refund is confirmed – order {order}",
+        "refund_subject_plain": "Your refund is confirmed",
+        "refund_intro": "Good news: we approved your refund{about}.",
+        "refund_amount": "Refund amount",
+        "refund_method": "Refunded to",
+        "refund_when": "When you'll see it",
+        "refund_reference": "Reference",
+        "refund_method_default": "your original payment method",
+        "refund_when_default": "a few business days, depending on your bank",
+        "refund_footer": (
+            "Questions? Message us in the {empresa} chat and mention your reference number."
+        ),
         "unsupported": "For now I can only read text messages. Could you type it out for me?",
         "page_title": "{empresa} · Customer support",
         "page_title_plain": "Customer support",

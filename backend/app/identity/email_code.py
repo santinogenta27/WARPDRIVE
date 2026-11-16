@@ -8,6 +8,7 @@ enviado, para no revelar qué emails existen, y ningún código lo verifica.
 import hashlib
 import hmac
 import html
+import logging
 import re
 import secrets
 import uuid
@@ -15,8 +16,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 import psycopg
+from cryptography.fernet import InvalidToken
 
-from app import i18n
+from app import crypto, i18n
 from app.contacts import hash_phone
 from app.db.connection import tenant_scope
 from app.mailer import Email
@@ -26,6 +28,7 @@ CODE = re.compile(r"(?<!\d)\d{6}(?!\d)")
 CODE_TTL_MINUTES = 10
 MAX_ATTEMPTS = 3
 VERIFIED_DAYS = 30
+logger = logging.getLogger(__name__)
 
 CheckResult = Literal["verified", "wrong", "locked", "expired"]
 
@@ -120,23 +123,60 @@ def send_code(
     tenant_id: uuid.UUID,
     verification: Verification,
     customer_phone: str | None,
+    email: str | None = None,
 ) -> str:
     """Genera un código nuevo para el email dado. `customer_phone`: el cliente que tiene ese
-    email en el sistema de la empresa (None si no está registrado: ningún código verifica)."""
+    email en el sistema de la empresa (None si no está registrado: ningún código verifica).
+    `email`: se guarda cifrado si es de un cliente, para confirmarle después un reembolso
+    (decisión 046)."""
     code = f"{secrets.randbelow(1_000_000):06d}"
+    sealed = _seal(tenant_id, email) if customer_phone and email else None
     with tenant_scope(conn, tenant_id):
         conn.execute(
             "update identity_verifications set status = 'code_sent', code_hash = %s,"
-            " phone_hash = %s, attempts = 0,"
+            " phone_hash = %s, email_enc = %s, attempts = 0,"
             " expires_at = now() + make_interval(mins => %s) where id = %s",
             (
                 _hash(verification.id, code),
                 hash_phone(customer_phone) if customer_phone else None,
+                sealed,
                 CODE_TTL_MINUTES,
                 verification.id,
             ),
         )
     return code
+
+
+def _seal(tenant_id: uuid.UUID, email: str) -> str | None:
+    """El email cifrado con la clave de la empresa. Sin ENCRYPTION_KEY no se guarda: la
+    verificación sigue y solo falta el email de confirmación."""
+    try:
+        return crypto.encrypt_for(tenant_id, email.strip())
+    except RuntimeError:
+        logger.warning("Sin ENCRYPTION_KEY: no se guarda el email de la verificación.")
+        return None
+
+
+def verified_email(
+    conn: psycopg.Connection, tenant_id: uuid.UUID, contact_id: uuid.UUID
+) -> str | None:
+    """El email con el que el contacto se verificó, mientras la verificación sigue vigente y es
+    la del cliente que el contacto demostró ser. None si no hay uno."""
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "select v.email_enc from identity_verifications v"
+            " join contacts c on c.id = v.contact_id"
+            " where v.contact_id = %s and v.status = 'verified' and v.email_enc is not null"
+            " and v.phone_hash = c.verified_phone_hash and c.verified_until > now()"
+            " order by v.created_at desc limit 1",
+            (contact_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    try:
+        return crypto.decrypt_for(tenant_id, row[0])
+    except (RuntimeError, InvalidToken):
+        return None
 
 
 def check_code(

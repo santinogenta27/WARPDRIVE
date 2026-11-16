@@ -492,7 +492,7 @@ class Agent:
         email = email_code.EMAIL.search(turn.text)
         if email is not None:
             phone = self._guardian.customer_phone(turn.tenant_id, email.group(0))
-            code = email_code.send_code(self._conn, turn.tenant_id, pending, phone)
+            code = email_code.send_code(self._conn, turn.tenant_id, pending, phone, email.group(0))
             if phone is not None:
                 letter = email_code.code_email(
                     to=email.group(0), company=company, code=code, language=turn.lang
