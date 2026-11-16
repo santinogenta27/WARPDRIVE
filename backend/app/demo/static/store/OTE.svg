@@ -1,0 +1,11 @@
+<svg class="art" viewBox="0 0 400 500" data-art="OTE" aria-hidden="true" focusable="false">
+  <ellipse class="sh" cx="200" cy="440" rx="118" ry="10"/>
+  <path class="b" d="M172 114L122 134L76 198L106 232L136 210L136 406Q200 414 264 406L264 210L294 232L324 198L278 134L228 114Q200 132 172 114Z"/>
+  <path class="d" d="M136 210L136 252L126 222Z"/>
+  <path class="d" d="M264 210L264 252L274 222Z"/>
+  <path class="st" d="M86 188L114 222M314 188L286 222"/>
+  <path class="dd" d="M174 114Q200 102 226 114Q200 126 174 114Z"/>
+  <path class="d" d="M168 115Q200 146 232 115L225 110Q200 136 175 110Z"/>
+  <path class="st" d="M138 394Q200 402 262 394"/>
+  <path class="hi" d="M152 154C148 220 148 320 150 386"/>
+</svg>

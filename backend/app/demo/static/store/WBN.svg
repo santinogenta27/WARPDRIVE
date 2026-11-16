@@ -1,0 +1,16 @@
+<svg class="art" viewBox="0 0 400 500" data-art="WBN" aria-hidden="true" focusable="false">
+  <defs>
+    <clipPath id="clip-wbn-crown"><path d="M118 304C112 200 160 142 200 142C240 142 288 200 282 304Z"/></clipPath>
+    <clipPath id="clip-wbn-cuff"><path d="M108 298Q200 286 292 298L296 382Q200 396 104 382Z"/></clipPath>
+  </defs>
+  <ellipse class="sh" cx="200" cy="420" rx="108" ry="10"/>
+  <path class="b" d="M118 304C112 200 160 142 200 142C240 142 288 200 282 304Z"/>
+  <g clip-path="url(#clip-wbn-crown)"><path class="rib soft" d="M100 230H300" style="stroke-width:180"/></g>
+  <path class="st" d="M200 146V296"/>
+  <path class="st o" d="M172 152C152 192 146 244 148 300M228 152C248 192 254 244 252 300"/>
+  <path class="hi" d="M142 226C150 188 166 166 184 158"/>
+  <path class="d" d="M108 298Q200 286 292 298L296 382Q200 396 104 382Z"/>
+  <g clip-path="url(#clip-wbn-cuff)"><path class="rib" d="M100 340H300" style="stroke-width:110"/></g>
+  <path class="st" d="M106 340Q200 352 294 340"/>
+  <rect class="lea" x="184" y="350" width="32" height="20" rx="3"/>
+</svg>

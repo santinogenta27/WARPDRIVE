@@ -1,0 +1,21 @@
+<svg class="art" viewBox="0 0 400 500" data-art="TRJ" aria-hidden="true" focusable="false">
+  <ellipse class="sh" cx="200" cy="448" rx="124" ry="10"/>
+  <path class="d" d="M150 134C140 62 260 62 250 134C236 116 164 116 150 134Z"/>
+  <path class="dd" d="M170 116C168 84 232 84 230 116C218 108 182 108 170 116Z"/>
+  <path class="b" d="M124 140C101 150 88 172 82 206L62 382L102 389L136 236L140 146Z"/>
+  <path class="b" d="M276 140C299 150 312 172 318 206L338 382L298 389L264 236L260 146Z"/>
+  <path class="d" d="M130 236L102 389L114 390L133 266Z"/>
+  <path class="d" d="M270 236L298 389L286 390L267 266Z"/>
+  <path class="dd" d="M64 366L104 372L102 389L62 382Z"/>
+  <path class="dd" d="M336 366L296 372L298 389L338 382Z"/>
+  <path class="b" d="M168 112L124 140C131 170 135 202 133 236L129 413Q200 423 271 413L267 236C265 202 269 170 276 140L232 112Z"/>
+  <path class="l" d="M168 112C172 136 184 148 200 150C216 148 228 136 232 112L222 108C218 126 210 134 200 134C190 134 182 126 178 108Z"/>
+  <path class="st" d="M134 170Q200 184 266 170"/>
+  <path class="d" d="M129 398Q200 408 271 398L271 413Q200 423 129 413Z"/>
+  <path class="zip" d="M200 150V416"/>
+  <rect class="m" x="196" y="154" width="8" height="18" rx="3"/>
+  <path class="zip" d="M220 204L252 194"/>
+  <path class="zip" d="M151 300L160 352"/>
+  <path class="zip" d="M249 300L240 352"/>
+  <path class="hi" d="M148 160C144 230 144 320 146 390"/>
+</svg>

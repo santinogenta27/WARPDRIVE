@@ -1,0 +1,21 @@
+<svg class="art" viewBox="0 0 400 500" data-art="CFP" aria-hidden="true" focusable="false">
+  <ellipse class="sh" cx="200" cy="444" rx="104" ry="9"/>
+  <path class="b" d="M134 106H266L284 432H216L202 202H198L184 432H116Z"/>
+  <path class="d" d="M198 202L184 432H172L192 214Z"/>
+  <path class="d" d="M202 202L216 432H228L208 214Z"/>
+  <path class="d" d="M117 412H185L184 432H116Z"/>
+  <path class="d" d="M215 412H283L284 432H216Z"/>
+  <path class="st" d="M117 416H185M215 416H283"/>
+  <path class="d" d="M234 236H272L274 300Q254 306 236 300Z"/>
+  <path class="st" d="M234 248H272"/>
+  <rect class="b" x="132" y="90" width="136" height="22" rx="2"/>
+  <path class="st" d="M134 112H266"/>
+  <rect class="d" x="146" y="86" width="8" height="30" rx="2"/>
+  <rect class="d" x="246" y="86" width="8" height="30" rx="2"/>
+  <circle class="m" cx="200" cy="101" r="4.5"/>
+  <path class="st" d="M207 112V178Q207 194 196 200"/>
+  <path class="st" d="M152 113Q158 142 135 154"/>
+  <path class="st" d="M248 113Q242 142 265 154"/>
+  <path class="hi" d="M152 170L144 396"/>
+  <path class="hi" d="M244 320L254 396"/>
+</svg>

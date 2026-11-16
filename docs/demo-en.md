@@ -19,6 +19,8 @@ Probado de punta a punta en Chrome el 13 de noviembre de 2026, con el modelo de 
 5. **La página del video:** en otra pestaña, `http://localhost:8000/demo/northwind-outfitters`.
    - Tocá el botón de las dos flechas del chat y después **"Yes, start over"**. El panel de la derecha queda en "Write in the chat to see each step here".
 6. **Ventana:** 1456×819 o más ancha (las capturas son de 1456×819), con el zoom del navegador al 100 %. El modo oscuro del sistema da el aspecto de las capturas.
+   - Para grabar en un tema sin cambiar el del sistema: `http://localhost:8000/demo/northwind-outfitters?theme=dark` (o `?theme=light`).
+   - El sitio de la tienda se rediseñó después de estas capturas (decisión 042). Cómo se ve ahora, a 1456×819 y 1920×1080, en claro y oscuro: `docs/img/demo-en/tienda-*.jpg`.
 7. **Ensayá una vez entera:** la primera respuesta del modelo del día suele tardar más.
 
 **Se graba en tiempo real y se edita.** Con el nivel gratuito de Groq cada respuesta tarda entre 5 y 80 segundos: casi todo es la espera del límite de tokens por minuto. En la edición se cortan las esperas (los tres puntos del chat) y quedan los 90 segundos.
