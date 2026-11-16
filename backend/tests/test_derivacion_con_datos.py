@@ -18,6 +18,7 @@ from typing import Any
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from simulated.english import long_date
 from simulated.stack import SimulatedStack, build_simulated_stack
 from test_northwind import _without_the_demo_northwind
 
@@ -57,8 +58,10 @@ def test_tras_verificar_y_consultar_responde_el_estado_del_pedido(
 
     assert answer.action == "responder", answer.message
     assert [(t.name, t.status) for t in answer.tool_calls] == [("consultar_pedido", "executed")]
-    # Los datos del pedido, tal como los devolvió la herramienta.
-    for fact in ("NW-4521", "UPS Ground", "1Z9A4F210377451236", "Denver", "November 14"):
+    # Los datos del pedido, tal como los devolvió la herramienta. La fecha nueva depende del día
+    # en que se corre (las fechas de la API simulada son relativas a hoy).
+    new_date = long_date(stack.acme_order("NW-4521")["delay"]["new_estimated_delivery"])
+    for fact in ("NW-4521", "UPS Ground", "1Z9A4F210377451236", "Denver", new_date):
         assert fact.lower() in answer.message.lower(), fact
     kinds = [event.kind for event in _events(stack, answer)]
     assert kinds.count("handoff_rejected") == 1

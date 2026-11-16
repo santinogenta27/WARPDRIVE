@@ -18,8 +18,10 @@ import secrets
 import sys
 import uuid
 from dataclasses import dataclass
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 import psycopg
@@ -94,15 +96,23 @@ def demo_customers(email: str | None) -> list[dict[str, Any]]:
     return [{**c, "email": wanted} for c in customers if c["phone"] in owners]
 
 
-def sandbox_client(demo_email: str | None = None) -> TestClient:
+def sandbox_client(demo_email: str | None = None, today: date | None = None) -> TestClient:
     """La API simulada de Northwind en proceso (los datos viven en memoria). `demo_email`: un
-    segundo email para la clienta del guion (ver `demo_customers`)."""
+    segundo email para la clienta del guion (ver `demo_customers`). `today`: el día respecto del
+    que se calculan las fechas de los pedidos (por defecto, hoy: al arrancar y con cada "Reset
+    demo")."""
+    api = api_module()
+    return TestClient(api.create_app(extra_customers=demo_customers(demo_email), today=today))
+
+
+def api_module() -> ModuleType:
+    """El módulo de la API simulada (`mocks/northwind-api/northwind_api.py`)."""
     mocks = str(API_DIR)
     if mocks not in sys.path:
         sys.path.insert(0, mocks)
-    from northwind_api import create_app
+    import northwind_api
 
-    return TestClient(create_app(extra_customers=demo_customers(demo_email)))
+    return northwind_api
 
 
 @lru_cache(maxsize=1)
