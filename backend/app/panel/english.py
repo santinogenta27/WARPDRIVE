@@ -77,6 +77,19 @@ PHRASES: dict[str, str] = {
     "Aprobado": "Approved",
     "Rechazado": "Rejected",
     "Decididas": "Decided",
+    # confirmación después de decidir (demo en inglés, cambio D)
+    "Reembolso aprobado · se envió el email de confirmación": (
+        "Refund approved · confirmation email sent"
+    ),
+    "Reembolso aprobado · no se pudo enviar el email de confirmación": (
+        "Refund approved · the confirmation email couldn't be sent"
+    ),
+    "Reembolso aprobado": "Refund approved",
+    "Solicitud aprobada": "Request approved",
+    "Aprobada, pero el sistema de la empresa no pudo completarla": (
+        "Approved, but the company's system couldn't complete it"
+    ),
+    "Solicitud rechazada": "Request rejected",
     "No hay pedidos esperando aprobación.": "Nothing is waiting for approval.",
     "Las acciones de riesgo alto (como un reembolso) no se ejecutan hasta que una persona las "
     "aprueba. Al aprobar, se ejecuta por el guardián y el cliente recibe el aviso en el chat.": (
@@ -640,6 +653,7 @@ def _fact(text: str) -> str:
 
 PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
     (re.compile(r"(\d+) mensajes?"), lambda m: f"{m[1]} message{'' if m[1] == '1' else 's'}"),
+    (re.compile(r"(\d+) esperando aprobación"), lambda m: f"{m[1]} waiting for approval"),
     (
         re.compile(r"· (Chat web|WhatsApp|Canal)( · verificado)?"),
         lambda m: f"· {_CHANNELS[m[1]]}{' · verified' if m[2] else ''}",

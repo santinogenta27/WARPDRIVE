@@ -2,6 +2,7 @@
 (decisión 022). Todo texto que viene de la base o del cliente pasa por `esc`."""
 
 import html
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
@@ -80,6 +81,17 @@ border-bottom:1px solid var(--line)}
 pre{overflow:auto;background:var(--bg);padding:10px;border-radius:10px;font-size:12.5px}
 .empty{text-align:center;color:var(--muted);padding:28px}footer{text-align:center;
 color:var(--muted);font-size:12px;padding:12px}
+nav a .count{display:inline-block;min-width:20px;height:20px;margin-left:6px;padding:0 6px;
+border-radius:10px;background:var(--warn);color:var(--surface);font-size:12px;font-weight:700;
+line-height:20px;text-align:center;vertical-align:1px}
+.card.attention{border-color:var(--warn);box-shadow:0 0 0 3px var(--warn-soft)}
+.toast{position:fixed;top:78px;left:50%;z-index:10;transform:translateX(-50%);
+max-width:calc(100vw - 32px);padding:11px 18px;border-radius:12px;background:var(--ink);
+color:var(--surface);font-weight:600;box-shadow:0 12px 32px -10px rgba(0,0,0,.45);
+animation:toast 5s ease forwards}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,-8px)}6%,84%{opacity:1;
+transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,0);visibility:hidden}}
+@media (prefers-reduced-motion:reduce){.toast{animation:none}}
 """
 
 NAV = [
@@ -92,6 +104,31 @@ NAV = [
 ]
 # Solo el operador de la plataforma.
 ADMIN_NAV = [("empresas", "Empresas"), ("facturacion", "Facturación")]
+# Aprobaciones pendientes de la empresa de la sesión: `enter` lo fija en cada pedido.
+PENDING: ContextVar[int] = ContextVar("panel_pending", default=0)
+
+# Confirmación breve después de decidir una aprobación (`?aviso=…`). El texto sale de esta lista:
+# lo que venga en la URL no se muestra.
+NOTICES = {
+    "reembolso-email": "Reembolso aprobado · se envió el email de confirmación",
+    "reembolso-sin-email": "Reembolso aprobado · no se pudo enviar el email de confirmación",
+    "reembolso": "Reembolso aprobado",
+    "aprobado": "Solicitud aprobada",
+    "fallo": "Aprobada, pero el sistema de la empresa no pudo completarla",
+    "rechazado": "Solicitud rechazada",
+}
+
+
+def toast(key: str | None) -> str:
+    text = NOTICES.get(key or "")
+    if text is None:
+        return ""
+    # Se va sola; sin `?aviso` en la dirección, recargar no la vuelve a mostrar.
+    return (
+        f'<div class="toast" role="status"><span aria-hidden="true">✓</span> {esc(text)}</div>'
+        "<script>setTimeout(function(){var t=document.querySelector('.toast');"
+        "if(t)t.remove()},5200);history.replaceState(null,'',location.pathname)</script>"
+    )
 
 
 def esc(value: object) -> str:
@@ -125,8 +162,16 @@ def page(
     if english.english():  # el panel de una empresa en inglés (decisión 037)
         title = english.translate_text(title)
     items = NAV + (ADMIN_NAV if admin else [])
+    waiting = PENDING.get()
+    # Las aprobaciones pendientes se ven desde cualquier pantalla (demo en inglés, cambio D).
+    count = (
+        f'<span class="count" aria-label="{waiting} esperando aprobación">{waiting}</span>'
+        if waiting
+        else ""
+    )
     links = "".join(
-        f'<a href="/panel/{slug}" class="{"on" if slug == active else ""}">{label}</a>'
+        f'<a href="/panel/{slug}" class="{"on" if slug == active else ""}">{label}'
+        f"{count if slug == 'aprobaciones' else ''}</a>"
         for slug, label in items
     )
     nav = (

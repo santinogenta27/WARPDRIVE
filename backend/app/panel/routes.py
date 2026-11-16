@@ -30,7 +30,7 @@ from app.db.connection import connect, tenant_scope
 from app.llm.embedder import Embedder
 from app.mailer import Mailer, mailer_from_env
 from app.panel import auth, english
-from app.panel.html import RESOLVED_BY, esc, local_time, page, status_badge
+from app.panel.html import PENDING, RESOLVED_BY, esc, local_time, page, status_badge, toast
 from app.panel.labels import action_label, money, type_label
 from app.panel.notify import notify_customer
 from app.panel.privacy import mask_codes, summary
@@ -194,23 +194,29 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
         return _forbidden()
     if session.tenant_id is None:
         return _no_tenant()
-    active, language, demo = _company(deps, session.tenant_id)
+    active, language, demo, pending = _company(deps, session.tenant_id)
     if not session.admin and not active:
         return _to_login()  # la empresa fue borrada: su sesión deja de servir
     # El panel habla el idioma de la empresa (decisión 037): vale para todo este pedido.
     english.set_language(language)
+    PENDING.set(pending)  # el contador del menú
     return Ctx(session, session.tenant_id, auth.csrf_token(session.token), demo=demo)
 
 
-def _company(deps: PanelDeps, tenant_id: uuid.UUID) -> tuple[bool, str, bool]:
-    """(¿la empresa existe y está activa?, su idioma, ¿es una empresa de demo?)."""
+def _company(deps: PanelDeps, tenant_id: uuid.UUID) -> tuple[bool, str, bool, int]:
+    """(¿la empresa existe y está activa?, su idioma, ¿es una empresa de demo?, aprobaciones
+    pendientes)."""
     with deps.connection() as conn, tenant_scope(conn, tenant_id):
         row = conn.execute(
-            "select status = 'active', settings ->> 'language', settings ->> 'demo'"
+            "select status = 'active', settings ->> 'language', settings ->> 'demo',"
+            " (select count(*) from approvals a join cases c on c.id = a.case_id"
+            "  and c.archived_at is null where a.status = 'pending')"
             " from tenants where id = %s",
             (tenant_id,),
         ).fetchone()
-    return (bool(row[0]), i18n.normalize(row[1]), bool(row[2])) if row else (False, "es", False)
+    if row is None:
+        return False, "es", False, 0
+    return bool(row[0]), i18n.normalize(row[1]), bool(row[2]), int(row[3])
 
 
 def _money(value: Any) -> str:
@@ -317,7 +323,7 @@ def _approval_cards(rows: list[tuple[Any, ...]], csrf: str, *, back: str) -> str
     for approval_id, tool, params, case_id, created, customer_messages in rows:
         first_message = summary(customer_messages or [])
         cards.append(
-            f"""<div class="card"><div class="row"><div class="grow">
+            f"""<div class="card attention"><div class="row"><div class="grow">
 <span class="badge waiting_approval">Pendiente</span> <b>{esc(action_label(tool, params))}</b>
 <div class="muted small" style="margin-top:6px">“{esc(first_message or "")}” ·
 <a href="/panel/casos/{case_id}">ver caso</a> · {local_time(created)}</div></div>
@@ -372,7 +378,8 @@ def approvals_page(request: Request, deps: Deps) -> Response:
         for tool, params, status, decided, case_id, email in decided
         if decided is not None
     )
-    body = f"""<h1>Aprobaciones</h1><p class="lead">Las acciones de riesgo alto (como un reembolso)
+    body = f"""{toast(request.query_params.get("aviso"))}
+<h1>Aprobaciones</h1><p class="lead">Las acciones de riesgo alto (como un reembolso)
 no se ejecutan hasta que una persona las aprueba. Al aprobar, se ejecuta por el guardián y el
 cliente recibe el aviso en el chat.</p>{cards}
 {f"<h2>Decididas</h2>{history}" if history else ""}"""
@@ -416,6 +423,9 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
         except ApprovalError:
             # Ya decidida (doble clic o reenvío): no se ejecuta ni se avisa de nuevo.
             return RedirectResponse("/panel/aprobaciones", status_code=303)
+        notice = "rechazado" if not approve else "aprobado"
+        if approve and outcome.status != "executed":
+            notice = "fallo"
         notify_customer(
             conn,
             ctx.tenant_id,
@@ -430,10 +440,16 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
             },
         )
         if outcome.status == "executed" and tool == refund_confirmation.REFUND_TOOL:
-            refund_confirmation.send(
+            mailed = refund_confirmation.send(
                 conn, deps.mailer(), ctx.tenant_id, approval_id, outcome.result
             )
+            notice = {
+                "sent": "reembolso-email",
+                "already_sent": "reembolso-email",
+                "failed": "reembolso-sin-email",
+            }.get(mailed, "reembolso")
     target = back if back.startswith("/panel/") else "/panel/aprobaciones"
+    target += ("&" if "?" in target else "?") + f"aviso={notice}"
     return RedirectResponse(target, status_code=303)
 
 
@@ -456,6 +472,9 @@ def inbox(request: Request, deps: Deps) -> Response:
         # Regla de cierre: los que llevan 24 h sin respuesta del cliente quedan resueltos.
         close_inactive(conn, ctx.tenant_id)
         rows = _inbox_rows(conn, ctx.tenant_id)
+        waiting: dict[Any, tuple[Any, ...]] = {}  # caso -> su primera aprobación pendiente
+        for approval in _pending(conn, ctx.tenant_id):
+            waiting.setdefault(approval[3], approval)
     counts: dict[str, int] = {}
     for row in rows:
         counts[row[1]] = counts.get(row[1], 0) + 1
@@ -469,35 +488,52 @@ def inbox(request: Request, deps: Deps) -> Response:
             ("resolved", "Resueltos"),
         )
     )
-    items = (
-        "".join(
-            f"""<a class="card row" href="/panel/casos/{case_id}" style="text-decoration:none;
-color:inherit"><div class="grow"><div class="row" style="gap:8px">
+
+    def item(
+        case_id: Any,
+        status: str,
+        updated: Any,
+        type_name: Any,
+        preview: Any,
+        total: int,
+        channel: Any,
+        verified: bool,
+        resolved_by: Any,
+        reopened: bool,
+    ) -> str:
+        head = f"""<div class="row" style="gap:8px">
 {status_badge(status, resolved_by, reopened)}
 <span class="muted small">{esc(type_label(type_name))}</span>
 <span class="muted small">· {esc(CHANNELS.get(channel or "", "Canal"))}
-{" · verificado" if verified else ""}</span></div>
-<div class="ellipsis" style="margin-top:6px">{esc(summary(preview or []) or "(sin texto)")}
+{" · verificado" if verified else ""}</span></div>"""
+        text = esc(summary(preview or []) or "(sin texto)")
+        approval = waiting.get(case_id)
+        if approval is not None:
+            # Espera una aprobación: resaltada, con lo que hay que decidir y los botones a la
+            # vista (demo en inglés, cambio D).
+            approval_id, tool, params = approval[:3]
+            return f"""<div class="card row attention"><a class="grow" href="/panel/casos/{case_id}"
+style="text-decoration:none;color:inherit;min-width:0">{head}
+<div style="margin-top:6px"><b>{esc(action_label(tool, params))}</b></div>
+<div class="ellipsis muted small" style="margin-top:2px">{text}</div></a>
+<form method="post" action="/panel/aprobaciones/{approval_id}" class="row">
+<input type="hidden" name="csrf" value="{ctx.csrf}">
+<input type="hidden" name="volver" value="/panel/casos">
+<button class="danger" name="decision" value="rechazar">Rechazar</button>
+<button class="primary" name="decision" value="aprobar">Aprobar</button></form></div>"""
+        return f"""<a class="card row" href="/panel/casos/{case_id}" style="text-decoration:none;
+color:inherit"><div class="grow">{head}
+<div class="ellipsis" style="margin-top:6px">{text}
 </div></div>
 <div class="muted small" style="text-align:right">{local_time(updated)}<br>{total} mensajes
 </div></a>"""
-            for (
-                case_id,
-                status,
-                updated,
-                type_name,
-                preview,
-                total,
-                channel,
-                verified,
-                resolved_by,
-                reopened,
-            ) in rows
-        )
-        or '<div class="card empty">Todavía no hay conversaciones.</div>'
+
+    items = "".join(item(*row) for row in rows) or (
+        '<div class="card empty">Todavía no hay conversaciones.</div>'
     )
     reset = '<a class="btn" href="/panel/reiniciar">Reiniciar demo</a>' if ctx.can_reset else ""
-    body = f"""<div class="row"><h1 class="grow">Casos</h1>{reset}</div>
+    body = f"""{toast(request.query_params.get("aviso"))}
+<div class="row"><h1 class="grow">Casos</h1>{reset}</div>
 <p class="lead">Conversaciones con su estado: primero las derivadas
 a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
 confirma o pasan 24 h sin respuesta.</p><div class="kpis">{kpis}</div>
@@ -745,7 +781,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         else f'<span class="badge escalated">Cadena rota en el evento {verdict.broken_at}: '
         f"{esc(verdict.reason)}</span>"
     )
-    body = f"""<p><a href="/panel/casos">← Casos</a></p>
+    body = f"""{toast(request.query_params.get("aviso"))}<p><a href="/panel/casos">← Casos</a></p>
 <div class="row"><h1 class="grow">Caso {esc(type_label(type_name))}</h1>
 {status_badge(status, resolved_by, reopened)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
