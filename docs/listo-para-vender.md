@@ -34,7 +34,7 @@ El código de los once requisitos está en las ramas `h9-…`, con sus tests. Lo
 | 10 | Calidad | Hecho, en simulado | Medir con Groq real (cuota) |
 | 11 | Producción mínima | Parcial | Revisión del abogado; primer backup y restauración |
 
-**Evals simulados:** en verde, sin regresiones, en cada rama que cambia el agente (1 a 5, 7 y 10). Las ramas 6, 8 y 9 no tocan el agente; como están apiladas, la última (`h9-conectores-y-registro`) incluye sus cambios, y ahí Acme y Northwind salen sin regresiones.
+**Evals simulados:** Acme y Northwind en verde, sin regresiones, en cada una de las diez ramas.
 
 **De punta a punta:** cada paso de una empresa nueva tiene su test (registro, carga, reglas, playground, salir en vivo, widget), pero nadie lo recorrió entero con una empresa real. Es la primera prueba para hacer antes de vender.
 
