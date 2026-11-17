@@ -212,6 +212,32 @@ PHRASES: dict[str, str] = {
     "Ya hay una solicitud pendiente de aprobación para el mismo recurso.": (
         "There's already a pending approval for the same resource."
     ),
+    # modelo y gasto (decisión 049)
+    "Modelo y gasto": "Model and spending",
+    "Key en uso:": "Key in use:",
+    "La de la plataforma, con límites": "The platform's, with limits",
+    "Gasto del mes:": "This month's spending:",
+    "Tope:": "Cap:",
+    "Llamadas al modelo:": "Model calls:",
+    "Al 80 % se envía un aviso; al 100 %, el asistente pasa cada mensaje a una persona del equipo "
+    "hasta el mes siguiente o hasta que subas el tope.": (
+        "At 80% you get an alert; at 100%, the assistant hands every message to a person on "
+        "your team until next month or until you raise the cap."
+    ),
+    "Proveedor": "Provider",
+    "Usar la de la plataforma": "Use the platform's",
+    "API key (se guarda cifrada; dejala vacía para conservar la guardada)": (
+        "API key (stored encrypted; leave it empty to keep the saved one)"
+    ),
+    "Tope mensual en USD (vacío: sin tope propio)": (
+        "Monthly cap in USD (empty: no cap of your own)"
+    ),
+    "Guardar": "Save",
+    "Modelo y tope guardados.": "Model and cap saved.",
+    "El tope tiene que ser un número.": "The cap has to be a number.",
+    "El tope no puede ser negativo.": "The cap can't be negative.",
+    "Falta la API key de ese proveedor.": "The API key for that provider is missing.",
+    "Elegí un proveedor de la lista.": "Choose a provider from the list.",
     # vista detrás de escena (decisión 041)
     "Vista detrás de escena": "Behind the scenes",
     "Activada": "On",

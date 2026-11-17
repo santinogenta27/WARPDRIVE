@@ -89,7 +89,10 @@ class GroqTransport:
         max_wait: float | None = None,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
+        url: str = API_URL,
     ) -> None:
+        # `url`: la misma API de chat completions en otro proveedor (OpenAI, decisión 049).
+        self._url = url
         self._api_key = api_key or os.environ.get("GROQ_API_KEY", "")
         self._http = http_client or httpx.Client(timeout=120.0)
         if min_tokens is None:
@@ -111,7 +114,7 @@ class GroqTransport:
             self._respect_tokens(model)
             try:
                 response = self._http.post(
-                    API_URL, headers={"Authorization": f"Bearer {self._api_key}"}, json=body
+                    self._url, headers={"Authorization": f"Bearer {self._api_key}"}, json=body
                 )
             except httpx.TransportError:
                 if last:

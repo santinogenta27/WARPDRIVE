@@ -562,7 +562,10 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 
 | Tarea | Rama | Pull request | Decisión |
 |---|---|---|---|
-| 1. Acciones prometidas y casos adversariales | `h9-calidad` | (ver abajo) | 048 |
+| 1. Acciones prometidas y casos adversariales | `h9-calidad` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-calidad) | 048 |
+| 2. API key por empresa y tope de gasto | `h9-modelo-gasto` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-modelo-gasto) | 049 |
+
+Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
 ### Tarea 1 — Acciones prometidas y casos adversariales (decisión 048)
 
@@ -572,6 +575,16 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 - **Falta:** medir con Groq real (no se corrió).
 - **Qué tenés que hacer vos:** nada.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_acciones_prometidas.py` y `python evals/runner.py --simulated` (también con `--company northwind`).
+
+### Tarea 2 — API key por empresa y tope de gasto (decisión 049)
+
+- **Hecho:** Configuración → **Modelo y gasto**: proveedor (Anthropic, OpenAI, Groq o Gemini), key cifrada que nunca se muestra, y tope mensual en USD. Muestra el gasto del mes contra el tope.
+- **Sin key propia:** usa la tuya, con un tope de USD 5 y 2000 llamadas por mes (`SHARED_MONTHLY_USD`, `SHARED_MONTHLY_CALLS`). Acme y Northwind no tienen límite de llamadas.
+- **Al 80 %:** alerta por email al operador. **Al 100 %:** cada mensaje va a una persona sin llamar al modelo; Why dice "La empresa llegó al tope de gasto del mes".
+- **Métricas** (resueltos, derivados, CSAT, costo): ya estaban.
+- **Falta:** probar una key real de cada proveedor; verificar los precios de `gpt-5-mini`.
+- **Qué tenés que hacer vos:** si querés otros límites, cargar `SHARED_MONTHLY_USD` y `SHARED_MONTHLY_CALLS` en Render.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_modelo_y_gasto.py`.
 
 ## Qué significa "simulado"
 

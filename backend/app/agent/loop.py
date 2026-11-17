@@ -35,6 +35,7 @@ from app.cases import billing, closing, csat
 from app.channels.whatsapp.format import to_whatsapp
 from app.db.connection import tenant_scope
 from app.identity import email_code
+from app.llm import spending
 from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
@@ -230,6 +231,7 @@ HANDOFF_CAUSES = (
     "formato",  # detalle: el problema de presentable.ISSUES
     "reverificar",
     "accion_sin_herramienta",
+    "tope_de_gasto",
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
     "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
@@ -420,6 +422,9 @@ class Agent:
             case_cost=Decimal(row[0]) if row else Decimal(0),
             turn_cost=turn_cost,
         )
+        # Aviso al cruzar el 80 % y el 100 % del tope de gasto del mes (decisión 049).
+        calls = sum(1 for r in timer.records if "llm.cost_usd" in r["attrs"])
+        spending.check_turn(self._conn, tenant_id, turn_cost=turn_cost, turn_calls=calls)
 
     def _handle(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
         company, tone, lang = self._tenant(tenant_id)
@@ -427,13 +432,21 @@ class Agent:
         rated = self._csat_answer(tenant_id, contact, text, tone, lang)
         if rated is not None:
             return rated
-        case_id, classification = self._open_case(tenant_id, contact_id, company, text, lang)
+        # Tope de gasto mensual alcanzado (decisión 049): deriva sin llamar al modelo.
+        capped = spending.over(self._conn, tenant_id)
+        case_id, classification = self._open_case(
+            tenant_id, contact_id, company, text, lang, classify_reopen=not capped
+        )
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(
             tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone, lang=lang
         )
         turn.classification = classification
         self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
+        if capped:
+            return self._escalate(
+                turn, "Tope de gasto mensual alcanzado.", {"tipo": "tope_de_gasto"}
+            )
         pending: email_code.Verification | None = None
         if not contact.verified:
             pending = email_code.open_verification(self._conn, tenant_id, contact_id)
@@ -1184,7 +1197,14 @@ class Agent:
         return ContactContext(id=row[0], phone_hash=row[1], verified=row[2])
 
     def _open_case(
-        self, tenant_id: uuid.UUID, contact_id: uuid.UUID, company: str, text: str, lang: str = "es"
+        self,
+        tenant_id: uuid.UUID,
+        contact_id: uuid.UUID,
+        company: str,
+        text: str,
+        lang: str = "es",
+        *,
+        classify_reopen: bool = True,
     ) -> tuple[uuid.UUID, Classification | None]:
         """El caso del mensaje: el que el contacto tiene abierto; si no, el que resolvió hace
         menos de 7 días por el mismo tema, que se reabre (regla de reapertura); si no, uno
@@ -1202,7 +1222,7 @@ class Agent:
             return row[0], None
         classification: Classification | None = None
         candidate = billing.reopen_candidate(self._conn, tenant_id, contact_id)
-        if candidate is not None and not closing.is_confirmation(text):
+        if candidate is not None and classify_reopen and not closing.is_confirmation(text):
             case_types = self._active_case_types(tenant_id)
             classification = classify(
                 self._llm,

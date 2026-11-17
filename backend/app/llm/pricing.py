@@ -37,6 +37,9 @@ PRICES: dict[str, Price] = {
     "openai/gpt-oss-120b": Price(_d("0"), _d("0"), _d("0"), _d("0")),
     "openai/gpt-oss-20b": Price(_d("0"), _d("0"), _d("0"), _d("0")),
     "qwen/qwen3.8-27b": Price(_d("0"), _d("0"), _d("0"), _d("0")),
+    # OpenAI, con la key de la empresa (decisión 049). Tarifas publicadas de gpt-5-mini:
+    # verificarlas antes de facturar, porque cambian.
+    "gpt-5-mini": Price(_d("0.25"), _d("2"), _d("0.25"), _d("0.025")),
 }
 
 

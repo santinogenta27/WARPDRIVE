@@ -83,6 +83,7 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
         "accion_sin_herramienta": (
             "Answer blocked by grounding check: it claimed an action no tool performed"
         ),
+        "tope_de_gasto": "The company reached its monthly spending cap",
         "limite_pasos": "Reached the step limit without a valid answer",
         "agente": "The agent chose to hand off",
         "agente_reconsiderada": (
@@ -100,6 +101,7 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
             "Respuesta frenada por el control de fundamento: afirmó una acción que ninguna "
             "herramienta hizo"
         ),
+        "tope_de_gasto": "La empresa llegó al tope de gasto del mes",
         "limite_pasos": "Llegó al límite de pasos sin una respuesta válida",
         "agente": "El agente eligió derivar",
         "agente_reconsiderada": (

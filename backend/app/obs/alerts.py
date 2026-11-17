@@ -36,6 +36,8 @@ SUBJECTS = {
     "latencia": "latencia alta",
     "costo_por_caso": "costo por caso",
     "errores": "errores",
+    "gasto_80": "gasto del mes al 80 % del tope",
+    "gasto_100": "gasto del mes en el tope: el asistente deriva todo a una persona",
 }
 
 
@@ -60,6 +62,9 @@ def _alert(kind: str, **fields: Any) -> str:
     logger.warning(line)
     _email(kind, str(fields.get("tenant", "")), line)
     return line
+
+
+alert = _alert  # para otros módulos (el tope de gasto, decisión 049)
 
 
 def _email(kind: str, tenant: str, line: str) -> None:

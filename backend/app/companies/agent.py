@@ -47,7 +47,9 @@ def build_agent(conn: psycopg.Connection, tenant_id: uuid.UUID) -> "Agent":
     from app.agent.loop import Agent
     from app.llm.client import LLMClient, PostgresUsageRecorder
     from app.llm.factory import embedder_from_env
+    from app.llm.tenant_llm import provider_for
 
     recorder = PostgresUsageRecorder(conn)
-    llm = LLMClient(provider=shared_provider(), recorder=recorder)
+    # Con la key propia de la empresa, su proveedor; si no, el de la plataforma (decisión 049).
+    llm = LLMClient(provider=provider_for(conn, tenant_id, shared_provider), recorder=recorder)
     return Agent(conn, llm, embedder_from_env(recorder), build_guardian(conn, tenant_id))
