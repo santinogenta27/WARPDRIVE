@@ -36,7 +36,7 @@ El código de los once requisitos está en las ramas `h9-…`, con sus tests. Lo
 
 **Evals simulados:** Acme y Northwind en verde, sin regresiones, en cada una de las diez ramas.
 
-**De punta a punta:** cada paso de una empresa nueva tiene su test (registro, carga, reglas, playground, salir en vivo, widget), pero nadie lo recorrió entero con una empresa real. Es la primera prueba para hacer antes de vender.
+**De punta a punta:** `test_empresa_nueva.py` recorre el camino entero de una empresa nueva, sola: registro y confirmación del email, subir su política, reglas y dominio, playground, salir en vivo, el widget respondiendo en su sitio con su documento, y el caso en el panel. Con el modelo simulado y con el reporte del análisis ya cargado. Falta hacerlo con una empresa real y el modelo real.
 
 ## Orden de trabajo
 
