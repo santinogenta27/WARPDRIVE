@@ -377,6 +377,7 @@ class Agent:
         self._model = model
         self._max_steps = max_steps
         self._mailer = mailer or mailer_from_env()
+        self._assistant = ""  # nombre del asistente de la empresa del turno (decisión 052)
 
     # -- entrada ---------------------------------------------------------------------------
     def handle_message(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
@@ -651,7 +652,7 @@ class Agent:
                 "chunk_ids": [str(d.chunk_id) for d in turn.documents],
             },
         )
-        system = prompt.system_prompt(company, tone, instructions)
+        system = prompt.system_prompt(company, tone, instructions, self._assistant)
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
@@ -671,7 +672,7 @@ class Agent:
         goals = "; ".join(goal for goal, _ in case_types.values()) or turn.say("store_questions")
         template = CHAT_INSTRUCTIONS_EN if turn.lang == "en" else CHAT_INSTRUCTIONS
         instructions = template.format(empresa=company, capacidades=goals)
-        system = prompt.system_prompt(company, tone, instructions)
+        system = prompt.system_prompt(company, tone, instructions, self._assistant)
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
@@ -1189,6 +1190,8 @@ class Agent:
         tone = str(settings.get("tone", "rioplatense"))
         if lang == "en" and not prompt.is_english(tone):
             tone = "english"
+        # El nombre que eligió la empresa para el asistente (decisión 052), para el prompt.
+        self._assistant = str((settings.get("brand") or {}).get("assistant") or "")
         return row[0], tone, lang
 
     def _contact(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> ContactContext:

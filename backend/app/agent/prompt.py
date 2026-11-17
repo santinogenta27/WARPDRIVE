@@ -114,7 +114,7 @@ def conduct_rules() -> str:
     return (PROMPTS_DIR / f"{CONDUCT_VERSION}.txt").read_text(encoding="utf-8").strip()
 
 
-def system_prompt(company: str, tone: str, case_type_instructions: str) -> str:
+def system_prompt(company: str, tone: str, case_type_instructions: str, assistant: str = "") -> str:
     name = SYSTEM_PROMPT_VERSION + (ENGLISH_SUFFIX if is_english(tone) else "")
     template = (PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
     fixed = template.replace("{empresa}", company).replace(
@@ -122,6 +122,13 @@ def system_prompt(company: str, tone: str, case_type_instructions: str) -> str:
     )
     if is_english(tone):
         fixed = f"{fixed.rstrip()}\n{conduct_rules()}"
+    if assistant:  # el nombre que eligió la empresa (decisión 052); sin nombre, no cambia nada
+        intro = (
+            f"Your name is {_escape(assistant)}: introduce yourself with it."
+            if is_english(tone)
+            else f"Te llamás {_escape(assistant)}: presentate con ese nombre."
+        )
+        fixed = f"{fixed.rstrip()}\n{intro}"
     return f"{fixed}\n<tipo_de_caso>\n{case_type_instructions.strip()}\n</tipo_de_caso>"
 
 

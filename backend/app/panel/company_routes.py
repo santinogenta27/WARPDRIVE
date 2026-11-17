@@ -765,8 +765,9 @@ WIDGET_PREVIEW_JS = """(function(){var f=document.getElementById("widget-form");
 var logo=null;function v(n){return f.elements[n].value}
 function push(){if(!window.EnterpriseChat)return;var c={name:v("nombre").trim(),accent:v("color"),
 suggestions:v("sugerencias").split("\\n").map(function(s){return s.trim()}).filter(Boolean)
-.slice(0,4)};
+.slice(0,4),greeting:v("saludo").trim()};
 if(logo!==null)c.logo=logo;window.EnterpriseChat.setBrand(c)}
+f.elements.saludo.addEventListener("input",push);
 f.elements.pick.addEventListener("input",function(){f.elements.color.value=this.value;push()});
 f.elements.color.addEventListener("input",function(){if(/^#[0-9a-fA-F]{6}$/.test(this.value))
 f.elements.pick.value=this.value;push()});
@@ -816,6 +817,12 @@ subdominios y <span class="mono">localhost</span> para probar en tu computadora.
  pattern="#[0-9a-fA-F]{{6}}" value="{esc(found.accent)}"></div>
 <label for="logo">Logo (PNG, JPG o WebP, cuadrado, hasta 200 KB)</label>
 <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">{logo_note}
+<label for="asistente">Nombre del asistente (opcional)</label>
+<input id="asistente" name="asistente" maxlength="40" value="{esc(found.assistant)}"
+ placeholder="Por ejemplo: Nina">
+<label for="saludo">Saludo al abrir el chat (opcional)</label>
+<textarea id="saludo" name="saludo" maxlength="300" style="min-height:70px"
+ placeholder="{esc(widget.greeting(found.name, found.language))}">{esc(found.greeting)}</textarea>
 <label for="sugerencias">Preguntas sugeridas (hasta 4, una por línea)</label>
 <textarea id="sugerencias" name="sugerencias" style="min-height:96px"
  placeholder="¿Hacen envíos?">{esc(chr(10).join(found.suggestions))}</textarea>
@@ -848,6 +855,8 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
                 suggestions=fields.get("sugerencias", ""),
                 logo=data.files[0].data if data.files else None,
                 remove_logo=fields.get("quitar_logo") == "si",
+                assistant=fields.get("asistente", ""),
+                greeting=fields.get("saludo", ""),
             )
     except widget.WidgetError as error:
         return _back("configuracion", error=str(error))

@@ -735,6 +735,7 @@ transition-duration:.01ms!important}
     setBrand: function (changes) {
       if (!cfg) return;
       if (changes.name) { cfg.name = changes.name; cfg.greeting = T.greeting(changes.name); }
+      if (changes.greeting) cfg.greeting = changes.greeting;
       if (/^#[0-9a-f]{6}$/i.test(changes.accent || "")) cfg.accent = changes.accent;
       if ("logo" in changes) cfg.logo = changes.logo;
       if (changes.suggestions) cfg.suggestions = changes.suggestions;

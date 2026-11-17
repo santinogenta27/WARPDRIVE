@@ -238,6 +238,15 @@ PHRASES: dict[str, str] = {
     "El tope no puede ser negativo.": "The cap can't be negative.",
     "Falta la API key de ese proveedor.": "The API key for that provider is missing.",
     "Elegí un proveedor de la lista.": "Choose a provider from the list.",
+    # nombre y saludo del asistente (decisión 052)
+    "Nombre del asistente (opcional)": "Assistant's name (optional)",
+    "Saludo al abrir el chat (opcional)": "Greeting when the chat opens (optional)",
+    "Por ejemplo: Nina": "For example: Nina",
+    "El nombre del asistente tiene que tener entre 2 y 40 caracteres.": (
+        "The assistant's name has to be 2 to 40 characters long."
+    ),
+    "El saludo puede tener hasta 300 caracteres.": "The greeting can be up to 300 characters.",
+    "El nombre y el saludo no pueden llevar < ni >.": "The name and greeting can't contain < or >.",
     # reglas de atención (decisión 051)
     "Reglas de atención": "Service rules",
     "Exige identidad verificada": "Requires a verified identity",

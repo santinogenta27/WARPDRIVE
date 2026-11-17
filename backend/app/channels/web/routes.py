@@ -374,7 +374,7 @@ def widget_config(request: Request, deps: Deps, canal: str = "") -> JSONResponse
             "name": found.name,
             "accent": found.accent,
             "logo": f"/chat/widget/logo/{slug}?v={version}" if found.has_logo else None,
-            "greeting": widget.greeting(found.name, found.language),
+            "greeting": widget.greeting_for(found),
             "suggestions": list(found.suggestions)
             or (DEMO_SUGGESTIONS if slug == _slug(deps, "") else []),
             "limit": MESSAGE_LIMIT,

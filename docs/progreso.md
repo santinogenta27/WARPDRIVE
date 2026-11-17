@@ -566,6 +566,7 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 | 2. API key por empresa y tope de gasto | `h9-modelo-gasto` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-modelo-gasto) | 049 |
 | 3. Carga de documentos desde el panel | `h9-documentos` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-documentos) | 050 |
 | 4. Reglas de atención en el panel | `h9-reglas` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-reglas) | 051 |
+| 5. Nombre y saludo del asistente | `h9-marca` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-marca) | 052 |
 
 Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
@@ -604,6 +605,14 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
 - **Falta:** nada de lo pedido.
 - **Qué tenés que hacer vos:** nada.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_reglas.py`.
+
+### Tarea 5 — Nombre y saludo del asistente (decisión 052)
+
+- **Hecho:** en Configuración → Widget → Marca, el nombre del asistente (se presenta con él) y el saludo al abrir el chat, con vista previa.
+- **Ya estaba:** nombre que ve el cliente, color, logo, sugerencias e idioma con su tono.
+- **Falta:** atender en dos idiomas a la vez en la misma empresa (hoy uno por empresa).
+- **Qué tenés que hacer vos:** nada.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_tono_y_marca.py`.
 
 ## Qué significa "simulado"
 
