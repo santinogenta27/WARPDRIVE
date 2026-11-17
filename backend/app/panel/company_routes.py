@@ -26,6 +26,7 @@ from app.llm import spending, tenant_llm
 from app.onboarding import ingest as ingestion
 from app.onboarding.ingest import Upload
 from app.panel import auth
+from app.panel.guides import guides_html
 from app.panel.html import esc, local_time, page
 from app.panel.labels import money, tool_label, type_label
 from app.panel.routes import Ctx, Deps, Form, PanelDeps, _forbidden, _not_found, _user_id, enter
@@ -797,6 +798,7 @@ def _widget_html(ctx: Ctx, request: Request, slug: str, found: widget.WidgetSett
 donde quieras el chat. Aparece una burbuja abajo a la derecha.</p>
 <pre id="snippet">{esc(code)}</pre>
 <button type="button" id="copy-snippet" data-done="Copiado">Copiar código</button>
+{guides_html()}
 <form method="post" action="/panel/configuracion/widget" enctype="multipart/form-data"
  id="widget-form">{_csrf(ctx)}
 <h3>2. Dominios permitidos</h3>

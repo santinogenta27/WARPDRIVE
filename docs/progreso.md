@@ -567,6 +567,7 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 | 3. Carga de documentos desde el panel | `h9-documentos` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-documentos) | 050 |
 | 4. Reglas de atención en el panel | `h9-reglas` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-reglas) | 051 |
 | 5. Nombre y saludo del asistente | `h9-marca` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-marca) | 052 |
+| 6. Guías de instalación | `h9-instalacion` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-instalacion) | 053 |
 
 Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
@@ -613,6 +614,14 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
 - **Falta:** atender en dos idiomas a la vez en la misma empresa (hoy uno por empresa).
 - **Qué tenés que hacer vos:** nada.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_tono_y_marca.py`.
+
+### Tarea 6 — Guías de instalación (decisión 053)
+
+- **Hecho:** debajo del código para copiar, guías desplegables para Shopify, WordPress, Tiendanube y WhatsApp, en el idioma de la empresa. También en `docs/instalacion.md`, para mandarlas por email.
+- **Ya estaba:** el snippet con "Copiar código", los dominios permitidos y la vista previa.
+- **Falta:** probar los pasos en una tienda real de cada plataforma (los menús cambian seguido).
+- **Qué tenés que hacer vos:** nada. Para WhatsApp de un cliente, el trámite con Meta sigue siendo manual.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_instalacion.py`. Solo toca el panel: los evals no cambian.
 
 ## Qué significa "simulado"
 
