@@ -571,6 +571,7 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 | 7. Aviso al equipo por email | `h9-bandeja` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-bandeja) | 054 |
 | 8. Probar antes de salir en vivo | `h9-go-live` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-go-live) | 056 |
 | 9. Producción mínima | `h9-produccion` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-produccion) | 055 |
+| 10. Shopify, Tiendanube y registro self-service | `h9-conectores-y-registro` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-conectores-y-registro) | 057, 058 |
 
 Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
@@ -658,14 +659,24 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
   - cargar `ALERT_EMAIL_TO` en Render.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_produccion.py`.
 
-### Tarea 10 — Conectores de Shopify y Tiendanube, y registro self-service (decisiones 057 y 058) — INCOMPLETA
+### Tarea 10 — Conectores de Shopify y Tiendanube, y registro self-service (decisiones 057 y 058)
 
-Rama `h9-conectores-y-registro`, [abrir PR](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-conectores-y-registro). Se cortó por el límite de uso.
+Rama `h9-conectores-y-registro`, [abrir PR](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-conectores-y-registro).
 
-- **Hecho:** conectores de Shopify y Tiendanube sobre la API canónica de tienda; "Conectar tienda" y "Probar herramientas" en Configuración → Sistema; registro en `/registro` con confirmación por email; invitaciones con rol (admin o persona del equipo) en **Equipo**; la persona del equipo no entra a Configuración, Onboarding ni Equipo. Migración 0022 (aditiva).
-- **Tests:** `test_conectores.py` en verde. `test_registro.py`: 2 de 3 en verde; **falla `test_de_punta_a_punta_registro_invitacion_y_roles`** (`assert None is not None`, sin revisar).
-- **Falta:** arreglar ese test; traducir al inglés los textos nuevos de Configuración → Sistema (puede fallar `test_panel_ingles`); correr los evals simulados; probar con una tienda de desarrollo de Shopify real.
-- **Qué tenés que hacer vos:** crear una tienda de desarrollo de Shopify (gratis) y una app propia con su token para probar.
+- **Hecho:**
+  - **Shopify y Tiendanube:** Configuración → Sistema → "Conectar tienda" (tienda y token, cifrado). Pedidos, envíos y cupones; reembolsos en Shopify (en Tiendanube los hace una persona, porque su API no reembolsa). Las herramientas quedan sin aprobar, con los controles de siempre del guardián.
+  - **Probar herramientas:** cada herramienta de consulta, con un pedido de ejemplo, contra el sistema real.
+  - **Registro en `/registro`:** la empresa se crea recién al confirmar el email; ese usuario queda como admin. Enlace desde el login.
+  - **Equipo:** invitaciones con rol (admin o persona del equipo). La persona del equipo no entra a Configuración, Onboarding ni Equipo.
+  - Migración 0022, aditiva.
+- **Ya estaba:** OpenAPI con credenciales cifradas, prueba de conexión y activación.
+- **Falta:** probar contra una tienda real de cada plataforma (los tests usan respuestas de ejemplo de su documentación).
+- **Qué tenés que hacer vos:** crear una tienda de desarrollo de Shopify (gratis) con una app propia y su token, y probar "Conectar tienda". Sin Resend, el enlace del registro sale en el log del servidor.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_conectores.py backend/tests/test_registro.py`.
+
+### Cierre del Hito 9
+
+Las diez tareas están en sus ramas, apiladas: conviene mergearlas en orden, de `h9-calidad` a `h9-conectores-y-registro`. Ninguna está mergeada. No se hizo ninguna llamada a Groq real.
 
 ## Qué significa "simulado"
 

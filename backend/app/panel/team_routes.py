@@ -37,8 +37,8 @@ def team_page(request: Request, deps: Deps, ok: str = "", error: str = "") -> Re
     body = f"""<h1>Equipo</h1><p class="lead">Quién usa el panel de {esc(ctx.session.company)}.</p>
 {notice}<div class="card"><table><tr><th>Email</th><th>Rol</th><th>Estado</th></tr>{rows}</table>
 </div><div class="card"><h2 style="margin-top:0">Invitar</h2>
-<form method="post" action="/panel/equipo/invitar"><input type="hidden" name="csrf"
- value="{ctx.csrf}"><label for="email">Email</label>
+<form method="post" action="/panel/equipo/invitar">
+<input type="hidden" name="csrf" value="{ctx.csrf}"><label for="email">Email</label>
 <input id="email" name="email" type="email" required style="max-width:360px">
 <label for="rol">Rol</label><select id="rol" name="rol" style="max-width:260px">{options}</select>
 <p class="muted small">Un admin ve y cambia todo. Una persona del equipo atiende Casos y

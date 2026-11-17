@@ -238,6 +238,26 @@ PHRASES: dict[str, str] = {
     "El tope no puede ser negativo.": "The cap can't be negative.",
     "Falta la API key de ese proveedor.": "The API key for that provider is missing.",
     "Elegí un proveedor de la lista.": "Choose a provider from the list.",
+    # conectar una tienda y probar herramientas (decisión 057)
+    "¿Usás Shopify o Tiendanube?": "Do you use Shopify or Tiendanube?",
+    "Conectá tu tienda sin OpenAPI: se crean las herramientas de pedidos, envíos, reembolsos y "
+    "cupones, sin aprobar. Después probá la conexión y aprobalas más arriba.": (
+        "Connect your store without an OpenAPI: the order, shipping, refund and coupon tools are "
+        "created, unapproved. Then test the connection and approve them above."
+    ),
+    "Plataforma": "Platform",
+    "Tienda (Shopify: mitienda.myshopify.com · Tiendanube: el número de tu tienda)": (
+        "Store (Shopify: mystore.myshopify.com · Tiendanube: your store number)"
+    ),
+    "Token de acceso (de una app propia de tu tienda)": (
+        "Access token (from a custom app of your store)"
+    ),
+    "Conectar tienda": "Connect store",
+    "Número de pedido de ejemplo": "Sample order number",
+    "Probar herramientas": "Test tools",
+    "Tienda conectada. Probá la conexión y aprobá sus herramientas.": (
+        "Store connected. Test the connection and approve its tools."
+    ),
     # equipo e invitaciones (decisión 058)
     "¿Tu empresa no tiene cuenta?": "Your company doesn't have an account?",
     "Creala acá": "Create it here",

@@ -16,6 +16,10 @@
 | 10 | Calidad: nunca inventa, nunca promete, adversariales | Parcial | Fundamento (`agent/grounding.py`); acción afirmada sin herramienta se rechaza una vez y después deriva con motivo en "Why" (`agent/conduct.py`, decisión 040). Falta: "enviado"/"sent" y pasivas ("está aplicado"); una aprobación pendiente no respalda "reembolsado"; adversariales de fuera de tema, datos de otro cliente e idiomas mezclados en Acme y Northwind | S |
 | 11 | Producción mínima | Parcial | Borrado de una empresa (decisión 034); alertas por email (decisión 033); límites por IP y sesión (decisión 019). Falta: términos y privacidad, exportar datos, backups documentados, rotación de secretos en `docs/render.md` | M |
 
+## Estado al cerrar el hito
+
+Los once requisitos quedaron hechos, cada uno en su rama `h9-…` (detalle y lo que falta probar con cuentas reales en `docs/progreso.md`, Hito 9).
+
 ## Orden de trabajo
 
 Tal como pide el Hito 9: 10 → 9 → 2 → 4 → 5 → 7 → 8 → 6 → 11 → 3 y 1. Ninguno está hecho entero, así que no se saltea ninguno. Las ramas van apiladas (decisión 047).
