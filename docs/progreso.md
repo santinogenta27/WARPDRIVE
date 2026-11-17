@@ -570,6 +570,7 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 | 6. Guías de instalación | `h9-instalacion` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-instalacion) | 053 |
 | 7. Aviso al equipo por email | `h9-bandeja` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-bandeja) | 054 |
 | 8. Probar antes de salir en vivo | `h9-go-live` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-go-live) | 056 |
+| 9. Producción mínima | `h9-produccion` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-produccion) | 055 |
 
 Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
@@ -641,6 +642,21 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
 - **Falta:** que la empresa revise y edite una muestra de los evals generados antes de salir (la spec lo pide como mitigación).
 - **Qué tenés que hacer vos:** nada; si querés otro umbral, `GO_LIVE_MIN_RESOLUTION` en Render.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_go_live.py`.
+
+### Tarea 9 — Producción mínima (decisión 055)
+
+- **Hecho:**
+  - plantillas de términos y privacidad en `docs/legal/`, marcadas como BORRADOR para un abogado;
+  - Empresas → **Exportar**: un .zip con los datos de la empresa, sin secretos;
+  - `ENCRYPTION_KEY` acepta "nueva,vieja" y `python -m app.rotate_keys` vuelve a cifrar todo, sin perder datos;
+  - `docs/render.md`: backups (Neon más un `pg_dump` semanal y la restauración probada), límites y alertas, y cómo rotar cada secreto.
+- **Ya estaba:** borrar una empresa, límites de uso y alertas por email.
+- **Falta:** que un abogado revise las plantillas; backups automáticos (hoy, a mano y gratis).
+- **Qué tenés que hacer vos:**
+  - mandar `docs/legal/` a un abogado;
+  - hacer el primer `pg_dump` y probar la restauración (pasos en `docs/render.md`);
+  - cargar `ALERT_EMAIL_TO` en Render.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_produccion.py`.
 
 ## Qué significa "simulado"
 

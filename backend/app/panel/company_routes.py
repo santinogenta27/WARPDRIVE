@@ -19,7 +19,7 @@ from app import i18n
 from app.channels.web import widget
 from app.companies import connection as system
 from app.companies import delete as removal
-from app.companies import onboarding, review, rules
+from app.companies import export, onboarding, review, rules
 from app.companies.create import CompanyError, chat_slug, create_company
 from app.demo import behind
 from app.llm import spending, tenant_llm
@@ -163,7 +163,8 @@ def _companies_page(ctx: Ctx, deps: PanelDeps, notice: str, created: str = "") -
         f"<tr><td><b>{esc(name)}</b></td><td>{esc(users)}</td>"
         f'<td class="mono">/c/{esc(str(address or "")[4:])}</td>'
         f"<td>{local_time(created_at, '%d/%m/%Y')}</td>"
-        f'<td><a href="/panel/empresas/{tenant_id}/borrar">Borrar…</a></td></tr>'
+        f'<td><a href="/panel/empresas/{tenant_id}/exportar">Exportar</a> · '
+        f'<a href="/panel/empresas/{tenant_id}/borrar">Borrar…</a></td></tr>'
         for tenant_id, name, created_at, users, address in _companies(deps)
     )
     table = (
@@ -493,6 +494,26 @@ def start_onboarding(request: Request, form: Form, deps: Deps) -> Response:
 
 
 ONLY_OPERATOR_DELETES = "Solo el operador de la plataforma puede borrar una empresa."
+
+
+@router.get("/empresas/{tenant_id}/exportar")
+def export_company_route(tenant_id: uuid.UUID, request: Request, deps: Deps) -> Response:
+    """Los datos de la empresa en un .zip, sin secretos (decisión 055). Solo el operador."""
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    if not ctx.session.admin:
+        return _forbidden("Solo el operador de la plataforma puede exportar una empresa.")
+    try:
+        with deps.connection() as conn:
+            data = export.export_company(conn, tenant_id, operator=ctx.session.email)
+    except ValueError:
+        return _not_found("Esa empresa", ctx.session)
+    return Response(
+        data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="empresa-{tenant_id}.zip"'},
+    )
 
 
 @router.get("/empresas/{tenant_id}/borrar", response_class=HTMLResponse)

@@ -149,3 +149,58 @@ Después del primer despliegue se prueba así:
 Aunque se falsifique, el límite total diario (`WEB_CHAT_DAILY_LIMIT`) protege igual la cuota.
 
 Decisión 019.
+
+## Backups
+
+La base es Postgres en Neon (la misma que usa la demo; ver `DATABASE_URL`).
+
+- **Qué guarda Neon solo:** el historial de cambios para restaurar a un momento ("point-in-time restore"). En el plan gratis cubre pocas horas; en los pagos, días. El plazo exacto cambia con los planes: confirmalo en Neon → tu proyecto → **Settings**.
+- **Copia propia, una vez por semana** (gratis, en tu PC), además de lo de Neon:
+
+  ```
+  pg_dump --format=custom --no-owner "%DATABASE_URL%" -f backup-AAAA-MM-DD.dump
+  ```
+
+  Guardala fuera de la PC (Drive o similar). Contiene datos de clientes: no la mandes por email.
+- **Probar la restauración** cada mes, en una base vacía (por ejemplo, una rama nueva de Neon):
+
+  ```
+  pg_restore --no-owner --dbname "URL-DE-LA-BASE-VACIA" backup-AAAA-MM-DD.dump
+  ```
+
+  Después, `python -m pytest backend/tests/test_smoke.py` apuntando `DATABASE_URL` a esa base.
+- **Borrar una empresa** (Empresas → Borrar) no la saca de los backups: se va sola cuando vencen. Los términos lo dicen ("hasta 7 días").
+- **Exportar una empresa:** Empresas → **Exportar** descarga un .zip con sus datos, sin credenciales ni claves.
+
+## Límites y alertas
+
+Ya están activos: 20 mensajes por sesión y límites por IP y por día en el chat web (decisión 019), tope de gasto mensual por empresa (decisión 049), y alertas por latencia, costo por caso, errores y gasto, en los logs y por email a `ALERT_EMAIL_TO` (decisiones 028, 033 y 049). Para recibirlas, cargá `ALERT_EMAIL_TO` y el email real (Resend).
+
+## Rotar los secretos
+
+Cada secreto se cambia en Render → servicio → **Environment** → editar → **Save Changes** (se redespliega solo). Si también lo usás en tu PC, cambialo en `.env`. Rotalos si alguien que no debe los vio, si se subieron por error a un repositorio, o una vez por año.
+
+| Secreto | Dónde se genera | Qué pasa al cambiarlo |
+|---|---|---|
+| `ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` | **No la reemplaces de una:** lo cifrado con la vieja no se podría leer. Pasos abajo. |
+| `PANEL_SECRET` (si no está, se usa `ENCRYPTION_KEY`) | Cualquier texto largo al azar | Se cierran las sesiones del panel: todos vuelven a ingresar. |
+| `PANEL_PASSWORD` | Elegila vos (larga) | La del operador. Las empresas tienen su propia clave. |
+| `DATABASE_URL` | Neon → **Roles** → `neondb_owner` → **Reset password** | Copiá la URL nueva a Render y a `.env` enseguida: la vieja deja de andar. |
+| `GROQ_API_KEY` | console.groq.com → **API Keys** → crear una nueva → borrar la vieja | Ninguno, si cargás la nueva antes de borrar la vieja. |
+| `GEMINI_API_KEY` | aistudio.google.com → **API keys** | Igual que Groq. |
+| `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY` | console.anthropic.com y dash.voyageai.com | Igual que Groq. |
+| `RESEND_API_KEY` | resend.com → **API Keys** | Igual que Groq. |
+| `WHATSAPP_APP_SECRET` | Meta → tu app → **Configuración → Básica → Restablecer clave secreta** | Los webhooks firmados con la vieja se rechazan: cambiala en Render en el mismo momento. |
+| `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_VERIFY_TOKEN` | Meta → **Usuarios del sistema** → generar token; el de verificación lo elegís vos | El de verificación hay que cargarlo igual en Meta y en Render. |
+| `TWILIO_AUTH_TOKEN` | console.twilio.com → **Auth Tokens** → secundario → promoverlo | Ninguno, si promovés el secundario después de cargarlo. |
+| Keys de modelos de cada empresa | Las carga cada empresa en Configuración → **Modelo y gasto** | Cada empresa la cambia cuando quiere; quedan cifradas con `ENCRYPTION_KEY`. |
+
+### `ENCRYPTION_KEY`, paso a paso
+
+1. Generá la clave nueva (comando de la tabla).
+2. En Render, poné `ENCRYPTION_KEY=NUEVA,VIEJA` (la nueva primero, separadas por una coma). Guardá. Con las dos, todo se sigue leyendo.
+3. En tu PC, con la misma variable en `.env`: `python -m app.rotate_keys` (desde `backend/`). Vuelve a cifrar con la nueva los tokens de canales, las credenciales de los sistemas, los emails verificados y las keys de modelos de cada empresa. Se puede correr dos veces sin problema.
+4. Dejá solo la nueva: `ENCRYPTION_KEY=NUEVA`. Guardá.
+5. Si no definiste `PANEL_SECRET`, las sesiones del panel se cierran en los pasos 2 y 4.
+
+Decisión 055.
