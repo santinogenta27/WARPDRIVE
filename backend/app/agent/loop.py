@@ -33,6 +33,7 @@ from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
 from app.cases import billing, closing, csat
 from app.channels.whatsapp.format import to_whatsapp
+from app.companies import rules
 from app.db.connection import tenant_scope
 from app.identity import email_code
 from app.llm import spending
@@ -1107,7 +1108,12 @@ class Agent:
                 (json.dumps(summary, ensure_ascii=False), turn.case_id),
             )
         self._audit(turn, "escalated", {**summary, "causa": cause})
-        return self._finish(turn, "derivar", turn.say("escalation"), summary=summary)
+        message = turn.say("escalation")
+        # Fuera del horario del equipo, cuándo responden (decisión 051).
+        note = rules.closed_note(self._conn, turn.tenant_id, turn.lang)
+        return self._finish(
+            turn, "derivar", f"{message} {note}" if note else message, summary=summary
+        )
 
     def _finish(
         self,

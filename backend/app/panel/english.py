@@ -238,6 +238,37 @@ PHRASES: dict[str, str] = {
     "El tope no puede ser negativo.": "The cap can't be negative.",
     "Falta la API key de ese proveedor.": "The API key for that provider is missing.",
     "Elegí un proveedor de la lista.": "Choose a provider from the list.",
+    # reglas de atención (decisión 051)
+    "Reglas de atención": "Service rules",
+    "Exige identidad verificada": "Requires a verified identity",
+    "Siempre pide aprobación": "Always asks for approval",
+    "Guardar reglas": "Save rules",
+    "Días en que atiende el equipo": "Days your team is available",
+    "Lun": "Mon",
+    "Mar": "Tue",
+    "Mié": "Wed",
+    "Jue": "Thu",
+    "Vie": "Fri",
+    "Sáb": "Sat",
+    "Dom": "Sun",
+    "Desde": "From",
+    "Hasta": "To",
+    "El asistente atiende siempre. Fuera de este horario, cuando pasa un caso a una persona, le "
+    "dice al cliente cuándo le responden. Sin días marcados, no se avisa nada.": (
+        "The assistant is always on. Outside these hours, when it hands a case to a person, it "
+        "tells the customer when they'll get a reply. With no days checked, nothing is said."
+    ),
+    "Email que recibe los casos derivados y las aprobaciones": (
+        "Email that receives handed-off cases and approvals"
+    ),
+    "Vacío: el aviso va a los usuarios de la empresa.": "Empty: the alert goes to your users.",
+    "Reglas de atención guardadas.": "Service rules saved.",
+    "Elegí al menos un día de atención.": "Choose at least one day.",
+    "El horario va en formato HH:MM, por ejemplo 09:00.": "Hours go as HH:MM, for example 09:00.",
+    "La hora de cierre tiene que ser posterior a la de apertura.": (
+        "The closing time has to be after the opening time."
+    ),
+    "El email para derivar no es válido.": "The handoff email isn't valid.",
     # documentos indexados y sitio web (decisión 050)
     "Sitio web de la empresa": "Company website",
     "Se leen hasta 30 páginas, sin salir de tu dominio. Volver a cargarlo actualiza las páginas.": (

@@ -19,7 +19,7 @@ from app import i18n
 from app.channels.web import widget
 from app.companies import connection as system
 from app.companies import delete as removal
-from app.companies import onboarding, review
+from app.companies import onboarding, review, rules
 from app.companies.create import CompanyError, chat_slug, create_company
 from app.demo import behind
 from app.llm import spending, tenant_llm
@@ -630,6 +630,20 @@ def _tools_html(ctx: Ctx, tools: list[review.Tool]) -> str:
             facts.append(f"tope {m['max_amount']}%")  # un descuento (decisión 039)
         elif m.get("max_amount") is not None:
             facts.append(f"tope {money(m['max_amount'])}")
+        checked = " checked" if m.get("requires_verified_contact") else ""
+        always = " checked" if high else ""
+        rules_form = f"""<form method="post" action="/panel/configuracion/herramientas/{tool.id}"
+ class="row small" style="margin-top:8px;gap:16px">{_csrf(ctx)}
+<input type="hidden" name="reglas" value="si">
+<label style="font-weight:400"><input type="checkbox" name="identidad" value="si"{checked}>
+Exige identidad verificada</label>
+{
+            f'<label style="font-weight:400"><input type="checkbox" name="siempre" value="si"'
+            f"{always}> Siempre pide aprobación</label>"
+            if writes
+            else ""
+        }
+<button type="submit">Guardar reglas</button></form>"""
         cards.append(
             f"""<div class="card"><div class="row"><div class="grow">
 <span class="badge {"resolved" if tool.approved else ""}">
@@ -640,7 +654,8 @@ def _tools_html(ctx: Ctx, tools: list[review.Tool]) -> str:
 <form method="post" action="/panel/configuracion/herramientas/{tool.id}">{_csrf(ctx)}
 <button class="{"" if tool.approved else "primary"}" name="aprobada"
  value="{"no" if tool.approved else "si"}">
-{"Quitar aprobación" if tool.approved else "Aprobar"}</button></form></div>{limits}</div>"""
+{"Quitar aprobación" if tool.approved else "Aprobar"}</button></form></div>{rules_form}{limits}
+</div>"""
         )
     return "".join(cards)
 
@@ -948,6 +963,53 @@ style="max-width:320px">{options}</select>
 <div class="row"><button type="submit">Guardar</button></div></form></div>"""
 
 
+DAYS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+
+
+def _rules_html(ctx: Ctx, found: rules.Rules) -> str:
+    """Horario del equipo y a quién derivar (decisión 051). Las reglas por herramienta están en
+    cada herramienta, más abajo."""
+    hours = found.hours
+    days = "".join(
+        f'<label style="font-weight:400"><input type="checkbox" name="dia_{n}" value="si"'
+        f"{' checked' if hours and n in hours.days else ''}> {label}</label> "
+        for n, label in enumerate(DAYS, start=1)
+    )
+    start = esc(hours.start if hours else "")
+    end = esc(hours.end if hours else "")
+    return f"""<div class="card"><form method="post" action="/panel/configuracion/reglas">
+{_csrf(ctx)}<label>Días en que atiende el equipo</label><div class="row small">{days}</div>
+<div class="row"><div><label for="desde">Desde</label>
+<input id="desde" name="desde" type="time" value="{start}"></div>
+<div><label for="hasta">Hasta</label><input id="hasta" name="hasta" type="time" value="{end}">
+</div></div>
+<p class="muted small">El asistente atiende siempre. Fuera de este horario, cuando pasa un caso a
+una persona, le dice al cliente cuándo le responden. Sin días marcados, no se avisa nada.</p>
+<label for="derivar_a">Email que recibe los casos derivados y las aprobaciones</label>
+<input id="derivar_a" name="derivar_a" type="email" value="{esc(found.handoff_email or "")}"
+ placeholder="soporte@tutienda.com" style="max-width:360px">
+<p class="muted small">Vacío: el aviso va a los usuarios de la empresa.</p>
+<button type="submit">Guardar reglas</button></form></div>"""
+
+
+@router.post("/configuracion/reglas")
+def save_rules(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    days = ",".join(str(n) for n in range(1, 8) if form.get(f"dia_{n}") == "si")
+    try:
+        hours = (
+            rules.parse_hours(days, form.get("desde", ""), form.get("hasta", "")) if days else None
+        )
+        handoff = rules.parse_handoff_email(form.get("derivar_a", ""))
+    except rules.RulesError as error:
+        return _back("configuracion", error=str(error))
+    with deps.connection() as conn:
+        rules.save(conn, ctx.tenant_id, hours, handoff)
+    return _back("configuracion", ok="Reglas de atención guardadas.")
+
+
 @router.post("/configuracion/modelo")
 def save_model(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
@@ -994,6 +1056,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
         language = i18n.tenant_language(conn, ctx.tenant_id)
         behind_on = behind.enabled(conn, ctx.tenant_id)
         model = _model_html(ctx, conn)
+        attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
     approved = {t.name for t in tools if t.approved}
     chat = (
         f"<p>Probá el asistente de {esc(ctx.session.company)} en su propio chat: "
@@ -1011,6 +1074,7 @@ qué usa el asistente. Lo que activás o aprobás acá pasa al asistente en vivo
 queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Idioma</h2>{_language_html(ctx, language)}
 <h2>Modelo y gasto</h2>{model}
+<h2>Reglas de atención</h2>{attention}
 <h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
 <h2>Herramientas</h2>{_tools_html(ctx, tools)}
 <h2>Sistema de la empresa</h2>{_system_html(ctx, found, mode)}
@@ -1054,8 +1118,18 @@ def update_tool(tool_id: uuid.UUID, request: Request, form: Form, deps: Deps) ->
         return ctx
     approved = {"si": True, "no": False}.get(form.get("aprobada", ""))
     limits = form.get("limites") == "si"
+    # Reglas por herramienta (decisión 051): casillas sin marcar no llegan en el formulario.
+    rules_sent = form.get("reglas") == "si"
     try:
         with deps.connection() as conn:
+            writes = next(
+                (
+                    t.manifest["upstream"]["method"] != "GET"
+                    for t in review.tools(conn, ctx.tenant_id)
+                    if t.id == tool_id
+                ),
+                False,
+            )
             found = review.set_tool(
                 conn,
                 ctx.tenant_id,
@@ -1063,6 +1137,8 @@ def update_tool(tool_id: uuid.UUID, request: Request, form: Form, deps: Deps) ->
                 approved=approved,
                 max_amount=form.get("monto_maximo", "") if limits else review.UNSET,
                 approval_over=form.get("aprobacion_sobre", "") if limits else review.UNSET,
+                requires_verified=form.get("identidad") == "si" if rules_sent else None,
+                always_approval=form.get("siempre") == "si" if rules_sent and writes else None,
             )
     except review.ReviewError as error:
         return _back("configuracion", error=str(error))

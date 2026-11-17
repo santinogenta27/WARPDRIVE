@@ -565,6 +565,7 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 | 1. Acciones prometidas y casos adversariales | `h9-calidad` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-calidad) | 048 |
 | 2. API key por empresa y tope de gasto | `h9-modelo-gasto` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-modelo-gasto) | 049 |
 | 3. Carga de documentos desde el panel | `h9-documentos` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-documentos) | 050 |
+| 4. Reglas de atención en el panel | `h9-reglas` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-reglas) | 051 |
 
 Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
@@ -595,6 +596,14 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
 - **Falta:** OCR para PDF escaneados; sitios que arman el texto con JavaScript.
 - **Qué tenés que hacer vos:** nada.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_documentos.py`.
+
+### Tarea 4 — Reglas de atención en el panel (decisión 051)
+
+- **Hecho:** en cada herramienta, "Exige identidad verificada" y "Siempre pide aprobación"; en Configuración → **Reglas de atención**, el horario del equipo y el email que recibe los derivados. Fuera de horario, al derivar, el asistente dice cuándo responden.
+- **Ya estaba:** aprobar herramientas, monto máximo y monto que pide aprobación. Todo lo aplica el guardián o el ciclo, nunca el prompt.
+- **Falta:** nada de lo pedido.
+- **Qué tenés que hacer vos:** nada.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_reglas.py`.
 
 ## Qué significa "simulado"
 
