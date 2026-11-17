@@ -24,7 +24,7 @@
       send: "Enviar", chatWith: "Chat con ", openWith: "Abrir el chat con ", closeWith: "Cerrar el chat con ",
       unread: " sin leer", team: function (n) { return "Equipo de " + n; }, notSent: "No se envió. ",
       retry: "Reintentar", suggestions: "Preguntas frecuentes", loading: "Cargando el chat…",
-      typing: "Escribiendo…", offlineBar: "Sin conexión. Revisá tu internet para seguir.",
+      typing: "Pensando…", offlineBar: "Sin conexión. Revisá tu internet para seguir.",
       left: function (r) { return r === 1 ? "Te queda 1 mensaje" : "Te quedan " + r + " mensajes"; },
       noConnect: "No pudimos conectar con el asistente.",
       askReset: "¿Empezar una conversación nueva? Esta se borra de este dispositivo.",
@@ -39,7 +39,7 @@
       send: "Send", chatWith: "Chat with ", openWith: "Open the chat with ", closeWith: "Close the chat with ",
       unread: " unread", team: function (n) { return n + " team"; }, notSent: "Not sent. ",
       retry: "Retry", suggestions: "Suggested questions", loading: "Loading the chat…",
-      typing: "Typing…", offlineBar: "You're offline. Check your connection to continue.",
+      typing: "Thinking…", offlineBar: "You're offline. Check your connection to continue.",
       left: function (r) { return r === 1 ? "1 message left" : r + " messages left"; },
       noConnect: "We couldn't reach the assistant.",
       askReset: "Start a new conversation? This one will be cleared from this device.",
@@ -142,7 +142,7 @@ display:flex;align-items:center;gap:10px}
 .link{border:0;background:none;padding:2px 4px;border-radius:6px;font-weight:600;font-size:13px;
 text-decoration:underline;text-underline-offset:3px}
 
-.log{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:86px 16px 10px;display:flex;
+.log{position:relative;flex:1;overflow-y:auto;overscroll-behavior:contain;padding:86px 16px 10px;display:flex;
 flex-direction:column;gap:10px;scrollbar-width:none}
 .log::-webkit-scrollbar,textarea::-webkit-scrollbar{display:none}
 .log:focus-visible{outline-offset:-5px;border-radius:14px}
@@ -161,9 +161,17 @@ overflow-wrap:anywhere}
 .meta{font-size:12px;color:var(--warn);margin:5px 4px 0}
 .note{align-self:center;max-width:92%;padding:9px 14px;border-radius:14px;background:var(--warn-bg);
 color:var(--warn);font-size:13px;text-align:center;animation:in .32s both}
-.typing{display:flex;gap:5px;padding:15px 16px}
-.typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:dot 1.25s infinite ease-in-out}
-.typing i:nth-child(2){animation-delay:.16s}.typing i:nth-child(3){animation-delay:.32s}
+/* "Escribiendo": sin burbuja, sobre el fondo del chat. Una marca con el acento que respira y un
+   texto con un brillo que lo recorre. Al llegar la respuesta se desvanece en su lugar. */
+.typing{flex-direction:row;align-items:center;gap:10px;min-height:41px;padding:0 4px}
+.typing .mark{flex:none;width:10px;height:10px;border-radius:50%;background:var(--accent);
+animation:breathe 1.5s ease-in-out infinite}
+.typing .label{font-size:14px;color:var(--muted);
+background:linear-gradient(90deg,var(--muted) 0 38%,var(--ink) 50%,var(--muted) 62% 100%) 0 0/250% 100%;
+-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+animation:shimmer 2s linear infinite}
+.typing.out{position:absolute;left:16px;opacity:0;transition:opacity .18s ease-out;pointer-events:none}
+.row.agent,.row.human{animation:rise .2s ease-out both}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;animation:in .4s .08s both}
 .chip{border:1px solid var(--line);background:transparent;border-radius:999px;padding:8px 14px;
 font-size:14px;text-align:left;transition:background .15s,border-color .15s}
@@ -194,7 +202,9 @@ transition:transform .2s cubic-bezier(.2,1.3,.4,1),background-color .18s ease,co
 .foot:empty{padding-top:0;padding-bottom:max(2px,env(safe-area-inset-bottom))}
 
 @keyframes in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
-@keyframes dot{0%,70%,100%{opacity:.3;transform:none}35%{opacity:1;transform:translateY(-3px)}}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes breathe{0%,100%{opacity:.5;transform:scale(.74)}50%{opacity:1;transform:scale(1)}}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
 @keyframes pulse{0%,100%{opacity:.55}50%{opacity:1}}
 
 @media (max-width:520px){
@@ -209,8 +219,11 @@ header{padding-top:max(14px,env(safe-area-inset-top))}
 @media (prefers-reduced-motion:reduce){
 *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
 transition-duration:.01ms!important}
+.typing .mark{animation:none;opacity:1;transform:none}
+.typing .label{animation:none;background:none;-webkit-text-fill-color:currentColor}
 .root[data-mode=float] .panel{transform:none}}
-@media (forced-colors:active){.bubble,.panel,.launcher,.send{border:1px solid CanvasText}.thumb{background:CanvasText}}
+@media (forced-colors:active){.bubble,.panel,.launcher,.send{border:1px solid CanvasText}.thumb{background:CanvasText}
+.typing .label{background:none;-webkit-text-fill-color:CanvasText}.typing .mark{background:CanvasText}}
 `;
 
   var ICONS = {
@@ -446,15 +459,26 @@ transition-duration:.01ms!important}
     log.querySelector(".sr").textContent = T.loading;
     form.hidden = true;
   }
+  // El widget no recibe los pasos del agente en vivo: el texto es siempre "Thinking…".
   function showTyping() {
     if (typing) return;
-    typing = el("div", "row agent");
-    typing.innerHTML = '<div class="bubble typing"><span class="sr"></span><i></i><i></i><i></i></div>';
-    typing.querySelector(".sr").textContent = T.typing;
+    typing = el("div", "row agent typing");
+    typing.appendChild(el("i", "mark")).setAttribute("aria-hidden", "true");
+    typing.appendChild(el("span", "label", T.typing));
     log.appendChild(typing);
     scrollDown();
   }
-  function hideTyping() { if (typing) { typing.remove(); typing = null; } }
+  // `fade`: llega la respuesta. El indicador sale del flujo en el mismo lugar y se desvanece
+  // mientras el mensaje entra ahí: no hay salto ni un instante sin ninguno de los dos.
+  function hideTyping(fade) {
+    if (!typing) return;
+    var node = typing;
+    typing = null;
+    if (!fade || !node.isConnected) { node.remove(); return; }
+    node.style.top = node.offsetTop + "px";
+    node.classList.add("out");
+    setTimeout(function () { node.remove(); }, 220);
+  }
   function setBar(text, actions) {
     bar.textContent = "";
     bar.hidden = !text;
@@ -556,7 +580,7 @@ transition-duration:.01ms!important}
     post(text, false).then(function (response) {
       return readEvents(response, function (name, data) {
         if (name === "typing") showTyping();
-        else if (name === "message") { answered = true; hideTyping(); add("agent", data.text, data.replies); }
+        else if (name === "message") { answered = true; hideTyping(true); add("agent", data.text, data.replies); }
         else if (name === "done") {
           var today = typeof data.remaining_today === "number" ? data.remaining_today : data.remaining;
           state.remaining = Math.min(data.remaining, today);
@@ -599,7 +623,7 @@ transition-duration:.01ms!important}
         if (seen.indexOf(m.id) >= 0) return;
         seen.push(m.id);
         state.seenHuman = seen.slice(-50);
-        hideTyping();
+        hideTyping(true);
         add("human", m.text);
       });
     }).catch(function () { /* sin conexión: se reintenta en la próxima vuelta */ }).then(function () { polling = false; });

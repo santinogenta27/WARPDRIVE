@@ -222,6 +222,7 @@
           "id": {"type": "string"},
           "customer_phone": {"type": "string"},
           "customer_name": {"type": "string"},
+          "payment_method": {"type": "string", "description": "How the order was paid, as the customer sees it"},
           "status": {"type": "string", "enum": ["paid", "shipped", "delivered", "cancelled"]},
           "items": {"type": "array", "items": {"$ref": "#/components/schemas/Item"}},
           "total": {"type": "number", "minimum": 0},
@@ -236,7 +237,7 @@
           "delay": {"oneOf": [{"$ref": "#/components/schemas/Delay"}, {"type": "null"}]}
         },
         "required": [
-          "id", "customer_phone", "customer_name", "status", "items", "total", "currency",
+          "id", "customer_phone", "customer_name", "payment_method", "status", "items", "total", "currency",
           "shipping_address", "created_at", "shipped_at", "delivered_at", "estimated_delivery",
           "carrier", "tracking_number", "delay"
         ],
@@ -285,9 +286,11 @@
           "amount": {"type": "number"},
           "currency": {"type": "string", "const": "USD"},
           "status": {"type": "string", "enum": ["requested"]},
+          "payment_method": {"type": "string", "description": "Where the refund goes: the order's original payment method"},
+          "expected_within": {"type": "string", "description": "How long it takes to show up"},
           "created_at": {"type": "string", "format": "date-time"}
         },
-        "required": ["id", "order_id", "amount", "currency", "status", "created_at"],
+        "required": ["id", "order_id", "amount", "currency", "status", "payment_method", "expected_within", "created_at"],
         "additionalProperties": false
       },
       "ExchangeRequest": {

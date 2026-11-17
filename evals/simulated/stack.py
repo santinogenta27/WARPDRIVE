@@ -9,6 +9,7 @@ del modelo se guardan en caché por entrada exacta, en una carpeta por proveedor
 import re
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -135,13 +136,16 @@ class ExhaustedProvider:
 
 
 def _company(
-    conn: psycopg.Connection, company: str, embedder: Any
+    conn: psycopg.Connection, company: str, embedder: Any, today: date | None = None
 ) -> tuple[AcmeSeed | NorthwindSeed, TestClient]:
-    """La empresa de demo y su API simulada: `acme` (en español) o `northwind` (en inglés)."""
+    """La empresa de demo y su API simulada: `acme` (en español) o `northwind` (en inglés).
+    Las fechas de Northwind son relativas a `today`: los tests y evals usan el día de sus
+    fixtures (`DATES_AS_OF`), así no dependen del día en que se corren."""
     if company == "northwind":
-        from app.demo.northwind import sandbox_client, seed_northwind
+        from app.demo.northwind import api_module, sandbox_client, seed_northwind
 
-        return seed_northwind(conn, embedder), sandbox_client()
+        fixtures_day: date = api_module().DATES_AS_OF
+        return seed_northwind(conn, embedder), sandbox_client(today=today or fixtures_day)
     return seed_acme(conn, embedder), TestClient(create_app())
 
 
@@ -151,10 +155,12 @@ def build_simulated_stack(
     mode: str = "normal",
     primary_out_of_quota: bool = False,
     company: str = "acme",
+    today: date | None = None,
 ) -> SimulatedStack:
     """`primary_out_of_quota`: el modelo simulado responde como respaldo de un principal sin
     cuota, con el mismo FallbackProvider que usa la demo (Groq agotado → Gemini). `company`:
-    `acme` o `northwind` (decisión 038)."""
+    `acme` o `northwind` (decisión 038). `today`: el día de las fechas de Northwind (por
+    defecto, el de sus fixtures)."""
     recorder = PostgresUsageRecorder(conn)
     embedder = VoyageEmbedder(
         recorder=recorder, api_key="sim", http_client=httpx.Client(transport=voyage_transport())
@@ -167,7 +173,7 @@ def build_simulated_stack(
     exhausted = ExhaustedProvider()
     provider = FallbackProvider(exhausted, simulated) if primary_out_of_quota else simulated
     llm = LLMClient(provider=provider, recorder=recorder)
-    seed, sandbox = _company(conn, company, embedder)
+    seed, sandbox = _company(conn, company, embedder, today)
     guardian = Guardian(conn, ToolRuntime(sandbox))
     mailer = RecordingMailer()
     agent = Agent(conn, llm, embedder, guardian, mailer=mailer)

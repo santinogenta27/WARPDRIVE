@@ -159,6 +159,43 @@ def test_el_diseno_del_widget_oculta_el_scroll_nativo_y_marca_el_boton_de_enviar
     assert ".panel::before" in script and "--rim" in script
 
 
+def _rule(script: str, selector: str) -> str:
+    found = re.search(re.escape(selector) + r"\{([^}]*)\}", script)
+    assert found is not None, selector
+    return found.group(1)
+
+
+def test_el_indicador_de_escribiendo_va_sin_burbuja_con_una_marca_que_respira() -> None:
+    """Demo en inglés, cambio A: el indicador es como el de los asistentes conocidos. Sin burbuja
+    ni fondo, una marca del color de la empresa que respira y un texto con brillo que dice qué
+    hace el agente. Al llegar la respuesta, se desvanece y el mensaje sube apenas."""
+    script = (STATIC / "widget.js").read_text(encoding="utf-8")
+    # Sin burbuja: el indicador va directo sobre el fondo del chat.
+    assert "bubble typing" not in script
+    assert "background" not in _rule(script, ".typing")
+    # La marca, con el acento de la empresa, respira: escala y opacidad, 1,5 s por ciclo.
+    mark = _rule(script, ".typing .mark")
+    assert "var(--accent)" in mark and "breathe 1.5s" in mark and "infinite" in mark
+    breathe = re.search(r"@keyframes breathe\{(.*?)\}\}", script)
+    assert breathe is not None and "scale(" in breathe.group(1) and "opacity" in breathe.group(1)
+    # El texto, gris suave con un brillo que lo recorre de izquierda a derecha cada 2 s.
+    label = _rule(script, ".typing .label")
+    assert "var(--muted)" in label and "background-clip:text" in label
+    assert "shimmer 2s" in label
+    assert re.search(r"@keyframes shimmer\{from\{background-position:100%", script)
+    # Qué hace el agente, en el idioma de la empresa. Sin pasos en vivo en el widget: "Thinking…".
+    assert 'typing: "Thinking…"' in script and 'typing: "Pensando…"' in script
+    # Se desvanece en su lugar (sale del flujo) y el mensaje entra con un fade corto hacia arriba.
+    assert "opacity:0" in _rule(script, ".typing.out")
+    assert "position:absolute" in _rule(script, ".typing.out")
+    assert "rise .2s" in _rule(script, ".row.agent,.row.human")
+    assert re.search(r"@keyframes rise\{from\{opacity:0;transform:translateY\(\d+px\)\}", script)
+    # Con movimiento reducido: sin animación, solo el texto.
+    reduced = script.split("@media (prefers-reduced-motion:reduce){", 1)[1].split("}}", 1)[0]
+    assert ".typing .mark{animation:none" in reduced and ".typing .label{animation:none" in reduced
+    assert "-webkit-text-fill-color:currentColor" in reduced
+
+
 def test_la_pagina_de_la_empresa_y_la_de_la_demo_usan_el_mismo_widget(world: World) -> None:
     company = world.api.get(f"/c/{world.norte_slug}")
     assert company.status_code == 200

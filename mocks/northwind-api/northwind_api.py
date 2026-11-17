@@ -4,12 +4,16 @@
 Each `create_app()` starts from a clean copy of `data/orders.json`, so tests don't leak into
 each other. Order ids are accepted as "NW-4521", "nw4521", "#4521" or "4521". Run locally:
 `uvicorn northwind_api:app --app-dir mocks/northwind-api --port 8082`.
+
+Dates are relative to today: `data/orders.json` is written as if today were `DATES_AS_OF`, and
+`create_app()` shifts every date by the same number of days so that today is today (or the
+`today` it gets). The demo creates the app when the API starts and again on each "Reset demo".
 """
 
 import copy
 import json
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +28,12 @@ CUSTOMERS_PATH = HERE / "data" / "customers.json"
 PRODUCTS_PATH = HERE / "data" / "products.json"
 NOT_SHIPPED = {"paid"}
 COURTESY_DAYS = 60  # vigencia del cupón y del envío express gratis
+REFUND_TIME = "5 to 7 business days"  # como dice returns_and_refunds.md
+# data/orders.json está escrito como si hoy fuera este día: NW-4521 se envió hace 5 días y su
+# nueva fecha de entrega es en 2.
+DATES_AS_OF = date(2026, 11, 12)
+STORE_TIME = timezone(timedelta(hours=-8))  # Portland, Oregon (hora estándar del Pacífico)
+_DATE_FIELDS = ("created_at", "shipped_at", "delivered_at", "estimated_delivery")
 _ORDER_ID = re.compile(r"^\s*#?\s*(?:nw)?[\s-]*(\d{3,6})\s*$", re.I)
 
 
@@ -60,14 +70,50 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def store_today() -> date:
+    return datetime.now(STORE_TIME).date()
+
+
+def _shift(value: str | None, days: int) -> str | None:
+    """`2026-11-14` o `2026-11-04T16:40:00-08:00`, `days` días después (la hora no cambia)."""
+    if not value:
+        return value
+    if len(value) == 10:
+        return (date.fromisoformat(value) + timedelta(days=days)).isoformat()
+    return (datetime.fromisoformat(value) + timedelta(days=days)).isoformat()
+
+
+def as_of(orders: list[dict[str, Any]], today: date) -> list[dict[str, Any]]:
+    """Los pedidos de `data/orders.json` con las fechas corridas para que hoy sea `today`."""
+    days = (today - DATES_AS_OF).days
+    shifted = copy.deepcopy(orders)
+    for order in shifted:
+        for name in _DATE_FIELDS:
+            order[name] = _shift(order.get(name), days)
+        if order.get("delay"):
+            delay = order["delay"]
+            delay["new_estimated_delivery"] = _shift(delay["new_estimated_delivery"], days)
+    return shifted
+
+
 def create_app(
     orders: list[dict[str, Any]] | None = None,
     *,
     extra_customers: list[dict[str, Any]] | None = None,
+    today: date | None = None,
 ) -> FastAPI:
     """`extra_customers`: customers added to `data/customers.json` (the demo uses one to give a
-    fixture customer a second, real email)."""
-    data = orders if orders is not None else json.loads(ORDERS_PATH.read_text(encoding="utf-8"))
+    fixture customer a second, real email). `today`: the day the orders are relative to (by
+    default, today in the store); explicit `orders` are used as they come."""
+
+    def current() -> date:
+        return today or store_today()
+
+    data = (
+        orders
+        if orders is not None
+        else as_of(json.loads(ORDERS_PATH.read_text(encoding="utf-8")), current())
+    )
     state: dict[str, dict[str, Any]] = {o["id"]: copy.deepcopy(o) for o in data}
     refunds: dict[str, dict[str, Any]] = {}  # by idempotency key
     cancels: set[str] = set()
@@ -157,6 +203,8 @@ def create_app(
             "amount": body.amount,
             "currency": "USD",
             "status": "requested",
+            "payment_method": order["payment_method"],
+            "expected_within": REFUND_TIME,
             "created_at": _now(),
         }
         if idempotency_key is not None:
@@ -234,7 +282,7 @@ def create_app(
         return JSONResponse(status_code=201, content=offer)
 
     def expires() -> str:
-        return (datetime.now(UTC).date() + timedelta(days=COURTESY_DAYS)).isoformat()
+        return (current() + timedelta(days=COURTESY_DAYS)).isoformat()
 
     @app.post("/orders/{order_id}/coupons", status_code=201, response_model=None)
     def create_coupon(
