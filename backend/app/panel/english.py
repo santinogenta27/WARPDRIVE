@@ -238,6 +238,24 @@ PHRASES: dict[str, str] = {
     "El tope no puede ser negativo.": "The cap can't be negative.",
     "Falta la API key de ese proveedor.": "The API key for that provider is missing.",
     "Elegí un proveedor de la lista.": "Choose a provider from the list.",
+    # equipo e invitaciones (decisión 058)
+    "¿Tu empresa no tiene cuenta?": "Your company doesn't have an account?",
+    "Creala acá": "Create it here",
+    "Esta sección es solo para los admins de la empresa.": "This section is for admins only.",
+    "Equipo": "Team",
+    "Email": "Email",
+    "Rol": "Role",
+    "Estado": "Status",
+    "Admin": "Admin",
+    "Persona del equipo": "Team member",
+    "Invitación enviada": "Invitation sent",
+    "Invitar": "Invite",
+    "Enviar invitación": "Send invitation",
+    "Un admin ve y cambia todo. Una persona del equipo atiende Casos y Aprobaciones, pero no "
+    "cambia la configuración.": (
+        "An admin sees and changes everything. A team member handles Cases and Approvals but "
+        "doesn't change the settings."
+    ),
     # nombre y saludo del asistente (decisión 052)
     "Nombre del asistente (opcional)": "Assistant's name (optional)",
     "Saludo al abrir el chat (opcional)": "Greeting when the chat opens (optional)",

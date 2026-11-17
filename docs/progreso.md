@@ -658,6 +658,15 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
   - cargar `ALERT_EMAIL_TO` en Render.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_produccion.py`.
 
+### Tarea 10 — Conectores de Shopify y Tiendanube, y registro self-service (decisiones 057 y 058) — INCOMPLETA
+
+Rama `h9-conectores-y-registro`, [abrir PR](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-conectores-y-registro). Se cortó por el límite de uso.
+
+- **Hecho:** conectores de Shopify y Tiendanube sobre la API canónica de tienda; "Conectar tienda" y "Probar herramientas" en Configuración → Sistema; registro en `/registro` con confirmación por email; invitaciones con rol (admin o persona del equipo) en **Equipo**; la persona del equipo no entra a Configuración, Onboarding ni Equipo. Migración 0022 (aditiva).
+- **Tests:** `test_conectores.py` en verde. `test_registro.py`: 2 de 3 en verde; **falla `test_de_punta_a_punta_registro_invitacion_y_roles`** (`assert None is not None`, sin revisar).
+- **Falta:** arreglar ese test; traducir al inglés los textos nuevos de Configuración → Sistema (puede fallar `test_panel_ingles`); correr los evals simulados; probar con una tienda de desarrollo de Shopify real.
+- **Qué tenés que hacer vos:** crear una tienda de desarrollo de Shopify (gratis) y una app propia con su token para probar.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

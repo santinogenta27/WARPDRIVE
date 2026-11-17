@@ -12,6 +12,8 @@ from app.panel.company_routes import router as company_router
 from app.panel.live_routes import router as live_router
 from app.panel.metrics_routes import router as metrics_router
 from app.panel.routes import router as panel_router
+from app.panel.signup_routes import router as signup_router
+from app.panel.team_routes import router as team_router
 
 
 @asynccontextmanager
@@ -31,6 +33,8 @@ app.include_router(web_router)
 app.include_router(panel_router)
 app.include_router(company_router)
 app.include_router(live_router)  # probar y salir en vivo (decisión 056)
+app.include_router(signup_router)  # registro self-service e invitaciones (decisión 058)
+app.include_router(team_router)
 app.include_router(metrics_router)
 app.include_router(billing_router)
 app.include_router(behind_router)  # vista detrás de escena (decisión 041)

@@ -21,6 +21,7 @@ from app.companies import connection as system
 from app.companies import delete as removal
 from app.companies import export, onboarding, review, rules
 from app.companies.create import CompanyError, chat_slug, create_company
+from app.connectors import platforms
 from app.demo import behind
 from app.llm import spending, tenant_llm
 from app.onboarding import ingest as ingestion
@@ -748,7 +749,28 @@ def _system_html(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> 
         if found and found.base_url
         else ""
     )
+    tools_probe = (
+        f'<form method="post" action="/panel/configuracion/sistema/herramientas" class="row"'
+        f' style="align-items:flex-end">{_csrf(ctx)}<div><label for="ejemplo">Número de pedido'
+        ' de ejemplo</label><input id="ejemplo" name="ejemplo" required placeholder="1001"'
+        ' style="max-width:200px"></div><button type="submit">Probar herramientas</button></form>'
+        if found and found.base_url
+        else ""
+    )
+    platforms_html = f"""<h3>¿Usás Shopify o Tiendanube?</h3><p class="muted small">Conectá tu
+tienda sin OpenAPI: se crean las herramientas de pedidos, envíos, reembolsos y cupones, sin
+aprobar. Después probá la conexión y aprobalas más arriba.</p>
+<form method="post" action="/panel/configuracion/sistema/plataforma">{_csrf(ctx)}
+<label for="plataforma">Plataforma</label><select id="plataforma" name="plataforma"
+ style="max-width:220px"><option value="shopify">Shopify</option>
+<option value="tiendanube">Tiendanube</option></select>
+<label for="tienda">Tienda (Shopify: mitienda.myshopify.com · Tiendanube: el número de tu
+tienda)</label><input id="tienda" name="tienda" required style="max-width:360px">
+<label for="token">Token de acceso (de una app propia de tu tienda)</label>
+<input id="token" name="token" type="password" autocomplete="off" required
+ style="max-width:420px"><button type="submit">Conectar tienda</button></form>"""
     return f"""<div class="card"><span class="badge {badge}">{label}</span>
+{platforms_html}
 <h3>1. OpenAPI de tu sistema</h3><p class="muted small">{esc(spec_note)} Con el OpenAPI, el
 análisis genera las herramientas del asistente. Subí el archivo (.json o .yaml) o pegalo.</p>
 <form method="post" action="/panel/configuracion/sistema/openapi" enctype="multipart/form-data">
@@ -772,7 +794,7 @@ mostrar. Cualquier cambio obliga a probar la conexión de nuevo.</p>
 <button type="submit">Guardar acceso</button></form>
 <h3>3. Probar y activar</h3><p class="muted small">La prueba hace una consulta de solo lectura
 a tu sistema con tus credenciales. Hasta que actives, el asistente usa respuestas simuladas.</p>
-<div class="row">{probe}{activate}</div>{test}</div>"""
+<div class="row">{probe}{activate}</div>{test}{tools_probe}</div>"""
 
 
 def _public_url(request: Request) -> str:
@@ -1234,6 +1256,47 @@ def test_system(request: Request, form: Form, deps: Deps) -> Response:
     if result["ok"]:
         return _back("configuracion", ok="La prueba de conexión pasó. Ya podés activar.")
     return _back("configuracion", error=f"La prueba de conexión falló: {result['detalle']}")
+
+
+@router.post("/configuracion/sistema/plataforma")
+def connect_platform(request: Request, form: Form, deps: Deps) -> Response:
+    """Shopify o Tiendanube, sin OpenAPI (decisión 057)."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    try:
+        with deps.connection() as conn:
+            platforms.connect(
+                conn,
+                ctx.tenant_id,
+                form.get("plataforma", ""),
+                form.get("tienda", ""),
+                form.get("token", ""),
+            )
+    except ValueError as error:
+        return _back("configuracion", error=str(error))
+    return _back(
+        "configuracion",
+        ok="Tienda conectada. Probá la conexión y aprobá sus herramientas.",
+    )
+
+
+@router.post("/configuracion/sistema/herramientas")
+def probe_system_tools(request: Request, form: Form, deps: Deps) -> Response:
+    """Prueba cada herramienta de solo lectura con un pedido de ejemplo (decisión 057)."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    try:
+        with deps.connection() as conn:
+            results = system.probe_tools(
+                conn, ctx.tenant_id, form.get("ejemplo", ""), client_factory=deps.client_factory
+            )
+    except system.ConnectionError_ as error:
+        return _back("configuracion", error=str(error))
+    summary = " · ".join(f"{tool_label(r['herramienta'])}: {r['detalle']}" for r in results)
+    failed = any(r["ok"] is False for r in results)
+    return _back("configuracion", **({"warning": summary} if failed else {"ok": summary}))
 
 
 @router.post("/configuracion/sistema/activar")

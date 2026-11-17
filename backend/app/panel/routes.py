@@ -30,7 +30,16 @@ from app.db.connection import connect, tenant_scope
 from app.llm.embedder import Embedder
 from app.mailer import Mailer, mailer_from_env
 from app.panel import auth, english
-from app.panel.html import PENDING, RESOLVED_BY, esc, local_time, page, status_badge, toast
+from app.panel.html import (
+    ADMIN_ONLY,
+    PENDING,
+    RESOLVED_BY,
+    esc,
+    local_time,
+    page,
+    status_badge,
+    toast,
+)
 from app.panel.labels import action_label, money, type_label
 from app.panel.notify import notify_customer
 from app.panel.privacy import mask_codes, summary
@@ -194,6 +203,10 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
         return _forbidden()
     if session.tenant_id is None:
         return _no_tenant()
+    # Una persona del equipo no entra a la configuración (decisión 058).
+    section = request.url.path.removeprefix("/panel/").split("/", 1)[0]
+    if session.role == "agent" and section in ADMIN_ONLY:
+        return _forbidden("Esta sección es solo para los admins de la empresa.")
     active, language, demo, pending = _company(deps, session.tenant_id)
     if not session.admin and not active:
         return _to_login()  # la empresa fue borrada: su sesión deja de servir
@@ -246,7 +259,8 @@ def _login_page(error: str = "") -> str:
  autocomplete="username">
 <label for="password">Clave</label><input id="password" name="password" type="password" required
  autocomplete="current-password">
-<p><button class="primary" type="submit" style="width:100%">Ingresar</button></p></form></div>"""
+<p><button class="primary" type="submit" style="width:100%">Ingresar</button></p></form>
+<p class="muted small">¿Tu empresa no tiene cuenta? <a href="/registro">Creala acá</a>.</p></div>"""
     return page("Ingresar", body, logged_in=False)
 
 
@@ -278,7 +292,7 @@ def login(request: Request, form: Form, deps: Deps) -> Response:
             auth.record_failure(email)
             return HTMLResponse(_login_page("Email o clave incorrectos."), status_code=401)
         token = auth.new_session(
-            user.email, tenant_id=user.tenant_id, company=user.company, admin=False
+            user.email, tenant_id=user.tenant_id, company=user.company, admin=False, role=user.role
         )
     auth.clear_failures(email)
     response = RedirectResponse("/panel/casos", status_code=303)
