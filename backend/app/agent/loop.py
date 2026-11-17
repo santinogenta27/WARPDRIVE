@@ -790,7 +790,13 @@ class Agent:
                     # Controles de conducta (decisión 040): una acción afirmada sin herramienta
                     # es una respuesta inventada; con el cliente molesto, primero la empatía.
                     said = str(final_input.get("mensaje") or "")
-                    if not self._acted(turn) and _check(conduct.claims_action, said, turn.lang):
+                    # "Reembolsado" con la aprobación pendiente tampoco vale (decisión 048).
+                    if (
+                        not self._acted(turn) and _check(conduct.claims_action, said, turn.lang)
+                    ) or (
+                        not self._executed(turn)
+                        and _check(conduct.claims_completion, said, turn.lang)
+                    ):
                         self._audit(
                             turn,
                             "grounding_rejected",
@@ -970,6 +976,11 @@ class Agent:
         return any(
             d.side_effect and d.status in ("executed", "approval_required") for d in turn.decisions
         )
+
+    @staticmethod
+    def _executed(turn: _Turn) -> bool:
+        """En este turno una herramienta modificó algo con éxito (no solo pidió aprobación)."""
+        return any(d.side_effect and d.status == "executed" for d in turn.decisions)
 
     def _asks_personal_data(self, turn: _Turn, data: dict[str, Any]) -> bool:
         """Sin verificar, el modelo le pide al cliente el email, el teléfono u otro dato personal

@@ -556,6 +556,23 @@ Los demás casos de las tareas 4 y 5 salieron bien:
 - **Que el panel "detrás de escena" muestre cada paso mientras pasa:** hoy aparece al terminar la respuesta, porque el turno se guarda en una sola transacción.
 - **Grabar el video.**
 
+## Hito 9 — Listo para vender a pymes (desde el 17 de noviembre de 2026)
+
+Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `main`, sin mergear. Las ramas están apiladas (decisión 047): conviene aprobarlas en orden.
+
+| Tarea | Rama | Pull request | Decisión |
+|---|---|---|---|
+| 1. Acciones prometidas y casos adversariales | `h9-calidad` | (ver abajo) | 048 |
+
+### Tarea 1 — Acciones prometidas y casos adversariales (decisión 048)
+
+- **Hecho:** "reembolsado", "aplicado", "acreditado" o "cancelado" necesitan una herramienta ejecutada en el turno; una aprobación pendiente no alcanza. También se reconocen "te envié", "ya te reembolsamos" y "está aplicado". Se reescribe una vez; si insiste, deriva y el motivo se ve en Why.
+- **Evals:** 4 casos adversariales nuevos en Acme (18 en total) y 4 en Northwind (25): fuera de tema, falso gerente, datos de otro cliente por email e idiomas mezclados. Simulados en verde, sin regresiones. Una acción prometida sin herramienta es falla crítica.
+- **Clasificador:** pedir datos de otro cliente va a la negativa fija, sin derivar.
+- **Falta:** medir con Groq real (no se corrió).
+- **Qué tenés que hacer vos:** nada.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_acciones_prometidas.py` y `python evals/runner.py --simulated` (también con `--company northwind`).
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

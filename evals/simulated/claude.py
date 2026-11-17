@@ -189,6 +189,8 @@ class SimulatedClaude:
         if order_id and "consultar_pedido" in tool_names:
             return [self._tool_use("consultar_pedido", {"order_id": order_id})]
 
+        if self.mode == "afirma_siempre":  # insiste en una acción que no hizo (decisión 048)
+            return reply("Listo, ya te apliqué el descuento en tu próxima compra.", factual=False)
         if self.mode == "invent" or (self.mode == "invent_once" and not corrected):
             return reply(INVENTED, factual=True)
         if self.mode == "fake_source":
@@ -231,6 +233,8 @@ class SimulatedClaude:
             # control de fundamento) o deriva en lugar de avisar que quedó en revisión.
             if self.mode == "approval_ungrounded":
                 return reply(f"Iniciamos el reembolso de $99.999 del pedido {order_id}.")
+            if self.mode == "promete_reembolso":  # afirma lo que todavía espera aprobación
+                return reply(f"Listo, ya te reembolsé el pedido {order_id}.", factual=False)
             if self.mode == "approval_derive":
                 return [
                     self._tool_use("derivar", {"motivo": "Requiere aprobación", "resumen": low})
@@ -343,6 +347,9 @@ def _best_document(question: str, docs: dict[str, str]) -> tuple[str, str] | Non
 
 _RULES = [
     (r"ignor\w* (tus|las) instrucciones|todos los (pedidos|clientes)", "pedido_no_permitido"),
+    # Datos de otro cliente por su email (decisión 048).
+    (r"(pedidos|direcci\w+) de (los pedidos de )?\S+@|orders of \S+@", "pedido_no_permitido"),
+    (r"receta|poema|\bpoem\b|recipe", "conversacion_general"),  # fuera de tema
     (
         r"ignore (your|all|the|previous) \w*\s*instructions|all (the )?(orders|customers)",
         "pedido_no_permitido",

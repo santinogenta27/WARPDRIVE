@@ -21,12 +21,33 @@ _CLAIM_EN = re.compile(
     r"|refunded|cancel+ed|changed|updated|upgraded|set\s+up|credited)\b"
     r"|\bis\s+now\s+(?:active|cancel+ed|refunded|applied)\b"
 )
+# Primera persona ("te envié", "ya te reembolsamos") y pasivas ("está aplicado", "quedó
+# acreditado"). "Fue enviado" queda afuera: es el estado de un pedido que trae la consulta. El
+# plural sin "ya" también ("reembolsamos el total en 10 días" es una política).
 _CLAIM_ES = re.compile(
     r"(?i)\b(?:ya\s+)?(?:te\s+|le\s+)?(?:agregu[eé]|apliqu[eé]|activ[eé]|inici[eé]|cargu[eé]"
-    r"|proces[eé]|reembols[eé]|cancel[eé]|cambi[eé]|actualic[eé]|gener[eé])\b"
-    r"|\b(?:qued[oó]|fue)\s+(?:agregad|aplicad|activad|iniciad|procesad|reembolsad|cancelad"
-    r"|cambiad|actualizad)[oa]s?\b"
+    r"|proces[eé]|reembols[eé]|cancel[eé]|cambi[eé]|actualic[eé]|gener[eé]|envi[eé]"
+    r"|acredit[eé])\b"
+    r"|\bya\s+(?:te\s+|le\s+)?(?:lo\s+|la\s+)?(?:agreg|aplic|activ|inici|carg|proces|reembols"
+    r"|cancel|cambi|actualiz|gener|envi|acredit)amos\b"
+    r"|\b(?:qued[oó]|fue)\s+(?:ya\s+)?(?:agregad|aplicad|activad|iniciad|procesad"
+    r"|reembolsad|cancelad|cambiad|actualizad|acreditad)[oa]s?\b"
+    # "Está cancelado" puede ser el estado del pedido: con "está", solo lo que hizo la tienda.
+    r"|\best[aá]\s+(?:ya\s+)?(?:aplicad|acreditad)[oa]s?\b"
+    r"|\bya\s+est[aá]\s+reembolsad[oa]s?\b"
 )
+# Lo que dice que algo ya está terminado. Una aprobación pendiente no lo respalda: hace falta
+# que la herramienta se haya ejecutado (decisión 048).
+_DONE_EN = re.compile(
+    r"(?i)\b(?:refunded|credited|cancel+ed|applied)\b"
+    r"|\b(?:has|have)\s+been\s+(?:processed|issued)\b"
+)
+_DONE_ES = re.compile(
+    r"(?i)\b(?:reembols[eé]|acredit[eé]|cancel[eé]|apliqu[eé])\b"
+    r"|\b(?:reembols|acredit|cancel|aplic)amos\b"
+    r"|\b(?:reembolsad|acreditad|cancelad|aplicad|procesad)[oa]s?\b"
+)
+DONE = {"es": _DONE_ES, "en": _DONE_EN}
 # Lo que ya estaba hecho de antes no es una afirmación nueva ("the express shipping you chose
 # earlier is already on your account").
 _RECAP = re.compile(r"(?i)\b(?:already|earlier|previously|before|ya\s+estaba|antes)\b")
@@ -69,6 +90,13 @@ def claims_action(text: str, language: str) -> bool:
     """La respuesta dice que ya se hizo una acción (agregar, aplicar, iniciar, cancelar…)."""
     found = CLAIMS.get(language, _CLAIM_EN).search(text)
     return found is not None and _RECAP.search(text) is None
+
+
+def claims_completion(text: str, language: str) -> bool:
+    """Además, dice que la acción ya terminó ("reembolsado", "applied"): una aprobación
+    pendiente no alcanza, hace falta una herramienta ejecutada."""
+    done = DONE.get(language, _DONE_EN).search(text)
+    return claims_action(text, language) and done is not None
 
 
 def is_upset(message: str, language: str) -> bool:
