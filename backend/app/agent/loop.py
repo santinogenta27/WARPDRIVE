@@ -31,7 +31,7 @@ from app.agent.classifier import (
 from app.agent.grounding import GroundingVerdict, check_grounding
 from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
-from app.cases import billing, closing, csat
+from app.cases import billing, closing, csat, team_notify
 from app.channels.whatsapp.format import to_whatsapp
 from app.companies import rules
 from app.db.connection import tenant_scope
@@ -392,7 +392,25 @@ class Agent:
             timing.log_turn(result.case_id, summary)
             audit_log.record(self._conn, tenant_id, result.case_id, "turn_timing", summary)
             self._observe(tenant_id, result, timer, summary)
+            self._notify_team(tenant_id, result)
         return result
+
+    def _notify_team(self, tenant_id: uuid.UUID, result: AgentResult) -> None:
+        """Un caso derivado o una aprobación pendiente: aviso por email al equipo (decisión
+        054), una sola vez por caso y por aprobación."""
+        if result.action == "derivar":
+            reason = str((result.escalation_summary or {}).get("motivo") or "")
+            team_notify.notify(self._conn, tenant_id, result.case_id, "escalated", reason=reason)
+        elif result.action == "pedir_aprobacion":
+            pending = [t.name for t in result.tool_calls if t.status == "approval_required"]
+            team_notify.notify(
+                self._conn,
+                tenant_id,
+                result.case_id,
+                "approval",
+                reason=", ".join(pending) or "una acción",
+                approval_id=result.approval_id,
+            )
 
     def _observe(
         self,

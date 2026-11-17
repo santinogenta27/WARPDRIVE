@@ -568,6 +568,7 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 | 4. Reglas de atención en el panel | `h9-reglas` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-reglas) | 051 |
 | 5. Nombre y saludo del asistente | `h9-marca` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-marca) | 052 |
 | 6. Guías de instalación | `h9-instalacion` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-instalacion) | 053 |
+| 7. Aviso al equipo por email | `h9-bandeja` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-bandeja) | 054 |
 
 Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
@@ -622,6 +623,14 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
 - **Falta:** probar los pasos en una tienda real de cada plataforma (los menús cambian seguido).
 - **Qué tenés que hacer vos:** nada. Para WhatsApp de un cliente, el trámite con Meta sigue siendo manual.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_instalacion.py`. Solo toca el panel: los evals no cambian.
+
+### Tarea 7 — Aviso al equipo por email (decisión 054)
+
+- **Hecho:** cuando un caso se deriva o una acción espera aprobación, un email al equipo con el motivo y el enlace al caso o a Aprobaciones. Una sola vez por caso y por aprobación, sin lo que escribió el cliente. Va al email de "Reglas de atención" o, si no hay, a los usuarios de la empresa. Acme y Northwind no avisan a nadie.
+- **Ya estaba:** la bandeja (Casos con los derivados primero, Aprobaciones) y la respuesta desde el panel.
+- **Falta:** aviso dentro del panel en tiempo real (hoy, el contador del menú al recargar).
+- **Qué tenés que hacer vos:** en Render, `PUBLIC_BASE_URL` con la dirección del servicio (para los enlaces del email) y el email real (Resend).
+- **Cómo probarlo:** `python -m pytest backend/tests/test_bandeja.py`.
 
 ## Qué significa "simulado"
 
