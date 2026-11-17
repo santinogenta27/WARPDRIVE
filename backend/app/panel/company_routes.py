@@ -248,6 +248,7 @@ def onboarding_page(request: Request, deps: Deps) -> Response:
         names = sorted(onboarding.business_names(conn, ctx.tenant_id) - {ctx.session.company})
         run = onboarding.state(conn, ctx.tenant_id)
         waiting = ingestion.pending_documents(conn, ctx.tenant_id)
+        indexed = ingestion.indexed_documents(conn, ctx.tenant_id)
     source_rows = "".join(
         f"<tr><td>{esc(name)}</td><td>{esc(KINDS.get(kind, kind))}</td>"
         f'<td class="num">{count or "—"}</td><td>{local_time(created)}</td></tr>'
@@ -301,7 +302,8 @@ pruebas y te dice qué parte de la atención resolvería solo.</p>{_notice(reque
 <input id="archivos" name="archivos" type="file" multiple required
  accept=".txt,.zip,.csv,.json,.md,.docx,.pdf">
 <p class="muted small">Chats de WhatsApp exportados (.txt, o un .zip con varios), tickets de
-helpdesk (.csv o .json) y documentos de políticas (.md, .txt, .docx o .pdf con texto). Hasta
+helpdesk (.csv o .json) y documentos de políticas (.md, .txt, .docx, .pdf con texto o una tabla
+.csv, como un catálogo). Hasta
 50 MB. En los chats y tickets, los datos personales se reemplazan por marcadores antes de
 guardar. En los documentos se reemplazan los números de tarjeta y los DNI; los emails y
 teléfonos de tu empresa quedan como están. El archivo original no se conserva.</p>
@@ -312,7 +314,13 @@ teléfonos de tu empresa quedan como están. El archivo original no se conserva.
  placeholder="Por ejemplo: Soporte Tienda, Ana de Tienda">
 <p class="muted small">Sirve para saber qué mensajes son del equipo y cuáles del cliente.
 Separá los nombres con comas y cargalos antes de subir los chats.</p>
-<button type="submit">Guardar nombres</button></form></div>
+<button type="submit">Guardar nombres</button></form>
+<form method="post" action="/panel/onboarding/sitio" style="margin-top:16px">{_csrf(ctx)}
+<label for="sitio">Sitio web de la empresa</label>
+<input id="sitio" name="sitio" type="url" required placeholder="https://www.tutienda.com">
+<p class="muted small">Se leen hasta 30 páginas, sin salir de tu dominio. Volver a cargarlo
+actualiza las páginas.</p><button type="submit">Leer el sitio</button></form></div>
+{_indexed_html(ctx, indexed)}
 <div class="card"><h2 style="margin-top:0">2. Análisis</h2>
 <ol class="steps">{steps}</ol><div style="margin-top:12px">{action}</div></div>"""
     return HTMLResponse(
@@ -324,6 +332,51 @@ Separá los nombres con comas y cargalos antes de subir los chats.</p>
             refresh=8 if running else None,
         )
     )
+
+
+def _indexed_html(ctx: Ctx, indexed: list[ingestion.IndexedDocument]) -> str:
+    """Lo que el asistente puede citar (decisión 050). Subir un archivo con el mismo nombre lo
+    reemplaza; borrarlo lo saca de las respuestas en el momento."""
+    if not indexed:
+        return ""
+    rows = "".join(
+        f"<tr><td>{esc(doc.title)}</td><td class=mono>{esc(doc.source)}</td>"
+        f'<td class="num">{doc.chunks}</td><td>{local_time(doc.created_at)}</td>'
+        f'<td><form method="post" action="/panel/onboarding/indexados/{doc.id}/borrar">'
+        f'{_csrf(ctx)}<button type="submit">Borrar</button></form></td></tr>'
+        for doc in indexed
+    )
+    return f"""<div class="card"><h2 style="margin-top:0">Documentos indexados</h2>
+<p class="muted small">Lo que el asistente puede citar. Para actualizar uno, subí el archivo de
+nuevo con el mismo nombre: reemplaza al anterior.</p>
+<table><tr><th>Título</th><th>Archivo</th><th class=num>Fragmentos</th><th>Indexado</th><th></th>
+</tr>{rows}</table></div>"""
+
+
+@router.post("/onboarding/indexados/{document_id}/borrar")
+def delete_indexed(document_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        found = ingestion.delete_document(conn, ctx.tenant_id, document_id)
+    if not found:
+        return _not_found("Ese documento", ctx.session)
+    return _back("onboarding", ok="Documento borrado: el asistente ya no lo usa.")
+
+
+@router.post("/onboarding/sitio")
+async def read_site(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    url = form.get("sitio", "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        return _back("onboarding", error="La dirección tiene que empezar con https://.")
+    result = await run_in_threadpool(_ingest, deps, ctx.tenant_id, [Upload(url, b"")])
+    if result.unreadable:
+        return _back("onboarding", error=" ".join(result.unreadable))
+    return _back("onboarding", ok=f"Se leyeron {result.documents} páginas del sitio.")
 
 
 def _pending_html(ctx: Ctx, waiting: list[ingestion.PendingDocument]) -> str:
@@ -375,6 +428,8 @@ async def upload_sources(request: Request, data: Files, deps: Deps) -> Response:
     )
     if result.skipped:
         summary += f" {result.skipped} ya estaban subidos."
+    if result.replaced:
+        summary += f" {result.replaced} reemplazaron a uno anterior con el mismo nombre."
     # Un documento sin texto (PDF escaneado) se avisa acá: el resto de la carga ya quedó.
     waiting = [
         f"{note} Parece tener datos de personas: no se indexó. Confirmalo o descartalo acá abajo."

@@ -238,6 +238,26 @@ PHRASES: dict[str, str] = {
     "El tope no puede ser negativo.": "The cap can't be negative.",
     "Falta la API key de ese proveedor.": "The API key for that provider is missing.",
     "Elegí un proveedor de la lista.": "Choose a provider from the list.",
+    # documentos indexados y sitio web (decisión 050)
+    "Sitio web de la empresa": "Company website",
+    "Se leen hasta 30 páginas, sin salir de tu dominio. Volver a cargarlo actualiza las páginas.": (
+        "Up to 30 pages are read, without leaving your domain. Loading it again updates the pages."
+    ),
+    "Leer el sitio": "Read the website",
+    "Documentos indexados": "Indexed documents",
+    "Lo que el asistente puede citar. Para actualizar uno, subí el archivo de nuevo con el mismo "
+    "nombre: reemplaza al anterior.": (
+        "What the assistant can cite. To update one, upload the file again with the same name: "
+        "it replaces the previous one."
+    ),
+    "Título": "Title",
+    "Fragmentos": "Chunks",
+    "Indexado": "Indexed",
+    "Borrar": "Delete",
+    "Documento borrado: el asistente ya no lo usa.": (
+        "Document deleted: the assistant no longer uses it."
+    ),
+    "La dirección tiene que empezar con https://.": "The address has to start with https://.",
     # vista detrás de escena (decisión 041)
     "Vista detrás de escena": "Behind the scenes",
     "Activada": "On",
@@ -317,12 +337,14 @@ PHRASES: dict[str, str] = {
     "1. Subí tus fuentes": "1. Upload your sources",
     "Historial de chats y documentos": "Chat history and documents",
     "Chats de WhatsApp exportados (.txt, o un .zip con varios), tickets de helpdesk (.csv o "
-    ".json) y documentos de políticas (.md, .txt, .docx o .pdf con texto). Hasta 50 MB. En los "
+    ".json) y documentos de políticas (.md, .txt, .docx, .pdf con texto o una tabla .csv, como un "
+    "catálogo). Hasta 50 MB. En los "
     "chats y tickets, los datos personales se reemplazan por marcadores antes de guardar. En los "
     "documentos se reemplazan los números de tarjeta y los DNI; los emails y teléfonos de tu "
     "empresa quedan como están. El archivo original no se conserva.": (
         "Exported WhatsApp chats (.txt, or a .zip with several), helpdesk tickets (.csv or "
-        ".json) and policy documents (.md, .txt, .docx or .pdf with text). Up to 50 MB. In chats "
+        ".json) and policy documents (.md, .txt, .docx, .pdf with text or a .csv table, like a "
+        "catalog). Up to 50 MB. In chats "
         "and tickets, personal data is replaced with placeholders before saving. In documents, "
         "card numbers and national ID numbers are replaced; your company's emails and phone "
         "numbers stay as they are. The original file isn't kept."

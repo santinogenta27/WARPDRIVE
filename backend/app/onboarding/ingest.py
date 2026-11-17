@@ -16,6 +16,7 @@ import hashlib
 import html
 import io
 import json
+import os
 import re
 import uuid
 import zipfile
@@ -24,6 +25,7 @@ from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import PurePath
 from typing import Any, Literal
+from urllib.parse import urljoin, urlsplit, urlunsplit
 from xml.etree import ElementTree
 
 import httpx
@@ -39,6 +41,11 @@ from app.rag.indexer import index_document
 Role = Literal["customer", "agent"]
 SourceKind = Literal["whatsapp_export", "helpdesk_export", "document", "url"]
 MAX_PDF_PAGES = 500  # extraer el texto es lento: un PDF más largo se sube en partes
+CRAWL_MAX_PAGES = 30  # páginas del sitio por rastreo (CRAWL_MAX_PAGES en el entorno)
+SKIP_EXTENSIONS = (
+    ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".css", ".js", ".pdf", ".zip",
+    ".mp4", ".mp3", ".xml", ".json",
+)  # fmt: skip
 
 ANDROID = re.compile(
     r"^(\d{1,2})/(\d{1,2})/(\d{2,4}),? (\d{1,2}):(\d{2})(?::\d{2})?\s?(?:[ap]\.?\s?m\.?)? - "
@@ -98,6 +105,8 @@ class IngestResult:
     # Un aviso por documento que no se indexó porque parece tener datos de personas: espera la
     # confirmación de la empresa (decisión 035).
     held: tuple[str, ...] = ()
+    # Documentos que reemplazaron a otro con el mismo nombre (decisión 050).
+    replaced: int = 0
 
 
 class UnreadableDocument(ValueError):
@@ -248,6 +257,13 @@ def read_document(data: bytes, name: str) -> Document:
         text = _pdf_text(data, PurePath(name).name)
         first = text.splitlines()[0]
         return Document(title=first if len(first) <= 120 else stem, source=stem, text=text)
+    if suffix == ".csv":  # una tabla (catálogo, envíos): una línea por fila, "columna: valor"
+        reader = csv.DictReader(io.StringIO(data.decode("utf-8-sig")))
+        lines = [
+            " · ".join(f"{k.strip()}: {(v or '').strip()}" for k, v in row.items() if k and v)
+            for row in reader
+        ]
+        return Document(title=stem, source=stem, text="\n".join(line for line in lines if line))
     # Saltos de línea de Windows: sin esto el texto no se parte en párrafos ni en fragmentos.
     text = data.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
     return Document(title=_title(text, stem), source=stem, text=text)
@@ -291,6 +307,7 @@ class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.parts: list[str] = []
+        self.links: list[str] = []
         self.title = ""
         self._skip = 0
         self._in_title = False
@@ -299,6 +316,10 @@ class _TextExtractor(HTMLParser):
         if tag in ("script", "style", "noscript"):
             self._skip += 1
         self._in_title = tag == "title"
+        if tag == "a":
+            href = dict(attrs).get("href")
+            if href:
+                self.links.append(href)
 
     def handle_endtag(self, tag: str) -> None:
         if tag in ("script", "style", "noscript") and self._skip:
@@ -318,12 +339,77 @@ def fetch_url(url: str, http: httpx.Client | None = None) -> Document:
     response.raise_for_status()
     parser = _TextExtractor()
     parser.feed(response.text)
-    slug = re.sub(r"[^a-z0-9]+", "_", url.lower().split("//", 1)[-1]).strip("_")[:60]
     return Document(
         title=html.unescape(parser.title.strip()) or url,
-        source=slug,
+        source=_slug(url),
         text="\n".join(html.unescape(p) for p in parser.parts),
     )
+
+
+def _slug(url: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", url.lower().split("//", 1)[-1]).strip("_")[:60]
+
+
+def _page_url(url: str) -> str:
+    """Sin fragmento ni parámetros: la misma página con otro ancla no se vuelve a leer."""
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc.lower(), parts.path or "/", "", ""))
+
+
+def crawl(
+    url: str, http: httpx.Client | None = None, *, max_pages: int | None = None
+) -> list[Document]:
+    """Las páginas del sitio de la empresa, sin salir de su dominio (decisión 050). Nunca contra
+    una dirección interna; las redirecciones se siguen solo dentro del dominio. Las imágenes y
+    otros archivos se saltean. Un error en una página interna no corta el rastreo."""
+    from app.companies.connection import check_public_host
+
+    limit = max_pages or int(os.environ.get("CRAWL_MAX_PAGES") or CRAWL_MAX_PAGES)
+    start = urlsplit(url.strip())
+    if start.scheme not in ("http", "https") or not start.hostname:
+        raise ValueError("la dirección tiene que empezar con https:// y tener un dominio")
+    check_public_host(url)
+    host = start.hostname.lower()
+    client = http or httpx.Client(timeout=20.0, follow_redirects=False)
+    first = _page_url(url.strip())
+    queue = [first]
+    seen = set(queue)
+    pages: list[Document] = []
+    while queue and len(pages) < limit:
+        current = queue.pop(0)
+        try:
+            response = client.get(current)
+        except httpx.HTTPError:
+            if current == first:
+                raise
+            continue
+        targets: list[str] = []
+        if response.is_redirect:
+            targets = [response.headers.get("location", "")]
+        elif response.status_code == 200 and "html" in response.headers.get(
+            "content-type", "text/html"
+        ):
+            parser = _TextExtractor()
+            parser.feed(response.text)
+            text = "\n".join(html.unescape(p) for p in parser.parts)
+            if text.strip():
+                title = html.unescape(parser.title.strip()) or current
+                pages.append(Document(title=title, source=_slug(current), text=text))
+            targets = parser.links
+        for link in targets:
+            found = _page_url(urljoin(current, link))
+            parts = urlsplit(found)
+            if (
+                parts.scheme in ("http", "https")
+                and (parts.hostname or "").lower() == host
+                and not parts.path.lower().endswith(SKIP_EXTENSIONS)
+                and found not in seen
+            ):
+                seen.add(found)
+                queue.append(found)
+    if not pages:
+        raise ValueError("no se encontró texto para leer en esa página")
+    return pages
 
 
 # -- detección y guardado --------------------------------------------------------------------
@@ -333,8 +419,13 @@ def detect_kind(upload: Upload) -> SourceKind:
         return "url"
     if name.endswith(".zip"):
         return "whatsapp_export"
-    if name.endswith((".csv", ".json")):
+    if name.endswith(".json"):
         return "helpdesk_export"
+    if name.endswith(".csv"):  # tickets si tiene sus columnas; si no, una tabla (decisión 050)
+        head = upload.data[:4000].decode("utf-8-sig", errors="ignore").splitlines()[:1]
+        header = next(csv.reader(head), [])
+        tickets = all(_column(header, kind) for kind in ("ticket", "text", "role"))
+        return "helpdesk_export" if tickets else "document"
     if name.endswith(".txt"):
         head = upload.data[:2000].decode("utf-8-sig", errors="ignore").splitlines()
         if any(ANDROID.match(line) or IOS.match(line) for line in head):
@@ -385,7 +476,7 @@ def ingest(
     En los documentos se reemplazan tarjetas y DNI antes de guardar. Con `hold_personal_data`
     (el panel), un documento que parece tener datos de varias personas no se indexa: queda en
     `pending_documents` hasta que la empresa lo confirma o lo descarta."""
-    sources = conversations = messages = documents = skipped = 0
+    sources = conversations = messages = documents = skipped = replaced = 0
     unreadable: list[str] = []
     held: list[str] = []
     for upload in uploads:
@@ -393,6 +484,29 @@ def ingest(
         content = upload.name.encode() if kind == "url" else upload.data
         digest = hashlib.sha256(content).hexdigest()
         document: Document | None = None
+        if kind == "url":
+            # El sitio de la empresa: rastrearlo de nuevo actualiza sus páginas (decisión 050).
+            try:
+                pages = crawl(upload.name, http)
+            except Exception as error:  # noqa: BLE001 — se informa y la carga sigue
+                unreadable.append(f"{upload.name}: no se pudo leer el sitio ({error}).")
+                continue
+            with tenant_scope(conn, tenant_id):
+                conn.execute("delete from sources where content_hash = %s", (digest,))
+                conn.execute(
+                    "insert into sources (tenant_id, kind, file_path, status, content_hash)"
+                    " values (%s, 'url', %s, 'done', %s)",
+                    (tenant_id, upload.name, digest),
+                )
+            sources += 1
+            for page in pages:
+                page = _without_cards_and_ids(page)
+                replaced += remove_source(conn, tenant_id, page.source)
+                index_document(
+                    conn, tenant_id, embedder, title=page.title, source=page.source, text=page.text
+                )
+                documents += 1
+            continue
         with tenant_scope(conn, tenant_id):
             exists = conn.execute(
                 "select 1 from sources where content_hash = %s", (digest,)
@@ -439,8 +553,9 @@ def ingest(
                     messages += _save_conversation(conn, tenant_id, row[0], chat)
                     conversations += 1
                 continue
-        if document is None:
-            document = _without_cards_and_ids(fetch_url(upload.name, http))
+        assert document is not None
+        # Otro archivo con el mismo nombre ya indexado: se reemplaza (decisión 050).
+        replaced += remove_source(conn, tenant_id, document.source)
         index_document(
             conn,
             tenant_id,
@@ -451,7 +566,14 @@ def ingest(
         )
         documents += 1
     return IngestResult(
-        sources, conversations, messages, documents, skipped, tuple(unreadable), tuple(held)
+        sources,
+        conversations,
+        messages,
+        documents,
+        skipped,
+        tuple(unreadable),
+        tuple(held),
+        replaced,
     )
 
 
@@ -497,6 +619,7 @@ def confirm_pending(
             " values (%s, 'document', %s, 'done', %s)",
             (tenant_id, name, digest),
         )
+    remove_source(conn, tenant_id, source)  # reemplaza al de mismo nombre (decisión 050)
     index_document(conn, tenant_id, embedder, title=title, source=source, text=text)
     return str(name)
 
@@ -510,3 +633,57 @@ def discard_pending(
             "delete from pending_documents where id = %s returning name", (document_id,)
         ).fetchone()
     return str(row[0]) if row else None
+
+
+# -- documentos indexados: listar, reemplazar y borrar (decisión 050) -----------------------
+@dataclass(frozen=True)
+class IndexedDocument:
+    id: uuid.UUID
+    title: str
+    source: str
+    chunks: int
+    created_at: datetime
+
+
+def source_key(name: str) -> str:
+    """Con qué `source` queda indexado un archivo o una página: subir otro con el mismo nombre
+    lo reemplaza."""
+    if name.lower().startswith(("http://", "https://")):
+        return _slug(name)
+    return PurePath(name.replace("\\", "/")).stem
+
+
+def remove_source(conn: psycopg.Connection, tenant_id: uuid.UUID, source: str) -> int:
+    """Saca del RAG los documentos con ese `source`. Devuelve cuántos había."""
+    with tenant_scope(conn, tenant_id):
+        conn.execute(
+            "delete from chunks where document_id in (select id from documents where source = %s)",
+            (source,),
+        )
+        return conn.execute("delete from documents where source = %s", (source,)).rowcount
+
+
+def indexed_documents(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[IndexedDocument]:
+    with tenant_scope(conn, tenant_id):
+        rows = conn.execute(
+            "select d.id, d.title, coalesce(d.source, ''), count(c.id), d.created_at"
+            " from documents d left join chunks c on c.document_id = d.id"
+            " group by d.id order by d.title, d.created_at"
+        ).fetchall()
+    return [IndexedDocument(*row) for row in rows]
+
+
+def delete_document(conn: psycopg.Connection, tenant_id: uuid.UUID, document_id: uuid.UUID) -> bool:
+    """Lo saca del RAG. El archivo deja de figurar como subido: se puede volver a subir."""
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute("select source from documents where id = %s", (document_id,)).fetchone()
+        if row is None:
+            return False
+        conn.execute("delete from chunks where document_id = %s", (document_id,))
+        conn.execute("delete from documents where id = %s", (document_id,))
+        for source_id, path in conn.execute(
+            "select id, file_path from sources where kind in ('document', 'url')"
+        ).fetchall():
+            if path and source_key(path) == row[0]:
+                conn.execute("delete from sources where id = %s", (source_id,))
+    return True

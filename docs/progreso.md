@@ -564,6 +564,7 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 |---|---|---|---|
 | 1. Acciones prometidas y casos adversariales | `h9-calidad` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-calidad) | 048 |
 | 2. API key por empresa y tope de gasto | `h9-modelo-gasto` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-modelo-gasto) | 049 |
+| 3. Carga de documentos desde el panel | `h9-documentos` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-documentos) | 050 |
 
 Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
@@ -585,6 +586,15 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
 - **Falta:** probar una key real de cada proveedor; verificar los precios de `gpt-5-mini`.
 - **Qué tenés que hacer vos:** si querés otros límites, cargar `SHARED_MONTHLY_USD` y `SHARED_MONTHLY_CALLS` en Render.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_modelo_y_gasto.py`.
+
+### Tarea 3 — Carga de documentos desde el panel (decisión 050)
+
+- **Hecho:** en Onboarding, un CSV que no es de tickets (catálogo, precios) se indexa como documento; **"Sitio web de la empresa"** lee hasta 30 páginas de tu dominio, nunca una dirección interna; **"Documentos indexados"** lista lo que el asistente puede citar y lo borra. Subir un archivo con el mismo nombre lo reemplaza.
+- **Ya estaba:** PDF, DOCX, TXT, MD, chats y tickets (CSV y JSON, que cubren los exportes de Zendesk, Freshdesk e Intercom), las 6 etapas con su avance y los avisos por archivo.
+- **Datos personales en documentos:** se mantiene la decisión 035 (tarjetas y DNI se reemplazan; un documento con datos de varias personas espera tu confirmación). El motivo de no anonimizar todo está en la 050.
+- **Falta:** OCR para PDF escaneados; sitios que arman el texto con JavaScript.
+- **Qué tenés que hacer vos:** nada.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_documentos.py`.
 
 ## Qué significa "simulado"
 
