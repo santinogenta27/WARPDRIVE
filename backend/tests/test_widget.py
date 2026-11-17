@@ -358,6 +358,14 @@ def test_el_chat_solo_responde_desde_los_dominios_permitidos(world: World) -> No
     assert api.post("/chat/session", params={"canal": slug}, headers=shop).status_code == 403
 
     save_widget(login(NORTE, NORTE_PASSWORD), dominios="www.tiendanorte.example")
+    # Hasta salir en vivo (decisión 056), tampoco en su dominio.
+    config = api.get("/chat/widget/config", params={"canal": slug}, headers=shop)
+    assert config.json()["allowed"] is False
+    with tenant_scope(world.conn, world.norte):
+        world.conn.execute(
+            "update tenants set settings = settings || '{\"live\": true}' where id = %s",
+            (world.norte,),
+        )
     assert api.get("/chat/widget/config", params={"canal": slug}, headers=shop).json()["allowed"]
     assert not api.get("/chat/widget/config", params={"canal": slug}, headers=evil).json()[
         "allowed"

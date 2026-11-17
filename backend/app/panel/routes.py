@@ -863,7 +863,12 @@ def report_page(request: Request, deps: Deps) -> Response:
         sources.append(deps.report_tenant)
     report: dict[str, Any] | None = None
     finished = None
+    from app.companies import go_live
+    from app.panel.live_routes import readiness_html
+
     with deps.connection() as conn:
+        # Probar y salir en vivo (decisión 056): arriba de todo.
+        live = readiness_html(ctx, go_live.readiness(conn, ctx.tenant_id))
         for source in sources:
             with tenant_scope(conn, source):
                 row = conn.execute(
@@ -875,11 +880,11 @@ def report_page(request: Request, deps: Deps) -> Response:
                 break
     if report is None:
         body = (
-            '<h1>Reporte de preparación</h1><div class="card empty">Todavía no hay un '
+            f'<h1>Reporte de preparación</h1>{live}<div class="card empty">Todavía no hay un '
             'onboarding terminado. Empezá en <a href="/panel/onboarding">Onboarding</a>.</div>'
         )
         return HTMLResponse(page("Reporte", body, active="reporte", session=ctx.session))
-    body = _report_body(report, finished, ctx.session.company)
+    body = _report_body(report, finished, ctx.session.company).replace("</h1>", f"</h1>{live}", 1)
     return HTMLResponse(page("Reporte de preparación", body, active="reporte", session=ctx.session))
 
 

@@ -569,6 +569,7 @@ Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `
 | 5. Nombre y saludo del asistente | `h9-marca` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-marca) | 052 |
 | 6. Guías de instalación | `h9-instalacion` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-instalacion) | 053 |
 | 7. Aviso al equipo por email | `h9-bandeja` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-bandeja) | 054 |
+| 8. Probar antes de salir en vivo | `h9-go-live` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-go-live) | 056 |
 
 Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
 
@@ -631,6 +632,15 @@ Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" c
 - **Falta:** aviso dentro del panel en tiempo real (hoy, el contador del menú al recargar).
 - **Qué tenés que hacer vos:** en Render, `PUBLIC_BASE_URL` con la dirección del servicio (para los enlaces del email) y el email real (Resend).
 - **Cómo probarlo:** `python -m pytest backend/tests/test_bandeja.py`.
+
+### Tarea 8 — Probar antes de salir en vivo (decisión 056)
+
+- **Hecho:** en Reporte, **Probar el asistente** abre el playground (el chat de la empresa con "detrás de escena" al lado, sin activar la vista pública) y **Salir en vivo**, que se habilita si el reporte estima al menos 60 % de resolución (`GO_LIVE_MIN_RESOLUTION`) y frena todos los ataques. Antes de salir, el widget no atiende en el sitio de la empresa; el panel y `/c/…` sí. "Pausar" lo saca.
+- **Ya estaba:** evals generados con el historial y el reporte de preparación.
+- **Acme y Northwind** están siempre en vivo: la demo no cambia.
+- **Falta:** que la empresa revise y edite una muestra de los evals generados antes de salir (la spec lo pide como mitigación).
+- **Qué tenés que hacer vos:** nada; si querés otro umbral, `GO_LIVE_MIN_RESOLUTION` en Render.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_go_live.py`.
 
 ## Qué significa "simulado"
 

@@ -44,14 +44,24 @@ def _company(deps: Any, slug: str) -> tuple[Any, uuid.UUID, str, bool]:
     return found, tenant_id, i18n.normalize(found.language), bool(row and row[0] == "northwind")
 
 
-def render(*, name: str, slug: str, accent: str, language: str, northwind: bool) -> str:
-    """La página: el sitio de la tienda (`app/demo/store.py`), el widget y el panel en vivo."""
+def render(
+    *,
+    name: str,
+    slug: str,
+    accent: str,
+    language: str,
+    northwind: bool,
+    live: str | None = None,
+) -> str:
+    """La página: el sitio de la tienda (`app/demo/store.py`), el widget y el panel en vivo.
+    `live`: de dónde lee los pasos (el playground del panel usa el suyo, decisión 056)."""
     values = {
         "lang": language,
         "title": TITLES[language].format(name=name),
         "name": name,
         "slug": slug,
         "accent": accent.lstrip("#"),
+        "live": live or f"/demo/{slug}/live",
     }
     page = PAGE.read_text(encoding="utf-8")
     for key, value in values.items():

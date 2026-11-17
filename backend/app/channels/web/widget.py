@@ -72,6 +72,14 @@ def load(conn: psycopg.Connection, tenant_id: uuid.UUID) -> WidgetSettings:
     )
 
 
+def live_domains(conn: psycopg.Connection, tenant_id: uuid.UUID) -> tuple[str, ...]:
+    """Los dominios donde el chat atiende ahora: los de la empresa si salió en vivo; si no,
+    ninguno ajeno (el panel y la página propia siguen andando, decisión 056)."""
+    from app.companies import go_live
+
+    return load(conn, tenant_id).domains if go_live.is_live(conn, tenant_id) else ()
+
+
 def greeting_for(found: WidgetSettings) -> str:
     """El saludo propio de la empresa o, si no cargó uno, el de siempre."""
     return found.greeting or greeting(found.name, found.language)
