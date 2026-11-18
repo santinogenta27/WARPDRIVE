@@ -17,15 +17,16 @@ cambia.
 import json
 import re
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 
 API_VERSION = "2025-01"
 CANONICAL_BASE = "https://tienda.local"
 SHOP = re.compile(r"^[a-z0-9][a-z0-9-]*\.myshopify\.com$")
+REF_ATTRIBUTE = "asistente_ref"  # atributo del carrito con la conversación (decisión 063)
 STATUS = {
     ("paid", None): "paid",
     ("paid", "partial"): "shipped",
@@ -175,7 +176,13 @@ class ShopifyTransport(httpx.BaseTransport):
         if request.method == "GET" and path == "/products":
             return self._products(query.get("query", ""), query.get("size"))
         if request.method == "POST" and path == "/checkouts":
-            return self._checkout(body.get("items") or [], float(body.get("discount_percent") or 0))
+            return self._checkout(
+                body.get("items") or [],
+                float(body.get("discount_percent") or 0),
+                str(body.get("ref") or ""),
+            )
+        if request.method == "GET" and path.startswith("/checkouts/"):
+            return self._purchase(path.removeprefix("/checkouts/"))
         match = re.match(r"^/orders/([^/]+)(?:/(\w[\w-]*))?$", path)
         if match is None:
             return _json(404, {"code": "not_found", "message": "Operación no disponible."})
@@ -223,7 +230,35 @@ class ShopifyTransport(httpx.BaseTransport):
         currency = (shop.json().get("shop") or {}).get("currency")
         return str(currency) if currency else None
 
-    def _checkout(self, items: list[dict[str, Any]], discount: float = 0) -> httpx.Response:
+    def _purchase(self, ref: str) -> httpx.Response:
+        """La compra de una conversación: el pedido cuyo atributo `ref` (lo deja el permalink en
+        `note_attributes`) es el de la conversación, entre los de los últimos 60 días."""
+        since = (datetime.now(UTC) - timedelta(days=60)).isoformat(timespec="seconds")
+        found = self._api.get(
+            "/orders.json", params={"status": "any", "limit": 250, "created_at_min": since}
+        )
+        if found.status_code != 200:
+            return _json(found.status_code, {"message": "Shopify no respondió."})
+        for order in found.json().get("orders") or []:
+            notes = {
+                str(n.get("name")): str(n.get("value")) for n in order.get("note_attributes") or []
+            }
+            if notes.get(REF_ATTRIBUTE) == ref and not order.get("cancelled_at"):
+                return _json(
+                    200,
+                    {
+                        "ref": ref,
+                        "status": "completed",
+                        "order_id": str(order.get("name", "")).lstrip("#"),
+                        "total": float(order.get("total_price") or 0),
+                        "currency": order.get("currency") or "",
+                    },
+                )
+        return _json(404, {"code": "checkout_not_found", "message": "Todavía no hay compra."})
+
+    def _checkout(
+        self, items: list[dict[str, Any]], discount: float = 0, ref: str = ""
+    ) -> httpx.Response:
         """El permalink de carrito de Shopify (`/cart/{variante}:{cantidad},...`): abre el
         checkout de la tienda con el carrito armado. No crea nada en Shopify ni cobra."""
         found = self._api.get("/products.json", params={"status": "active", "limit": 250})
@@ -263,15 +298,20 @@ class ShopifyTransport(httpx.BaseTransport):
             "total": round(total, 2),
             "currency": currency or "",
         }
+        query: dict[str, str] = {}
         if discount:
             # El descuento de una oferta (decisión 061): un código de un solo uso que el
             # permalink aplica con `?discount=`.
             code = self._discount_code("OFERTA", discount)
             if isinstance(code, httpx.Response):
                 return code
-            checkout["url"] += f"?discount={code}"
+            query["discount"] = code
             checkout["total"] = round(total * (1 - discount / 100), 2)
             checkout.update({"discount_percent": discount, "discount_code": code})
+        if ref:  # la conversación (decisión 063): queda en el pedido como atributo
+            query[f"attributes[{REF_ATTRIBUTE}]"] = ref
+        if query:
+            checkout["url"] += "?" + urlencode(query)
         return _json(201, checkout)
 
     def _order(self, number: str) -> dict[str, Any] | None:

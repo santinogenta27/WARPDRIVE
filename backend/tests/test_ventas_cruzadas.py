@@ -144,7 +144,7 @@ def test_el_descuento_pasa_al_link_solo_si_salio_de_la_oferta(northwind: Any) ->
     made = checkout(beanie, 15)
     assert made.status == "executed", made
     assert made.result["data"]["total"] == 20.4
-    assert made.result["data"]["url"].endswith("?discount=NW15OFF")
+    assert "discount=NW15OFF" in made.result["data"]["url"]
 
 
 # -- 3. el agente -----------------------------------------------------------------------------

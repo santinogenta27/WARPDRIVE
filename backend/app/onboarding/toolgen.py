@@ -34,6 +34,9 @@ OWNER_FIELDS = ("customer_phone", "phone", "telefono")
 # Operaciones que no son del agente: buscar clientes por datos personales es de la verificación
 # de identidad, no algo que el modelo deba poder llamar.
 EXCLUDED = re.compile(r"customers?|clientes?|users?|usuarios?", re.I)
+# Un campo del cuerpo con esta marca es el identificador de la conversación: no lo elige el
+# modelo, lo pone el guardián (decisión 063).
+CONVERSATION_REF = "x-conversation-ref"
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,8 @@ def _input_schema(op: Operation) -> dict[str, Any]:
             required.append(param["name"])
     if op.body_schema:
         for name, schema in (op.body_schema.get("properties") or {}).items():
+            if schema.get(CONVERSATION_REF):  # lo completa el guardián (decisión 063)
+                continue
             properties[name] = dict(schema)
         required.extend(op.body_schema.get("required") or [])
     return {
@@ -163,6 +168,10 @@ def build_manifest(spec: dict[str, Any], op: Operation) -> dict[str, Any]:
         manifest["owner_lookup"] = {"method": "GET", "path": resource[1]}
     if "amount" in schema["properties"]:
         manifest["amount_from"] = "input.amount"
+    body = (op.body_schema or {}).get("properties") or {}
+    ref = next((name for name, s in body.items() if s.get(CONVERSATION_REF)), None)
+    if ref:
+        manifest["conversation_ref"] = ref
     return manifest
 
 

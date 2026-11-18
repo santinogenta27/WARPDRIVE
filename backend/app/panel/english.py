@@ -285,6 +285,20 @@ PHRASES: dict[str, str] = {
     ),
     "El saludo puede tener hasta 300 caracteres.": "The greeting can be up to 300 characters.",
     "El nombre y el saludo no pueden llevar < ni >.": "The name and greeting can't contain < or >.",
+    # ventas atribuidas (decisión 063)
+    "Ventas atribuidas al agente": "Sales attributed to the assistant",
+    "ventas": "sales",
+    "monto": "amount",
+    "links de compra": "checkout links",
+    "de los links terminan en compra": "of the links end in a purchase",
+    "Cuenta las compras que la tienda informa como completadas desde un link que armó el "
+    "asistente: cada link lleva el identificador de su conversación.": (
+        "Counts the purchases the store reports as completed from a link the assistant built: "
+        "each link carries the identifier of its conversation."
+    ),
+    "Actualizar ventas": "Update sales",
+    "Ventas actualizadas.": "Sales updated.",
+    "No hay ventas nuevas.": "No new sales.",
     # ventas cruzadas (decisión 061)
     "Ventas cruzadas": "Cross-selling",
     "Producto": "Product",

@@ -54,6 +54,22 @@
         }
       }
     },
+    "/checkouts/{ref}": {
+      "get": {
+        "operationId": "consultarCompra",
+        "summary": "Whether the purchase of a conversation's checkout link was completed, with its order and amount (to attribute sales to the assistant)",
+        "parameters": [
+          {"name": "ref", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "The checkout of that conversation",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CheckoutStatus"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
     "/orders": {
       "get": {
         "operationId": "listarPedidos",
@@ -271,7 +287,8 @@
               "additionalProperties": false
             }
           },
-          "discount_percent": {"type": "number", "minimum": 0, "maximum": 90, "description": "Only the discount of an offer made in this conversation"}
+          "discount_percent": {"type": "number", "minimum": 0, "maximum": 90, "description": "Only the discount of an offer made in this conversation"},
+          "ref": {"type": "string", "maxLength": 40, "x-conversation-ref": true, "description": "Identifier of the conversation, to attribute the sale to the assistant"}
         },
         "required": ["items"],
         "additionalProperties": false
@@ -301,6 +318,18 @@
           "discount_code": {"type": "string", "description": "The code the checkout applies (the customer can also type it)"}
         },
         "required": ["url", "items", "total", "currency"],
+        "additionalProperties": false
+      },
+      "CheckoutStatus": {
+        "type": "object",
+        "properties": {
+          "ref": {"type": "string"},
+          "status": {"enum": ["open", "completed"]},
+          "order_id": {"type": "string"},
+          "total": {"type": "number", "minimum": 0},
+          "currency": {"type": "string"}
+        },
+        "required": ["ref", "status"],
         "additionalProperties": false
       },
       "ProductList": {

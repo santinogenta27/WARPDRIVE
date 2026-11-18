@@ -64,6 +64,7 @@ EXAMPLES: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str], int]]
         {},
         409,
     ),
+    ("get", "/checkouts/{ref}", "/checkouts/ea-sin-compra", None, {}, 404),
     ("get", "/orders/{order_id}", "/orders/NW-4521", None, {}, 200),
     ("get", "/orders/{order_id}", "/orders/NW-9999", None, {}, 404),
     ("patch", "/orders/{order_id}/address", "/orders/NW-4545/address", ADDRESS, {}, 200),
@@ -131,6 +132,23 @@ def test_la_api_responde_segun_su_contrato(
     Draft202012Validator({**schema, "components": SPEC["components"]}).validate(response.json())
 
 
+def test_la_compra_de_una_conversacion_responde_segun_su_contrato() -> None:
+    """`GET /checkouts/{ref}` necesita un link armado antes (decisión 063)."""
+    client = TestClient(create_app())
+    made = client.post(
+        "/checkouts", json={"items": [{"sku": "NW-WBN-NVY-OS", "quantity": 1}], "ref": "ea-1"}
+    )
+    assert made.status_code == 201 and made.json()["url"].endswith("?ref=ea-1")
+    for expected in ("open", "completed"):
+        if expected == "completed":
+            client.post("/checkouts/ea-1/complete")
+        response = client.get("/checkouts/ea-1")
+        assert response.status_code == 200 and response.json()["status"] == expected
+        documented = _resolve(SPEC["paths"]["/checkouts/{ref}"]["get"]["responses"]["200"])
+        schema = documented["content"]["application/json"]["schema"]
+        Draft202012Validator({**schema, "components": SPEC["components"]}).validate(response.json())
+
+
 @pytest.mark.parametrize(("method", "path", "body"), COURTESY_CONFLICTS)
 def test_una_segunda_cortesia_para_el_mismo_pedido_es_un_conflicto(
     method: str, path: str, body: dict[str, Any] | None
@@ -153,6 +171,7 @@ def test_todas_las_respuestas_documentadas_estan_probadas() -> None:
     }
     tested = {(m, p, s) for m, p, _, _, _, s in EXAMPLES}
     tested |= {(m, p, 409) for m, p, _ in COURTESY_CONFLICTS}
+    tested |= {("get", "/checkouts/{ref}", 200)}  # la compra de una conversación (decisión 063)
     assert documented == tested
 
 

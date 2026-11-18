@@ -11,9 +11,11 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.obs import metrics
 from app.obs.tracing import trace_id_for
+from app.panel.company_routes import _back, _csrf, _notice
 from app.panel.html import esc, local_time, page
 from app.panel.privacy import mask_codes
-from app.panel.routes import Deps, enter
+from app.panel.routes import Deps, Form, enter
+from app.sales import attribution
 
 router = APIRouter(prefix="/panel", include_in_schema=False)
 
@@ -230,6 +232,30 @@ menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
 respondió: así se ve si un cambio mejoró o empeoró.</p></div>"""
 
 
+def _money(currency: str, amount: Decimal) -> str:
+    return f"{currency} {amount:,.2f}".strip() if currency else f"{amount:,.2f}"
+
+
+def sales_html(found: list[attribution.SalesTotal], csrf: str) -> str:
+    """Ventas atribuidas al agente (decisión 063): compras completadas desde un link de compra
+    que armó el asistente, con el identificador de su conversación."""
+    sales = sum(t.sales for t in found)
+    links = sum(t.links for t in found)
+    amounts = " · ".join(_money(t.currency, t.amount) for t in found if t.sales) or "0"
+    rate = _pct(sales / links) if links else "—"
+    kpis = (
+        _kpi(_int(sales), "ventas", big=True)
+        + _kpi(amounts, "monto")
+        + _kpi(_int(links), "links de compra")
+        + _kpi(rate, "de los links terminan en compra")
+    )
+    return f"""<h2>Ventas atribuidas al agente</h2><div class="card"><div class="kpis">{kpis}</div>
+<p class="muted small">Cuenta las compras que la tienda informa como completadas desde un link que
+armó el asistente: cada link lleva el identificador de su conversación.</p>
+<form method="post" action="/panel/metricas/ventas">{csrf}
+<button type="submit" class="secondary">Actualizar ventas</button></form></div>"""
+
+
 @router.get("/metricas", response_class=HTMLResponse)
 def metrics_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
@@ -237,5 +263,17 @@ def metrics_page(request: Request, deps: Deps) -> Response:
         return ctx
     with deps.connection() as conn:
         data = metrics.collect(conn, ctx.tenant_id)
-    body = render(data, ctx.session.company)
+        sold = attribution.totals(conn, ctx.tenant_id)
+    body = _notice(request) + render(data, ctx.session.company) + sales_html(sold, _csrf(ctx))
     return HTMLResponse(page("Métricas", body, active="metricas", session=ctx.session))
+
+
+@router.post("/metricas/ventas")
+def refresh_sales(request: Request, form: Form, deps: Deps) -> Response:
+    """Pregunta a la tienda por las compras de los links del asistente (idempotente)."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        found = attribution.sync(conn, ctx.tenant_id, deps.guardian(conn, ctx.tenant_id))
+    return _back("metricas", ok="Ventas actualizadas." if found else "No hay ventas nuevas.")

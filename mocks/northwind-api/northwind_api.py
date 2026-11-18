@@ -16,6 +16,7 @@ import re
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Header
 from fastapi.responses import JSONResponse
@@ -64,6 +65,7 @@ class CartItem(BaseModel):
 class CheckoutRequest(BaseModel):
     items: list[CartItem] = Field(min_length=1, max_length=10)
     discount_percent: float = Field(default=0, ge=0, le=90)
+    ref: str | None = Field(default=None, max_length=40)
 
 
 CHECKOUT_BASE = "https://shop.northwind.example"  # la tienda ficticia (la demo la cambia)
@@ -209,6 +211,7 @@ def create_app(
     exchanged: set[str] = set()  # "order:sku": each item is exchanged once
     courtesies: dict[tuple[str, str], dict[str, Any]] = {}  # (kind, idempotency key)
     given_for: dict[str, str] = {}  # one courtesy per order: order id -> what it got
+    purchases: dict[str, dict[str, Any]] = {}  # checkouts by conversation ref
     catalog: list[dict[str, Any]] = json.loads(PRODUCTS_PATH.read_text(encoding="utf-8"))
     products = {p["name"].lower(): p for p in catalog}
 
@@ -220,7 +223,7 @@ def create_app(
         """Back to the initial orders, with no refunds, exchanges or courtesies (for evals)."""
         state.clear()
         state.update({o["id"]: copy.deepcopy(o) for o in data})
-        for kept in (refunds, cancels, exchanges, exchanged, courtesies, given_for):
+        for kept in (refunds, cancels, exchanges, exchanged, courtesies, given_for, purchases):
             kept.clear()
 
     app.state.reset = reset
@@ -277,13 +280,41 @@ def create_app(
             "total": round(total, 2),
             "currency": "USD",
         }
+        query: dict[str, str] = {}
         if body.discount_percent:
             code = f"NW{body.discount_percent:g}OFF"
-            checkout["url"] += f"?discount={code}"
+            query["discount"] = code
             checkout["total"] = round(total * (1 - body.discount_percent / 100), 2)
             checkout["discount_percent"] = body.discount_percent
             checkout["discount_code"] = code
+        if body.ref:  # la conversación que armó el link, para atribuir la venta
+            query["ref"] = body.ref
+            purchases[body.ref] = {
+                "ref": body.ref,
+                "status": "open",
+                "total": checkout["total"],
+                "currency": "USD",
+            }
+        if query:
+            checkout["url"] += "?" + urlencode(query)
         return JSONResponse(status_code=201, content=checkout)
+
+    @app.get("/checkouts/{ref}", response_model=None)
+    def checkout_status(ref: str) -> dict[str, Any] | JSONResponse:
+        found = purchases.get(ref)
+        if found is None:
+            return _error(404, "checkout_not_found", f"There's no checkout {ref}")
+        return found
+
+    @app.post("/checkouts/{ref}/complete", include_in_schema=False, response_model=None)
+    def complete_checkout(ref: str) -> dict[str, Any] | JSONResponse:
+        """Solo de la demo: el cliente pagó en el checkout de la tienda (idempotente)."""
+        found = purchases.get(ref)
+        if found is None:
+            return _error(404, "checkout_not_found", f"There's no checkout {ref}")
+        if found["status"] != "completed":
+            found.update({"status": "completed", "order_id": f"NW-{5000 + len(purchases)}"})
+        return found
 
     @app.get("/orders")
     def list_orders(customer_phone: str) -> dict[str, Any]:

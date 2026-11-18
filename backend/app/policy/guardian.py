@@ -22,7 +22,7 @@ from psycopg.types.json import Jsonb
 
 from app.contacts import hash_phone
 from app.db.connection import tenant_scope
-from app.sales import upsell
+from app.sales import attribution, upsell
 from app.tools.runtime import ToolRuntime, UpstreamResult, idempotency_key
 
 DecisionStatus = Literal["executed", "denied", "approval_required", "failed"]
@@ -176,7 +176,7 @@ class Guardian:
         )
         if decision is not None:
             return decision
-        return self._run(manifest, tool_input, case_id, resources)
+        return self._run(manifest, tool_input, case_id, resources, tenant_id)
 
     def execute_approved(
         self,
@@ -203,7 +203,7 @@ class Guardian:
         )
         if decision is not None:
             return decision
-        return self._run(manifest, tool_input, case_id, resources)
+        return self._run(manifest, tool_input, case_id, resources, tenant_id)
 
     def _pending_in_case(
         self,
@@ -241,6 +241,15 @@ class Guardian:
             },
             reason=CHANGED_MIND_REASON,
         )
+
+    def checkout_status(self, ref: str) -> dict[str, Any] | None:
+        """Si la compra de una conversación se completó en la tienda (decisión 063). Solo
+        lectura; None si la tienda no lo informa o no responde."""
+        try:
+            found = self._runtime.call("GET", "/checkouts/{ref}", {"ref": ref})
+        except RuntimeError:
+            return None
+        return found.data if found.ok and isinstance(found.data, dict) else None
 
     # -- retención (decisión 062) ----------------------------------------------------------
     def _retention(
@@ -547,18 +556,25 @@ class Guardian:
         tool_input: dict[str, Any],
         case_id: uuid.UUID,
         resources: dict[str, Any],
+        tenant_id: uuid.UUID,
     ) -> GuardDecision:
         upstream = manifest["upstream"]
         key = idempotency_key(manifest.get("idempotency_key"), {"case_id": case_id, **tool_input})
         side_effect = upstream["method"] != "GET"
+        # El identificador de la conversación (decisión 063) lo pone el código, no el modelo.
+        ref_field = manifest.get("conversation_ref")
+        ref = attribution.conversation_ref(case_id)
+        params = {**tool_input, ref_field: ref} if ref_field else tool_input
         try:
             outcome: UpstreamResult = self._runtime.call(
-                upstream["method"], upstream["path"], tool_input, key=key
+                upstream["method"], upstream["path"], params, key=key
             )
         except RuntimeError as exc:
             return GuardDecision(
                 "failed", {"error": "La API no respondió."}, str(exc), side_effect=side_effect
             )
+        if outcome.ok and ref_field and isinstance(outcome.data, dict):
+            attribution.record(self._conn, tenant_id, case_id, ref, outcome.data)
         if outcome.ok:
             return GuardDecision(
                 "executed",

@@ -37,6 +37,8 @@ MANIFEST_SCHEMA: dict[str, Any] = {
         "alternatives": {"type": "array", "items": {"type": "string"}},
         # Retención (decisión 062): herramientas que se ofrecen antes de cancelar o reembolsar.
         "retention": {"type": "array", "items": {"type": "string"}},
+        # Campo del cuerpo donde el guardián pone el identificador de la conversación (063).
+        "conversation_ref": {"type": "string"},
         "owner_check": {"type": ["string", "null"]},
         "owner_lookup": {
             "type": "object",
