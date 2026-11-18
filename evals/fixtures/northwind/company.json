@@ -29,6 +29,9 @@
     {"label": "daniel", "phone": "+15555550102", "verified": true},
     {"label": "sophia", "phone": "+15555550103", "verified": false}
   ],
+  "upsell_rules": [
+    {"product": "Wool Beanie", "case_types": ["shopping"], "max_discount": 15}
+  ],
   "tool_limits": {
     "iniciar_reembolso": {"risk": "medium", "approval_over": 100, "max_amount": 1000},
     "cancelar_pedido": {"approval_over": 500, "amount_from": "order.total"},

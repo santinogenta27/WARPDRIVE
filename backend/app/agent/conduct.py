@@ -61,8 +61,23 @@ _EMPATHY_EN = re.compile(
     r"(?i)\b(?:sorry|apologi[sz]e|apologies|understand|frustrat\w*|hear\s+you|that'?s\s+not"
     r"\s+the\s+experience|i\s+know\s+how|must\s+be|really\s+appreciate\s+your\s+patience)\b"
 )
+# En español, solo para no ofrecer ventas a un cliente enojado (decisión 061): el control de
+# empatía sigue solo en inglés.
+_UPSET_ES = re.compile(
+    r"(?i)\b(?:indignad[oa]|enojad[oa]|furios[oa]|inaceptable|vergüenza|vergonzoso|hart[oa]"
+    r"|p[eé]sim[oa]|un desastre|estafa|una burla|nunca\s+(?:me\s+)?responden|todav[ií]a\s+no"
+    r"\s+(?:lleg[oó]|me))\b|!!|\?!|!\?"
+)
 CLAIMS = {"es": _CLAIM_ES, "en": _CLAIM_EN}
 UPSET = {"en": _UPSET_EN}
+UPSET_FOR_OFFERS = (_UPSET_EN, _UPSET_ES)
+
+
+def upset_any_language(message: str) -> bool:
+    """El cliente está molesto, escriba en inglés o en español."""
+    return any(pattern.search(message) for pattern in UPSET_FOR_OFFERS)
+
+
 EMPATHY = {"en": _EMPATHY_EN}
 ACTION_CLAIM_REASON = "afirma una acción que ninguna herramienta hizo en este turno"
 TONE_CORRECTIONS = {

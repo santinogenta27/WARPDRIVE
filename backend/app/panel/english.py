@@ -285,6 +285,36 @@ PHRASES: dict[str, str] = {
     ),
     "El saludo puede tener hasta 300 caracteres.": "The greeting can be up to 300 characters.",
     "El nombre y el saludo no pueden llevar < ni >.": "The name and greeting can't contain < or >.",
+    # ventas cruzadas (decisión 061)
+    "Ventas cruzadas": "Cross-selling",
+    "Producto": "Product",
+    "Cuándo": "When",
+    "Descuento máximo": "Maximum discount",
+    "Quitar": "Remove",
+    "Todavía no hay productos para ofrecer.": "No products to offer yet.",
+    "Producto (con el nombre que tiene en tu tienda)": "Product (with its name in your store)",
+    "Cuándo ofrecerlo": "When to offer it",
+    "Descuento máximo (%)": "Maximum discount (%)",
+    "Agregar": "Add",
+    "No hay tipos de caso activos donde ofrecer algo.": (
+        "There are no active case types where something can be offered."
+    ),
+    "El asistente ofrece como mucho un producto por conversación, después de resolver lo que "
+    "pidió el cliente, y nunca si está enojado o en medio de un reclamo. El descuento no pasa el "
+    "máximo.": (
+        "The assistant offers at most one product per conversation, after solving what the "
+        "customer asked, and never when they're upset or in the middle of a complaint. The "
+        "discount never goes over the maximum."
+    ),
+    "Producto para ofrecer agregado.": "Product to offer added.",
+    "Producto quitado.": "Product removed.",
+    "El descuento tiene que ser un número.": "The discount has to be a number.",
+    "El descuento máximo va de 0 a 50 %.": "The maximum discount goes from 0 to 50%.",
+    "Falta el producto.": "The product is missing.",
+    "Elegí al menos un tipo de caso.": "Choose at least one case type.",
+    "Las ventas no se ofrecen en un reclamo: elegí otro tipo de caso.": (
+        "Products aren't offered during a complaint: choose another case type."
+    ),
     # reglas de atención (decisión 051)
     "Reglas de atención": "Service rules",
     "Exige identidad verificada": "Requires a verified identity",

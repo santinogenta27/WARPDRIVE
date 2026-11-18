@@ -132,7 +132,7 @@ class TiendanubeTransport(httpx.BaseTransport):
         if request.method == "GET" and url.path == "/products":
             return self._products(query.get("query", ""), query.get("size"))
         if request.method == "POST" and url.path == "/checkouts":
-            return self._checkout(body.get("items") or [])
+            return self._checkout(body.get("items") or [], float(body.get("discount_percent") or 0))
         match = re.match(r"^/orders/([^/]+)(?:/(\w[\w-]*))?$", url.path)
         if match is None:
             return _json(404, {"code": "not_found", "message": "Operación no disponible."})
@@ -185,7 +185,7 @@ class TiendanubeTransport(httpx.BaseTransport):
         ]
         return _json(200, {"products": products})
 
-    def _checkout(self, items: list[dict[str, Any]]) -> httpx.Response:
+    def _checkout(self, items: list[dict[str, Any]], discount: float = 0) -> httpx.Response:
         """Tiendanube no tiene un link de carrito armado por API: el equivalente es la página
         del producto con la variante elegida, donde el cliente toca "Comprar". Por eso, un
         producto por link."""
@@ -219,15 +219,21 @@ class TiendanubeTransport(httpx.BaseTransport):
             "quantity": quantity,
             "unit_price": variant["price"],
         }
-        return _json(
-            201,
-            {
-                "url": f"{_text(product.get('canonical_url'))}?variant={raw.get('id')}",
-                "items": [line],
-                "total": round(variant["price"] * quantity, 2),
-                "currency": currency or "",
-            },
-        )
+        total = variant["price"] * quantity
+        checkout: dict[str, Any] = {
+            "url": f"{_text(product.get('canonical_url'))}?variant={raw.get('id')}",
+            "items": [line],
+            "total": round(total, 2),
+            "currency": currency or "",
+        }
+        if discount:
+            # La página del producto no aplica cupones: el cliente escribe el código al pagar.
+            code = self._discount_code("OFERTA", discount)
+            if isinstance(code, httpx.Response):
+                return code
+            checkout["total"] = round(total * (1 - discount / 100), 2)
+            checkout.update({"discount_percent": discount, "discount_code": code})
+        return _json(201, checkout)
 
     def _order(self, number: str) -> dict[str, Any] | None:
         found = self._api.get("/orders", params={"q": number.lstrip("#")})
@@ -236,14 +242,21 @@ class TiendanubeTransport(httpx.BaseTransport):
         orders = [o for o in found.json() or [] if str(o.get("number")) == number.lstrip("#")]
         return orders[0] if len(orders) == 1 else None
 
-    def _coupon(self, order: dict[str, Any], percent: float) -> httpx.Response:
-        code = f"GRACIAS{secrets.token_hex(3).upper()}"
+    def _discount_code(self, prefix: str, percent: float) -> str | httpx.Response:
+        """Un cupón de un solo uso con su código."""
+        code = f"{prefix}{secrets.token_hex(3).upper()}"
         made = self._api.post(
             "/coupons",
             json={"code": code, "type": "percentage", "value": f"{percent:.2f}", "max_uses": 1},
         )
         if made.status_code not in (200, 201):
             return _json(made.status_code, {"message": "Tiendanube rechazó el cupón."})
+        return code
+
+    def _coupon(self, order: dict[str, Any], percent: float) -> httpx.Response:
+        code = self._discount_code("GRACIAS", percent)
+        if isinstance(code, httpx.Response):
+            return code
         return _json(
             201,
             {

@@ -196,6 +196,19 @@ def configure(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
                 active=active[kind.name],
                 instructions=instructions[kind.name],
             )
+    # Ventas cruzadas (decisión 061): las reglas de los fixtures, sin duplicar al regenerar.
+    from app.sales import upsell
+
+    for rule in upsell.load(conn, tenant_id):
+        upsell.remove(conn, tenant_id, rule.id)
+    for rule in data.get("upsell_rules") or []:
+        upsell.add(
+            conn,
+            tenant_id,
+            rule["product"],
+            list(rule["case_types"]),
+            upsell.parse_discount(str(rule["max_discount"])),
+        )
     brand = data.get("widget") or {}
     current = widget.load(conn, tenant_id)
     widget.save(

@@ -270,7 +270,8 @@
               "required": ["sku", "quantity"],
               "additionalProperties": false
             }
-          }
+          },
+          "discount_percent": {"type": "number", "minimum": 0, "maximum": 90, "description": "Only the discount of an offer made in this conversation"}
         },
         "required": ["items"],
         "additionalProperties": false
@@ -295,7 +296,9 @@
             }
           },
           "total": {"type": "number", "minimum": 0},
-          "currency": {"type": "string"}
+          "currency": {"type": "string"},
+          "discount_percent": {"type": "number"},
+          "discount_code": {"type": "string", "description": "The code the checkout applies (the customer can also type it)"}
         },
         "required": ["url", "items", "total", "currency"],
         "additionalProperties": false

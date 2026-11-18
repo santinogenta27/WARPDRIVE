@@ -52,6 +52,7 @@ from app.policy.guardian import (
     Guardian,
 )
 from app.rag.search import SearchResult, hybrid_search
+from app.sales import upsell
 
 AGENT_MODEL = "claude-sonnet-5-5"
 MAX_STEPS = 8
@@ -719,10 +720,22 @@ class Agent:
         # Con algo pendiente de aprobación, el agente puede cancelarlo si el cliente cambia de
         # idea (decisión 040).
         pending = chat_fallback is None and self._has_pending(turn.tenant_id, turn.case_id)
+        # Venta cruzada (decisión 061): solo si hay una regla para el tipo de caso, no hubo otra
+        # oferta en la conversación y es buen momento. El guardián lo vuelve a controlar.
+        offers = (
+            upsell.offerable(self._conn, turn.tenant_id, turn.case_id, turn.case_type, turn.text)
+            if chat_fallback is None
+            else []
+        )
         tools = prompt.tool_definitions(
-            manifests, finals, english=turn.lang == "en", pending=pending
+            manifests,
+            finals,
+            english=turn.lang == "en",
+            pending=pending,
+            offers=[(r.product, r.max_discount) for r in offers],
         )
         allowed = {m["name"] for m in manifests} | ({CANCEL_PENDING} if pending else set())
+        allowed |= {upsell.OFFER_PRODUCT} if offers else set()
         turn.sales = any(is_product_tool(m) for m in manifests)
         try:
             return self._loop(turn, system, messages, tools, allowed, chat=chat_fallback)
@@ -940,6 +953,13 @@ class Agent:
                     if call.name == CANCEL_PENDING and CANCEL_PENDING in allowed:
                         decision = self._guardian.cancel_pending(
                             turn.tenant_id, turn.case_id, call.input
+                        )
+                    elif call.name == upsell.OFFER_PRODUCT and call.name in allowed:
+                        decision = self._guardian.offer_product(
+                            tenant_id=turn.tenant_id,
+                            case_id=turn.case_id,
+                            message=turn.text,
+                            tool_input=call.input,
                         )
                     else:
                         decision = self._guardian.execute(

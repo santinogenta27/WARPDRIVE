@@ -63,6 +63,7 @@ class CartItem(BaseModel):
 
 class CheckoutRequest(BaseModel):
     items: list[CartItem] = Field(min_length=1, max_length=10)
+    discount_percent: float = Field(default=0, ge=0, le=90)
 
 
 CHECKOUT_BASE = "https://shop.northwind.example"  # la tienda ficticia (la demo la cambia)
@@ -269,13 +270,19 @@ def create_app(
                 }
             )
         cart = ",".join(f"{line['sku']}:{line['quantity']}" for line in lines)
-        total = round(sum(line["unit_price"] * line["quantity"] for line in lines), 2)
-        checkout = {
+        total = sum(line["unit_price"] * line["quantity"] for line in lines)
+        checkout: dict[str, Any] = {
             "url": f"{checkout_base.rstrip('/')}/cart/{cart}",
             "items": lines,
-            "total": total,
+            "total": round(total, 2),
             "currency": "USD",
         }
+        if body.discount_percent:
+            code = f"NW{body.discount_percent:g}OFF"
+            checkout["url"] += f"?discount={code}"
+            checkout["total"] = round(total * (1 - body.discount_percent / 100), 2)
+            checkout["discount_percent"] = body.discount_percent
+            checkout["discount_code"] = code
         return JSONResponse(status_code=201, content=checkout)
 
     @app.get("/orders")

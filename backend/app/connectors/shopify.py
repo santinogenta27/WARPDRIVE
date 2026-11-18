@@ -175,7 +175,7 @@ class ShopifyTransport(httpx.BaseTransport):
         if request.method == "GET" and path == "/products":
             return self._products(query.get("query", ""), query.get("size"))
         if request.method == "POST" and path == "/checkouts":
-            return self._checkout(body.get("items") or [])
+            return self._checkout(body.get("items") or [], float(body.get("discount_percent") or 0))
         match = re.match(r"^/orders/([^/]+)(?:/(\w[\w-]*))?$", path)
         if match is None:
             return _json(404, {"code": "not_found", "message": "Operación no disponible."})
@@ -223,7 +223,7 @@ class ShopifyTransport(httpx.BaseTransport):
         currency = (shop.json().get("shop") or {}).get("currency")
         return str(currency) if currency else None
 
-    def _checkout(self, items: list[dict[str, Any]]) -> httpx.Response:
+    def _checkout(self, items: list[dict[str, Any]], discount: float = 0) -> httpx.Response:
         """El permalink de carrito de Shopify (`/cart/{variante}:{cantidad},...`): abre el
         checkout de la tienda con el carrito armado. No crea nada en Shopify ni cobra."""
         found = self._api.get("/products.json", params={"status": "active", "limit": 250})
@@ -256,15 +256,23 @@ class ShopifyTransport(httpx.BaseTransport):
                 }
             )
         host = str(self._api.base_url.host)
-        return _json(
-            201,
-            {
-                "url": f"https://{host}/cart/{','.join(parts)}",
-                "items": lines,
-                "total": round(sum(x["unit_price"] * x["quantity"] for x in lines), 2),
-                "currency": currency or "",
-            },
-        )
+        total = sum(x["unit_price"] * x["quantity"] for x in lines)
+        checkout: dict[str, Any] = {
+            "url": f"https://{host}/cart/{','.join(parts)}",
+            "items": lines,
+            "total": round(total, 2),
+            "currency": currency or "",
+        }
+        if discount:
+            # El descuento de una oferta (decisión 061): un código de un solo uso que el
+            # permalink aplica con `?discount=`.
+            code = self._discount_code("OFERTA", discount)
+            if isinstance(code, httpx.Response):
+                return code
+            checkout["url"] += f"?discount={code}"
+            checkout["total"] = round(total * (1 - discount / 100), 2)
+            checkout.update({"discount_percent": discount, "discount_code": code})
+        return _json(201, checkout)
 
     def _order(self, number: str) -> dict[str, Any] | None:
         name = f"#{number.lstrip('#')}"
@@ -315,7 +323,23 @@ class ShopifyTransport(httpx.BaseTransport):
         )
 
     def _coupon(self, order: dict[str, Any], percent: float) -> httpx.Response:
-        code = f"GRACIAS-{secrets.token_hex(3).upper()}"
+        code = self._discount_code("GRACIAS", percent)
+        if isinstance(code, httpx.Response):
+            return code
+        return _json(
+            201,
+            {
+                "code": code,
+                "kind": "percent",
+                "order_id": str(order.get("name", "")).lstrip("#"),
+                "percent": percent,
+                "applies_to": "next_order",
+            },
+        )
+
+    def _discount_code(self, prefix: str, percent: float) -> str | httpx.Response:
+        """Un código de descuento de un solo uso: una regla de precio con su código."""
+        code = f"{prefix}-{secrets.token_hex(3).upper()}"
         rule = {
             "price_rule": {
                 "title": code,
@@ -339,16 +363,7 @@ class ShopifyTransport(httpx.BaseTransport):
         )
         if coded.status_code not in (200, 201):
             return _json(coded.status_code, {"message": "Shopify rechazó el código del cupón."})
-        return _json(
-            201,
-            {
-                "code": code,
-                "kind": "percent",
-                "order_id": str(order.get("name", "")).lstrip("#"),
-                "percent": percent,
-                "applies_to": "next_order",
-            },
-        )
+        return code
 
 
 def client(shop: str, token: str, upstream: httpx.BaseTransport | None = None) -> httpx.Client:

@@ -74,6 +74,49 @@ _BUY = re.compile(
 )
 
 
+OFFER = "ofrecer_producto"  # venta cruzada (decisión 061)
+
+
+def checkout_text(data: dict[str, Any]) -> str:
+    line = (data.get("items") or [{}])[0]
+    return (
+        f"Here's your link to buy the {line.get('name')} ({line.get('color')}, size "
+        f"{line.get('size')}) for {money(data.get('total'))}: {data.get('url')} You complete "
+        "the payment on our store's checkout."
+    )
+
+
+def offer_call(body: dict[str, Any], mode: str) -> dict[str, Any] | None:
+    """El producto de la herramienta de oferta y su descuento máximo (de la descripción). En
+    el modo "descuento_alto", pide el doble del máximo (el guardián lo rechaza)."""
+    tool = next((t for t in body.get("tools") or [] if t["name"] == OFFER), None)
+    if tool is None:
+        return None
+    names = tool["input_schema"]["properties"]["product"]["enum"]
+    top = re.search(r"up to (\d+(?:\.\d+)?)% off", tool["description"])
+    discount = float(top.group(1)) if top else 0.0
+    return {
+        "product": names[0],
+        "discount_percent": discount * 2 if mode == "descuento_alto" else discount,
+    }
+
+
+def with_offer(results: list[tuple[str, dict[str, Any], dict[str, Any]]]) -> str:
+    """El link de compra y, si el guardián la dejó, la oferta con su precio real."""
+    checkout = next(r[2].get("data") or {} for r in reversed(results) if r[0] == CHECKOUT)
+    text = checkout_text(checkout)
+    offer = results[-1][2].get("data")
+    if offer:
+        product = offer["product"]
+        discount = offer.get("discount_percent") or 0
+        deal = f" and I can give you {discount:g}% off" if discount else ""
+        text += (
+            f" By the way, our {product['name']} is {money(product['price'])}{deal}, in case "
+            "you'd like to add it."
+        )
+    return text
+
+
 def wants_to_buy(message: str) -> bool:
     return _BUY.search(message) is not None
 
@@ -226,6 +269,16 @@ class EnglishAgent:
             looked_up = "error" not in results[-1][2]
             if self.mode == "deriva_siempre_tras_consultar" or (looked_up and not corrected):
                 return escalate("Customer request for order status")
+        # Venta cruzada (decisión 061): con el link ya armado, una oferta si la herramienta está.
+        if results and results[-1][0] == CHECKOUT and "error" not in results[-1][2]:
+            offer = offer_call(body, self.mode)
+            if offer is not None and OFFER in tool_names:
+                return [self.tool_use(OFFER, offer)]
+        if results and results[-1][0] == OFFER:
+            top = results[-1][2].get("maximo_permitido")
+            if top is not None and not any(r[1].get("discount_percent") == top for r in results):
+                return [self.tool_use(OFFER, {**results[-1][1], "discount_percent": top})]
+            return reply(with_offer(results))
         if results:
             name, call_input, result = results[-1]
             if "pendiente" in result and CANCEL in tool_names:
@@ -298,12 +351,7 @@ class EnglishAgent:
         if name == PRODUCTS:
             return reply(self.recommend(call_input, data, message, corrected))
         if name == CHECKOUT:
-            line = (data.get("items") or [{}])[0]
-            return reply(
-                f"Here's your link to buy the {line.get('name')} ({line.get('color')}, size "
-                f"{line.get('size')}) for {money(data.get('total'))}: {data.get('url')} You "
-                "complete the payment on our store's checkout."
-            )
+            return reply(checkout_text(data))
         if name in self.DONE:
             return reply(self.DONE[name](data))
         if name != "consultar_pedido":

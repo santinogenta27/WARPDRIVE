@@ -7,6 +7,7 @@ from typing import Any
 
 from app.policy.guardian import CANCEL_PENDING
 from app.rag.search import SearchResult
+from app.sales.upsell import OFFER_PRODUCT
 
 PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 # v2: cuándo derivar y cuándo explicar (docs/calidad.md). v3: sin verificar, usar la herramienta
@@ -177,17 +178,54 @@ def cancel_pending_tool(english: bool) -> dict[str, Any]:
     }
 
 
+def offer_tool(offers: list[tuple[str, float]], english: bool) -> dict[str, Any]:
+    """Herramienta interna de venta cruzada (decisión 061): los productos que la empresa eligió
+    para este tipo de caso, con su descuento máximo. La ejecuta el guardián, que vuelve a
+    controlar todo; se ofrece solo cuando es buen momento y no hubo otra oferta."""
+    listed = ", ".join(
+        f"{name} ({f'up to {top:g}% off' if english else f'hasta {top:g} % de descuento'})"
+        if top
+        else name
+        for name, top in offers
+    )
+    return {
+        "name": OFFER_PRODUCT,
+        "description": (
+            "Offers the customer one more product the store chose for this moment, once per "
+            f"conversation, after you solved what they asked. Products: {listed}. The discount "
+            "can't go over the maximum. It returns the product's real price and stock."
+            if english
+            else "Ofrece al cliente un producto más que eligió la tienda para este momento, una "
+            f"sola vez por conversación y después de resolver lo que pidió. Productos: {listed}. "
+            "El descuento no puede pasar el máximo. Devuelve el precio y el stock reales."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "product": {"type": "string", "enum": [name for name, _ in offers]},
+                "discount_percent": {"type": "number", "minimum": 0},
+            },
+            "required": ["product"],
+            "additionalProperties": False,
+        },
+    }
+
+
 def tool_definitions(
     manifests: list[dict[str, Any]],
     finals: tuple[str, ...] = ("responder", "derivar"),
     *,
     english: bool = False,
     pending: bool = False,
+    offers: list[tuple[str, float]] | None = None,
 ) -> list[dict[str, Any]]:
-    """`pending`: el caso tiene algo pendiente de aprobación; se suma `cancelar_pendiente`."""
+    """`pending`: el caso tiene algo pendiente de aprobación; se suma `cancelar_pendiente`.
+    `offers`: productos de venta cruzada para ofrecer ahora; se suma `ofrecer_producto`."""
     business = [
         {"name": m["name"], "description": m["description"], "input_schema": m["input_schema"]}
         for m in manifests
     ]
     extra = [cancel_pending_tool(english)] if pending else []
+    if offers:
+        extra.append(offer_tool(offers, english))
     return business + extra + [t for t in _final_tools(english) if t["name"] in finals]

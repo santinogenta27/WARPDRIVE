@@ -22,6 +22,7 @@ from psycopg.types.json import Jsonb
 
 from app.contacts import hash_phone
 from app.db.connection import tenant_scope
+from app.sales import upsell
 from app.tools.runtime import ToolRuntime, UpstreamResult, idempotency_key
 
 DecisionStatus = Literal["executed", "denied", "approval_required", "failed"]
@@ -33,6 +34,7 @@ ALREADY_PENDING_REASON = "Ya hay una solicitud pendiente de aprobación para el 
 CANCEL_PENDING = "cancelar_pendiente"
 CHANGED_MIND_REASON = "Hay una solicitud pendiente para el mismo recurso en este caso."
 _HIDDEN_FIELDS = {"customer_phone"}  # el modelo no necesita el teléfono en claro
+ONE_OFFER_REASON = "Ya hubo una oferta en esta conversación."  # decisión 061
 
 
 def _resource_key(manifest: dict[str, Any], tool_input: dict[str, Any]) -> str | None:
@@ -156,6 +158,10 @@ class Guardian:
         waiting = self._pending_in_case(tenant_id, case_id, manifest, tool_input)
         if waiting is not None:
             return waiting
+        if tool_input.get("discount_percent"):
+            unoffered = self._discount_without_offer(tenant_id, case_id, tool_input)
+            if unoffered is not None:
+                return unoffered
         decision = self._apply_risk_policy(
             tenant_id=tenant_id,
             case_id=case_id,
@@ -230,6 +236,90 @@ class Guardian:
                 "pendiente": {"herramienta": row[0], "parametros": row[1]},
             },
             reason=CHANGED_MIND_REASON,
+        )
+
+    # -- ventas cruzadas (decisión 061) -----------------------------------------------------
+    def _discount_without_offer(
+        self, tenant_id: uuid.UUID, case_id: uuid.UUID, tool_input: dict[str, Any]
+    ) -> GuardDecision | None:
+        """Un descuento en el link de compra sale solo de la oferta de esta conversación: hasta
+        su porcentaje y para los productos ofrecidos."""
+        with tenant_scope(self._conn, tenant_id):
+            row = self._conn.execute(
+                "select discount, skus from upsell_offers where case_id = %s", (case_id,)
+            ).fetchone()
+        wanted = float(tool_input["discount_percent"])
+        skus = {str(item.get("sku")) for item in tool_input.get("items") or []}
+        if row is None or wanted > float(row[0]) or not skus <= set(row[1] or []):
+            return _denied(
+                "Descuento sin una oferta en la conversación.",
+                "Ese descuento no sale de una oferta de esta conversación: armá el link sin "
+                "descuento.",
+            )
+        return None
+
+    def offer_product(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        case_id: uuid.UUID,
+        message: str,
+        tool_input: dict[str, Any],
+    ) -> GuardDecision:
+        """Una venta cruzada: un producto de una regla activa del tipo de caso, hasta su
+        descuento máximo, una vez por conversación y nunca en mal momento. Trae el producto de
+        la tienda (precio y stock reales) y no lo ofrece sin stock."""
+        product = str(tool_input.get("product") or "").strip()
+        discount = tool_input.get("discount_percent", 0)
+        if not product or not isinstance(discount, int | float) or discount < 0:
+            return _denied("Parámetros inválidos.")
+        with tenant_scope(self._conn, tenant_id):
+            row = self._conn.execute(
+                "select t.name from cases c join case_types t on t.id = c.case_type_id"
+                " where c.id = %s",
+                (case_id,),
+            ).fetchone()
+        kind = row[0] if row else None
+        rule = next(
+            (
+                r
+                for r in upsell.load(self._conn, tenant_id, active_only=True)
+                if r.product.lower() == product.lower() and kind in r.case_types
+            ),
+            None,
+        )
+        if rule is None:
+            return _denied("No hay una regla para ofrecer ese producto en este tipo de caso.")
+        if discount > rule.max_discount:
+            decision = _denied("El descuento supera el máximo de la regla.")
+            decision.result["maximo_permitido"] = rule.max_discount
+            return decision
+        moment = upsell.bad_moment(self._conn, tenant_id, case_id, message)
+        if moment is not None:
+            return _denied(f"No es momento de ofrecer: {moment}")
+        if upsell.offered(self._conn, tenant_id, case_id):
+            return _denied(ONE_OFFER_REASON)
+        try:
+            found = self._runtime.call("GET", "/products", {"query": rule.product})
+        except RuntimeError as exc:
+            return GuardDecision("failed", {"error": "La API no respondió."}, str(exc))
+        products = (found.data or {}).get("products") or [] if found.ok else []
+        view = next((p for p in products if str(p.get("name")).lower() == product.lower()), None)
+        if view is None or not view.get("in_stock"):
+            return _denied("El producto no está disponible en la tienda.")
+        skus = [str(v["sku"]) for v in view.get("variants") or []]
+        with tenant_scope(self._conn, tenant_id):
+            made = self._conn.execute(
+                "insert into upsell_offers (tenant_id, case_id, rule_id, product, discount, skus)"
+                " values (%s, %s, %s, %s, %s, %s) on conflict (tenant_id, case_id) do nothing"
+                " returning id",
+                (tenant_id, case_id, rule.id, view["name"], discount, skus),
+            ).fetchone()
+        if made is None:
+            return _denied(ONE_OFFER_REASON)
+        return GuardDecision(
+            "executed",
+            {"ok": True, "data": {"product": _sanitize(view), "discount_percent": discount}},
         )
 
     def cancel_pending(
