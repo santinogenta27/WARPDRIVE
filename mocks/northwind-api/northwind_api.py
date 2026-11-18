@@ -16,6 +16,7 @@ import re
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Header
 from fastapi.responses import JSONResponse
@@ -54,6 +55,93 @@ class ExchangeRequest(BaseModel):
 
 class CouponRequest(BaseModel):
     percent: int = Field(ge=1, le=100)
+
+
+class CartItem(BaseModel):
+    sku: str
+    quantity: int = Field(default=1, ge=1, le=10)
+
+
+class CheckoutRequest(BaseModel):
+    items: list[CartItem] = Field(min_length=1, max_length=10)
+    discount_percent: float = Field(default=0, ge=0, le=90)
+    ref: str | None = Field(default=None, max_length=40)
+
+
+CHECKOUT_BASE = "https://shop.northwind.example"  # la tienda ficticia (la demo la cambia)
+
+
+COLOR_CODES = {
+    "Lake Blue": "BLU",
+    "Black": "BLK",
+    "Moss": "MOS",
+    "Rust": "RST",
+    "Navy": "NVY",
+    "Oat": "OAT",
+    "Charcoal": "CHR",
+    "Olive": "OLV",
+    "Khaki": "KHK",
+    "White": "WHT",
+    "Sage": "SGE",
+    "Walnut": "BRN",
+    "Field Tan": "TAN",
+    "Heather Gray": "GRY",
+}
+_WORD = re.compile(r"[a-z0-9]+")
+# Palabras que no ayudan a buscar un producto ("do you have a jacket in M?").
+_SEARCH_STOP = {"a", "an", "the", "do", "you", "have", "any", "in", "for", "of", "and", "or"}
+
+
+def sku(product: dict[str, Any], color: str, size: str) -> str:
+    """ "NW-TRJ-BLU-M": como los SKU de los pedidos."""
+    size_code = "OS" if size.lower() == "one size" else size.upper()
+    return f"NW-{product['code']}-{COLOR_CODES.get(color, color[:3].upper())}-{size_code}"
+
+
+def product_view(product: dict[str, Any]) -> dict[str, Any]:
+    """Un producto con sus variantes, precio y stock reales (el Product del OpenAPI)."""
+    variants = [
+        {
+            "sku": sku(product, color, size),
+            "size": size,
+            "color": color,
+            "stock": int(product["stock"][color][size]),
+        }
+        for color in product["colors"]
+        for size in product["sizes"]
+    ]
+    return {
+        "code": product["code"],
+        "name": product["name"],
+        "category": product["category"],
+        "description": product["description"],
+        "price": product["price"],
+        "currency": "USD",
+        "in_stock": any(v["stock"] > 0 for v in variants),
+        "variants": variants,
+    }
+
+
+def search_products(
+    catalog: list[dict[str, Any]], query: str = "", size: str | None = None
+) -> list[dict[str, Any]]:
+    """Productos cuyo nombre, categoría o descripción tienen alguna palabra de `query` (todos si
+    no hay palabras). Con `size`, solo las variantes de ese talle."""
+    words = {w.rstrip("s") for w in _WORD.findall(query.lower())} - _SEARCH_STOP
+    found = []
+    for product in catalog:
+        text = f"{product['name']} {product['category']} {product['description']}".lower()
+        own = {w.rstrip("s") for w in _WORD.findall(text)}
+        if words and not words & own:
+            continue
+        view = product_view(product)
+        if size:
+            view["variants"] = [
+                v for v in view["variants"] if v["size"].lower() == size.strip().lower()
+            ]
+            view["in_stock"] = any(v["stock"] > 0 for v in view["variants"])
+        found.append(view)
+    return found
 
 
 def canonical(order_id: str) -> str:
@@ -101,10 +189,12 @@ def create_app(
     *,
     extra_customers: list[dict[str, Any]] | None = None,
     today: date | None = None,
+    checkout_base: str = CHECKOUT_BASE,
 ) -> FastAPI:
     """`extra_customers`: customers added to `data/customers.json` (the demo uses one to give a
     fixture customer a second, real email). `today`: the day the orders are relative to (by
-    default, today in the store); explicit `orders` are used as they come."""
+    default, today in the store); explicit `orders` are used as they come. `checkout_base`:
+    where the checkout links point (the demo points them to its own store page)."""
 
     def current() -> date:
         return today or store_today()
@@ -121,7 +211,9 @@ def create_app(
     exchanged: set[str] = set()  # "order:sku": each item is exchanged once
     courtesies: dict[tuple[str, str], dict[str, Any]] = {}  # (kind, idempotency key)
     given_for: dict[str, str] = {}  # one courtesy per order: order id -> what it got
-    products = {p["name"].lower(): p for p in json.loads(PRODUCTS_PATH.read_text(encoding="utf-8"))}
+    purchases: dict[str, dict[str, Any]] = {}  # checkouts by conversation ref
+    catalog: list[dict[str, Any]] = json.loads(PRODUCTS_PATH.read_text(encoding="utf-8"))
+    products = {p["name"].lower(): p for p in catalog}
 
     app = FastAPI(title="Northwind Outfitters — Orders API (simulated)")
     app.openapi = lambda: json.loads(OPENAPI_PATH.read_text(encoding="utf-8"))  # type: ignore[method-assign]
@@ -131,7 +223,7 @@ def create_app(
         """Back to the initial orders, with no refunds, exchanges or courtesies (for evals)."""
         state.clear()
         state.update({o["id"]: copy.deepcopy(o) for o in data})
-        for kept in (refunds, cancels, exchanges, exchanged, courtesies, given_for):
+        for kept in (refunds, cancels, exchanges, exchanged, courtesies, given_for, purchases):
             kept.clear()
 
     app.state.reset = reset
@@ -146,6 +238,83 @@ def create_app(
     def find_customers(email: str) -> dict[str, Any]:
         wanted = email.strip().lower()
         return {"customers": [c for c in customers if c["email"].lower() == wanted]}
+
+    @app.get("/products")
+    def find_products(query: str = "", size: str | None = None) -> dict[str, Any]:
+        return {"products": search_products(catalog, query, size)}
+
+    @app.post("/checkouts", status_code=201, response_model=None)
+    def create_checkout(body: CheckoutRequest) -> JSONResponse:
+        """Arma el carrito y devuelve el link del checkout de la tienda: ahí paga el cliente.
+        Acá no se cobra nada ni se reserva stock."""
+        variants = {
+            v["sku"]: (view, v) for view in map(product_view, catalog) for v in view["variants"]
+        }
+        lines = []
+        for item in body.items:
+            found = variants.get(item.sku.strip().upper())
+            if found is None:
+                return _error(409, "unknown_sku", f"There's no product with SKU {item.sku}")
+            view, variant = found
+            if variant["stock"] < item.quantity:
+                return _error(
+                    409,
+                    "out_of_stock",
+                    f"{view['name']} ({variant['color']}, {variant['size']}) is out of stock",
+                )
+            lines.append(
+                {
+                    "sku": variant["sku"],
+                    "name": view["name"],
+                    "size": variant["size"],
+                    "color": variant["color"],
+                    "quantity": item.quantity,
+                    "unit_price": view["price"],
+                }
+            )
+        cart = ",".join(f"{line['sku']}:{line['quantity']}" for line in lines)
+        total = sum(line["unit_price"] * line["quantity"] for line in lines)
+        checkout: dict[str, Any] = {
+            "url": f"{checkout_base.rstrip('/')}/cart/{cart}",
+            "items": lines,
+            "total": round(total, 2),
+            "currency": "USD",
+        }
+        query: dict[str, str] = {}
+        if body.discount_percent:
+            code = f"NW{body.discount_percent:g}OFF"
+            query["discount"] = code
+            checkout["total"] = round(total * (1 - body.discount_percent / 100), 2)
+            checkout["discount_percent"] = body.discount_percent
+            checkout["discount_code"] = code
+        if body.ref:  # la conversación que armó el link, para atribuir la venta
+            query["ref"] = body.ref
+            purchases[body.ref] = {
+                "ref": body.ref,
+                "status": "open",
+                "total": checkout["total"],
+                "currency": "USD",
+            }
+        if query:
+            checkout["url"] += "?" + urlencode(query)
+        return JSONResponse(status_code=201, content=checkout)
+
+    @app.get("/checkouts/{ref}", response_model=None)
+    def checkout_status(ref: str) -> dict[str, Any] | JSONResponse:
+        found = purchases.get(ref)
+        if found is None:
+            return _error(404, "checkout_not_found", f"There's no checkout {ref}")
+        return found
+
+    @app.post("/checkouts/{ref}/complete", include_in_schema=False, response_model=None)
+    def complete_checkout(ref: str) -> dict[str, Any] | JSONResponse:
+        """Solo de la demo: el cliente pagó en el checkout de la tienda (idempotente)."""
+        found = purchases.get(ref)
+        if found is None:
+            return _error(404, "checkout_not_found", f"There's no checkout {ref}")
+        if found["status"] != "completed":
+            found.update({"status": "completed", "order_id": f"NW-{5000 + len(purchases)}"})
+        return found
 
     @app.get("/orders")
     def list_orders(customer_phone: str) -> dict[str, Any]:

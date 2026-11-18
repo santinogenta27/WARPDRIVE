@@ -28,7 +28,7 @@ from app.agent.classifier import (
     Classification,
     classify,
 )
-from app.agent.grounding import GroundingVerdict, check_grounding
+from app.agent.grounding import GroundingVerdict, check_grounding, check_sales, is_product_tool
 from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
 from app.cases import billing, closing, csat, team_notify
@@ -46,12 +46,19 @@ from app.obs import alerts, timing, tracing
 from app.policy.guardian import (
     ALREADY_PENDING_REASON,
     CANCEL_PENDING,
+    RETENTION_REASON,
     UNVERIFIED_REASON,
     ContactContext,
     GuardDecision,
     Guardian,
 )
 from app.rag.search import SearchResult, hybrid_search
+from app.sales import upsell
+
+RETENTION_WAIT = {
+    "es": "Las alternativas se acaban de ofrecer: respondé y esperá lo que diga el cliente.",
+    "en": "The alternatives were just offered: answer and wait for what the customer says.",
+}
 
 AGENT_MODEL = "claude-sonnet-5-5"
 MAX_STEPS = 8
@@ -232,6 +239,7 @@ HANDOFF_CAUSES = (
     "formato",  # detalle: el problema de presentable.ISSUES
     "reverificar",
     "accion_sin_herramienta",
+    "cobro_afirmado",  # dijo que cobró o compró (decisión 060)
     "tope_de_gasto",
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
@@ -314,6 +322,9 @@ class _Turn:
     handoff_retries: int = 0  # derivó con los datos de una herramienta (decisión 045)
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
+    sales: bool = False  # el turno ofrece la búsqueda de productos (decisión 059)
+    retained: set[str] = field(default_factory=set)  # retención ofrecida en el turno (062)
+    asked_given_order: bool = False  # ya se corrigió que pidiera el pedido dado (066)
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
     classification: Classification | None = None
     tone: str = "rioplatense"
@@ -655,6 +666,9 @@ class Agent:
                 if name not in tool_names
             ]
             instructions = f"{instructions.strip()}\n---\n{second.strip()}"
+        retained = self._retention_note(turn, tool_names)
+        if retained:
+            instructions = f"{instructions.strip()}\n{retained}"
         manifests = self._guardian.manifests(tenant_id, tool_names)
         turn.needs_identity = any(m.get("requires_verified_contact") for m in manifests)
         # La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el
@@ -717,10 +731,23 @@ class Agent:
         # Con algo pendiente de aprobación, el agente puede cancelarlo si el cliente cambia de
         # idea (decisión 040).
         pending = chat_fallback is None and self._has_pending(turn.tenant_id, turn.case_id)
+        # Venta cruzada (decisión 061): solo si hay una regla para el tipo de caso, no hubo otra
+        # oferta en la conversación y es buen momento. El guardián lo vuelve a controlar.
+        offers = (
+            upsell.offerable(self._conn, turn.tenant_id, turn.case_id, turn.case_type, turn.text)
+            if chat_fallback is None
+            else []
+        )
         tools = prompt.tool_definitions(
-            manifests, finals, english=turn.lang == "en", pending=pending
+            manifests,
+            finals,
+            english=turn.lang == "en",
+            pending=pending,
+            offers=[(r.product, r.max_discount) for r in offers],
         )
         allowed = {m["name"] for m in manifests} | ({CANCEL_PENDING} if pending else set())
+        allowed |= {upsell.OFFER_PRODUCT} if offers else set()
+        turn.sales = any(is_product_tool(m) for m in manifests)
         try:
             return self._loop(turn, system, messages, tools, allowed, chat=chat_fallback)
         except _ChatFallback:
@@ -823,6 +850,25 @@ class Agent:
                     # Controles de conducta (decisión 040): una acción afirmada sin herramienta
                     # es una respuesta inventada; con el cliente molesto, primero la empatía.
                     said = str(final_input.get("mensaje") or "")
+                    if _check(conduct.claims_payment, said):  # nunca cobra (decisión 060)
+                        self._audit(
+                            turn,
+                            "grounding_rejected",
+                            {"reason": conduct.PAYMENT_REASON, "rejected_message": final_input},
+                        )
+                        if turn.grounding_retries >= 1:
+                            return self._give_up(
+                                turn,
+                                f"Control de fundamento: {conduct.PAYMENT_REASON}.",
+                                chat,
+                                {"tipo": "cobro_afirmado"},
+                            )
+                        turn.grounding_retries += 1
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append(
+                            _correction(final_id, conduct.PAYMENT_CORRECTIONS[turn.lang])
+                        )
+                        continue
                     # "Reembolsado" con la aprobación pendiente tampoco vale (decisión 048).
                     if (
                         not self._acted(turn) and _check(conduct.claims_action, said, turn.lang)
@@ -850,6 +896,23 @@ class Agent:
                         messages.append(
                             _correction(final_id, conduct.ACTION_CORRECTIONS[turn.lang])
                         )
+                        continue
+                    given = _check(conduct.asks_given_order, said, turn.text)
+                    if given and not turn.asked_given_order:
+                        # Pide el número de pedido que el cliente ya dio (decisión 066): se le
+                        # pide usarlo, una sola vez.
+                        self._audit(
+                            turn,
+                            "grounding_rejected",
+                            {
+                                "reason": "Pidió un dato que el cliente ya dio.",
+                                "rejected_message": final_input,
+                            },
+                        )
+                        turn.asked_given_order = True
+                        messages.append({"role": "assistant", "content": response.content})
+                        correction = conduct.GIVEN_ORDER_CORRECTIONS[turn.lang].format(order=given)
+                        messages.append(_correction(final_id, correction))
                         continue
                     if turn.tone_retries == 0 and _check(
                         _lacks_empathy, turn.text, said, turn.lang
@@ -919,6 +982,21 @@ class Agent:
                         decision = self._guardian.cancel_pending(
                             turn.tenant_id, turn.case_id, call.input
                         )
+                    elif call.name in turn.retained:
+                        # Retención (decisión 062): las alternativas se acaban de ofrecer; la
+                        # acción espera a que el cliente conteste, no se repite en este turno.
+                        decision = GuardDecision(
+                            "denied",
+                            {"error": RETENTION_WAIT[turn.lang]},
+                            reason=RETENTION_WAIT["es"],
+                        )
+                    elif call.name == upsell.OFFER_PRODUCT and call.name in allowed:
+                        decision = self._guardian.offer_product(
+                            tenant_id=turn.tenant_id,
+                            case_id=turn.case_id,
+                            message=turn.text,
+                            tool_input=call.input,
+                        )
                     else:
                         decision = self._guardian.execute(
                             tenant_id=turn.tenant_id,
@@ -928,6 +1006,8 @@ class Agent:
                             tool_input=call.input,
                             allowed=allowed,
                         )
+                    if decision.reason == RETENTION_REASON:
+                        turn.retained.add(call.name)
                     turn.decisions.append(decision)
                     turn.tool_calls.append(
                         ToolExecution(call.name, call.input, decision.status, decision.reason)
@@ -994,6 +1074,36 @@ class Agent:
             chat,
             {"tipo": "limite_pasos"},
         )
+
+    def _retention_note(self, turn: _Turn, tool_names: list[str]) -> str:
+        """Retención (decisión 062): en un turno posterior el modelo no ve la respuesta del
+        guardián, solo el historial. Con gpt-oss-20b, cuando el cliente insistía, volvía a
+        ofrecer, derivaba o afirmaba el reembolso sin hacerlo (Hito QA, decisión 066). Se le
+        dice qué ya se ofreció; el guardián controla igual."""
+        with tenant_scope(self._conn, turn.tenant_id):
+            rows = self._conn.execute(
+                "select tool, resource_key from retention_offers where case_id = %s"
+                " order by created_at",
+                (turn.case_id,),
+            ).fetchall()
+        offered = [(str(t), str(k).replace("order_id=", "")) for t, k in rows if t in tool_names]
+        if not offered:
+            return ""
+        if turn.lang == "en":
+            lines = [
+                f"- The policy alternatives for {tool} on order {order} were already offered in "
+                f"this conversation. Don't offer them again: if the customer still wants it, "
+                f"call {tool} now."
+                for tool, order in offered
+            ]
+            return "already_offered:\n" + "\n".join(lines)
+        lines = [
+            f"- Las alternativas de la política para {tool} del pedido {order} ya se ofrecieron "
+            f"en esta conversación. No las vuelvas a ofrecer: si el cliente lo sigue queriendo, "
+            f"llamá {tool} ahora."
+            for tool, order in offered
+        ]
+        return "ya_ofrecido:\n" + "\n".join(lines)
 
     @staticmethod
     def _has_tool_data(turn: _Turn) -> bool:
@@ -1074,7 +1184,13 @@ class Agent:
         documents: dict[str, str] = {}
         for doc in turn.documents:
             documents[doc.source] = f"{documents.get(doc.source, '')}\n{doc.text}"
-        evidence = [turn.text] + [json.dumps(d.result, ensure_ascii=False) for d in turn.decisions]
+        results = [json.dumps(d.result, ensure_ascii=False) for d in turn.decisions]
+        if turn.sales:
+            # Precio y stock, solo de una herramienta (decisión 059).
+            sold = check_sales(str(data.get("mensaje") or ""), results, documents, turn.lang)
+            if not sold.ok:
+                return sold
+        evidence = [turn.text, *results]
         return check_grounding(
             str(data.get("mensaje") or ""),
             [str(s) for s in data.get("fuentes") or []],

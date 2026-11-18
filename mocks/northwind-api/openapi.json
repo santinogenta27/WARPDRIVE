@@ -21,6 +21,55 @@
         }
       }
     },
+    "/products": {
+      "get": {
+        "operationId": "buscarProductos",
+        "summary": "Searches the catalog: each product with its real price and its variants (size and color) with the units in stock right now. Use it for any question about products, prices, sizes, colors or stock",
+        "parameters": [
+          {"name": "query", "in": "query", "required": false, "description": "Words of what the customer is looking for (\"rain jacket\", \"merino sweater\"); empty for the whole catalog", "schema": {"type": "string"}},
+          {"name": "size", "in": "query", "required": false, "description": "Only the variants of this size (\"M\", \"32\")", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Products found (an empty list if none)",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProductList"}}}
+          }
+        }
+      }
+    },
+    "/checkouts": {
+      "post": {
+        "operationId": "armarCarrito",
+        "summary": "Builds a cart with the variants the customer chose (SKUs from buscar_productos) and returns the store's checkout link, where the customer completes the purchase. It doesn't take any payment",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CheckoutRequest"}}}
+        },
+        "responses": {
+          "201": {
+            "description": "Cart ready, with its checkout link",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Checkout"}}}
+          },
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/checkouts/{ref}": {
+      "get": {
+        "operationId": "consultarCompra",
+        "summary": "Whether the purchase of a conversation's checkout link was completed, with its order and amount (to attribute sales to the assistant)",
+        "parameters": [
+          {"name": "ref", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "The checkout of that conversation",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CheckoutStatus"}}}
+          },
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
     "/orders": {
       "get": {
         "operationId": "listarPedidos",
@@ -192,6 +241,101 @@
         "type": "object",
         "properties": {"code": {"type": "string"}, "message": {"type": "string"}},
         "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "Variant": {
+        "type": "object",
+        "properties": {
+          "sku": {"type": "string"},
+          "size": {"type": "string"},
+          "color": {"type": "string"},
+          "stock": {"type": ["integer", "null"], "minimum": 0, "description": "Units in stock now; 0 is out of stock and null means the store doesn't track stock (always available)"},
+          "price": {"type": "number", "minimum": 0, "description": "Only when this variant costs something different from the product"}
+        },
+        "required": ["sku", "size", "color", "stock"],
+        "additionalProperties": false
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "string"},
+          "name": {"type": "string"},
+          "category": {"type": "string"},
+          "description": {"type": "string"},
+          "price": {"type": "number", "minimum": 0},
+          "currency": {"type": "string"},
+          "in_stock": {"type": "boolean"},
+          "variants": {"type": "array", "items": {"$ref": "#/components/schemas/Variant"}}
+        },
+        "required": ["code", "name", "price", "currency", "in_stock", "variants"],
+        "additionalProperties": false
+      },
+      "CheckoutRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "sku": {"type": "string", "description": "SKU of the variant, from buscar_productos"},
+                "quantity": {"type": "integer", "minimum": 1, "maximum": 10}
+              },
+              "required": ["sku", "quantity"],
+              "additionalProperties": false
+            }
+          },
+          "discount_percent": {"type": "number", "minimum": 0, "maximum": 90, "description": "Only the discount of an offer made in this conversation"},
+          "ref": {"type": "string", "maxLength": 40, "x-conversation-ref": true, "description": "Identifier of the conversation, to attribute the sale to the assistant"}
+        },
+        "required": ["items"],
+        "additionalProperties": false
+      },
+      "Checkout": {
+        "type": "object",
+        "properties": {
+          "url": {"type": "string", "description": "The store's checkout link for the customer"},
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sku": {"type": "string"},
+                "name": {"type": "string"},
+                "size": {"type": "string"},
+                "color": {"type": "string"},
+                "quantity": {"type": "integer", "minimum": 1},
+                "unit_price": {"type": "number", "minimum": 0}
+              },
+              "required": ["sku", "name", "quantity", "unit_price"]
+            }
+          },
+          "total": {"type": "number", "minimum": 0},
+          "currency": {"type": "string"},
+          "discount_percent": {"type": "number"},
+          "discount_code": {"type": "string", "description": "The code the checkout applies (the customer can also type it)"}
+        },
+        "required": ["url", "items", "total", "currency"],
+        "additionalProperties": false
+      },
+      "CheckoutStatus": {
+        "type": "object",
+        "properties": {
+          "ref": {"type": "string"},
+          "status": {"enum": ["open", "completed"]},
+          "order_id": {"type": "string"},
+          "total": {"type": "number", "minimum": 0},
+          "currency": {"type": "string"}
+        },
+        "required": ["ref", "status"],
+        "additionalProperties": false
+      },
+      "ProductList": {
+        "type": "object",
+        "properties": {"products": {"type": "array", "items": {"$ref": "#/components/schemas/Product"}}},
+        "required": ["products"],
         "additionalProperties": false
       },
       "Item": {

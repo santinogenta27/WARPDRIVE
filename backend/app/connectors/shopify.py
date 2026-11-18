@@ -17,15 +17,16 @@ cambia.
 import json
 import re
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 
 API_VERSION = "2025-01"
 CANONICAL_BASE = "https://tienda.local"
 SHOP = re.compile(r"^[a-z0-9][a-z0-9-]*\.myshopify\.com$")
+REF_ATTRIBUTE = "asistente_ref"  # atributo del carrito con la conversación (decisión 063)
 STATUS = {
     ("paid", None): "paid",
     ("paid", "partial"): "shipped",
@@ -50,6 +51,65 @@ def clean_shop(value: str) -> str:
 
 def _json(status: int, data: Any) -> httpx.Response:
     return httpx.Response(status, json=data)
+
+
+_WORD = re.compile(r"[^\W_]+")
+SIZE_OPTIONS = {"size", "talle", "talla", "tamaño"}
+COLOR_OPTIONS = {"color", "colour"}
+
+
+def words(text: str) -> set[str]:
+    """Las palabras de una búsqueda o de un producto, sin plural simple ("jackets" -> "jacket")."""
+    return {w.rstrip("s") for w in _WORD.findall(text.lower()) if len(w) > 2}
+
+
+def matches(query: str, text: str) -> bool:
+    wanted = words(query)
+    return not wanted or bool(wanted & words(text))
+
+
+def product_view(product: dict[str, Any], currency: str | None) -> dict[str, Any]:
+    """Un producto de Shopify con la forma del producto canónico: precio y stock por variante
+    tal como los tiene la tienda. Sin seguimiento de inventario, el stock es null (disponible)."""
+    names = [str(o.get("name", "")).strip().lower() for o in product.get("options") or []]
+    variants: list[dict[str, Any]] = []
+    for variant in product.get("variants") or []:
+        values = [variant.get(f"option{i}") for i in (1, 2, 3)]
+        by_name = dict(zip(names, values, strict=False))
+        size = next((by_name[n] for n in names if n in SIZE_OPTIONS), None)
+        color = next((by_name[n] for n in names if n in COLOR_OPTIONS), None)
+        tracked = variant.get("inventory_management") == "shopify"
+        variants.append(
+            {
+                "sku": str(variant.get("sku") or variant.get("id")),
+                "size": str(size or variant.get("title") or ""),
+                "color": str(color or ""),
+                "stock": max(int(variant.get("inventory_quantity") or 0), 0) if tracked else None,
+                "price": float(variant.get("price") or 0),
+            }
+        )
+    prices = [v["price"] for v in variants]
+    return {
+        "code": str(product.get("id")),
+        "name": product.get("title"),
+        "category": product.get("product_type") or "",
+        "description": re.sub(r"<[^>]+>", " ", str(product.get("body_html") or "")).strip(),
+        "price": min(prices) if prices else 0.0,
+        "currency": currency or "",
+        "in_stock": any(v["stock"] is None or v["stock"] > 0 for v in variants),
+        "variants": variants,
+    }
+
+
+def only_size(view: dict[str, Any], size: str | None) -> dict[str, Any]:
+    if not size:
+        return view
+    variants = [v for v in view["variants"] if v["size"].lower() == size.strip().lower()]
+    return {
+        **view,
+        "variants": variants,
+        "in_stock": any(v["stock"] is None or v["stock"] > 0 for v in variants),
+    }
 
 
 def _owner(customer: dict[str, Any] | None) -> str | None:
@@ -113,6 +173,16 @@ class ShopifyTransport(httpx.BaseTransport):
         body = json.loads(request.content) if request.content else {}
         if request.method == "GET" and path == "/customers":
             return self._customers(query.get("email", ""))
+        if request.method == "GET" and path == "/products":
+            return self._products(query.get("query", ""), query.get("size"))
+        if request.method == "POST" and path == "/checkouts":
+            return self._checkout(
+                body.get("items") or [],
+                float(body.get("discount_percent") or 0),
+                str(body.get("ref") or ""),
+            )
+        if request.method == "GET" and path.startswith("/checkouts/"):
+            return self._purchase(path.removeprefix("/checkouts/"))
         match = re.match(r"^/orders/([^/]+)(?:/(\w[\w-]*))?$", path)
         if match is None:
             return _json(404, {"code": "not_found", "message": "Operación no disponible."})
@@ -138,6 +208,111 @@ class ShopifyTransport(httpx.BaseTransport):
             if str(c.get("email", "")).lower() == email.lower()
         ]
         return _json(200, {"customers": customers})
+
+    def _products(self, query: str, size: str | None) -> httpx.Response:
+        """Los productos activos (hasta 250) filtrados por las palabras de la búsqueda: la API
+        REST de Shopify filtra por título exacto, no por palabras."""
+        found = self._api.get("/products.json", params={"status": "active", "limit": 250})
+        if found.status_code != 200:
+            return _json(found.status_code, {"message": "Shopify no respondió."})
+        currency = self._currency()
+        products = [
+            only_size(product_view(p, currency), size)
+            for p in found.json().get("products") or []
+            if matches(query, f"{p.get('title')} {p.get('product_type')} {p.get('tags')}")
+        ]
+        return _json(200, {"products": products})
+
+    def _currency(self) -> str | None:
+        shop = self._api.get("/shop.json")
+        if shop.status_code != 200:
+            return None
+        currency = (shop.json().get("shop") or {}).get("currency")
+        return str(currency) if currency else None
+
+    def _purchase(self, ref: str) -> httpx.Response:
+        """La compra de una conversación: el pedido cuyo atributo `ref` (lo deja el permalink en
+        `note_attributes`) es el de la conversación, entre los de los últimos 60 días."""
+        since = (datetime.now(UTC) - timedelta(days=60)).isoformat(timespec="seconds")
+        found = self._api.get(
+            "/orders.json", params={"status": "any", "limit": 250, "created_at_min": since}
+        )
+        if found.status_code != 200:
+            return _json(found.status_code, {"message": "Shopify no respondió."})
+        for order in found.json().get("orders") or []:
+            notes = {
+                str(n.get("name")): str(n.get("value")) for n in order.get("note_attributes") or []
+            }
+            if notes.get(REF_ATTRIBUTE) == ref and not order.get("cancelled_at"):
+                return _json(
+                    200,
+                    {
+                        "ref": ref,
+                        "status": "completed",
+                        "order_id": str(order.get("name", "")).lstrip("#"),
+                        "total": float(order.get("total_price") or 0),
+                        "currency": order.get("currency") or "",
+                    },
+                )
+        return _json(404, {"code": "checkout_not_found", "message": "Todavía no hay compra."})
+
+    def _checkout(
+        self, items: list[dict[str, Any]], discount: float = 0, ref: str = ""
+    ) -> httpx.Response:
+        """El permalink de carrito de Shopify (`/cart/{variante}:{cantidad},...`): abre el
+        checkout de la tienda con el carrito armado. No crea nada en Shopify ni cobra."""
+        found = self._api.get("/products.json", params={"status": "active", "limit": 250})
+        if found.status_code != 200:
+            return _json(found.status_code, {"message": "Shopify no respondió."})
+        currency = self._currency()
+        lookup: dict[str, tuple[dict[str, Any], dict[str, Any], Any]] = {}
+        for product in found.json().get("products") or []:
+            view = product_view(product, currency)
+            for raw, variant in zip(product.get("variants") or [], view["variants"], strict=True):
+                lookup[variant["sku"]] = (view, variant, raw.get("id"))
+        lines: list[dict[str, Any]] = []
+        parts: list[str] = []
+        for item in items:
+            sku, quantity = str(item.get("sku", "")), int(item.get("quantity") or 1)
+            if sku not in lookup:
+                return _json(409, {"code": "unknown_sku", "message": f"No hay un producto {sku}."})
+            view, variant, variant_id = lookup[sku]
+            if variant["stock"] is not None and variant["stock"] < quantity:
+                return _json(409, {"code": "out_of_stock", "message": f"{view['name']} sin stock."})
+            parts.append(f"{variant_id}:{quantity}")
+            lines.append(
+                {
+                    "sku": sku,
+                    "name": view["name"],
+                    "size": variant["size"],
+                    "color": variant["color"],
+                    "quantity": quantity,
+                    "unit_price": variant["price"],
+                }
+            )
+        host = str(self._api.base_url.host)
+        total = sum(x["unit_price"] * x["quantity"] for x in lines)
+        checkout: dict[str, Any] = {
+            "url": f"https://{host}/cart/{','.join(parts)}",
+            "items": lines,
+            "total": round(total, 2),
+            "currency": currency or "",
+        }
+        query: dict[str, str] = {}
+        if discount:
+            # El descuento de una oferta (decisión 061): un código de un solo uso que el
+            # permalink aplica con `?discount=`.
+            code = self._discount_code("OFERTA", discount)
+            if isinstance(code, httpx.Response):
+                return code
+            query["discount"] = code
+            checkout["total"] = round(total * (1 - discount / 100), 2)
+            checkout.update({"discount_percent": discount, "discount_code": code})
+        if ref:  # la conversación (decisión 063): queda en el pedido como atributo
+            query[f"attributes[{REF_ATTRIBUTE}]"] = ref
+        if query:
+            checkout["url"] += "?" + urlencode(query)
+        return _json(201, checkout)
 
     def _order(self, number: str) -> dict[str, Any] | None:
         name = f"#{number.lstrip('#')}"
@@ -188,7 +363,23 @@ class ShopifyTransport(httpx.BaseTransport):
         )
 
     def _coupon(self, order: dict[str, Any], percent: float) -> httpx.Response:
-        code = f"GRACIAS-{secrets.token_hex(3).upper()}"
+        code = self._discount_code("GRACIAS", percent)
+        if isinstance(code, httpx.Response):
+            return code
+        return _json(
+            201,
+            {
+                "code": code,
+                "kind": "percent",
+                "order_id": str(order.get("name", "")).lstrip("#"),
+                "percent": percent,
+                "applies_to": "next_order",
+            },
+        )
+
+    def _discount_code(self, prefix: str, percent: float) -> str | httpx.Response:
+        """Un código de descuento de un solo uso: una regla de precio con su código."""
+        code = f"{prefix}-{secrets.token_hex(3).upper()}"
         rule = {
             "price_rule": {
                 "title": code,
@@ -212,16 +403,7 @@ class ShopifyTransport(httpx.BaseTransport):
         )
         if coded.status_code not in (200, 201):
             return _json(coded.status_code, {"message": "Shopify rechazó el código del cupón."})
-        return _json(
-            201,
-            {
-                "code": code,
-                "kind": "percent",
-                "order_id": str(order.get("name", "")).lstrip("#"),
-                "percent": percent,
-                "applies_to": "next_order",
-            },
-        )
+        return code
 
 
 def client(shop: str, token: str, upstream: httpx.BaseTransport | None = None) -> httpx.Client:

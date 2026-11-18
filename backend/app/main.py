@@ -7,6 +7,7 @@ from app.channels.twilio.webhook import router as twilio_router
 from app.channels.web.routes import router as web_router
 from app.channels.whatsapp.webhook import router as whatsapp_router
 from app.demo.behind_routes import router as behind_router
+from app.demo.cart import router as cart_router
 from app.panel.billing_routes import router as billing_router
 from app.panel.company_routes import router as company_router
 from app.panel.live_routes import router as live_router
@@ -38,6 +39,7 @@ app.include_router(team_router)
 app.include_router(metrics_router)
 app.include_router(billing_router)
 app.include_router(behind_router)  # vista detrás de escena (decisión 041)
+app.include_router(cart_router)  # carrito de la demo de Northwind (decisión 065)
 
 
 @app.get("/health")

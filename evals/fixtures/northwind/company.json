@@ -10,7 +10,7 @@
     "accent": "#2f5d50",
     "suggestions": [
       "Where is my order NW-4521?",
-      "What's your return policy?",
+      "Do you have a rain jacket in size M?",
       "Can I exchange a sweater for another size?",
       "I'd like to talk to a person"
     ]
@@ -21,16 +21,29 @@
     {"name": "exchange", "active": true},
     {"name": "change_shipping_address", "active": true},
     {"name": "cancel_order", "active": true},
-    {"name": "warranty_claim", "active": true}
+    {"name": "warranty_claim", "active": true},
+    {"name": "shopping", "active": true}
   ],
   "contacts": [
     {"label": "emily", "phone": "+15555550101", "verified": true},
     {"label": "daniel", "phone": "+15555550102", "verified": true},
     {"label": "sophia", "phone": "+15555550103", "verified": false}
   ],
+  "upsell_rules": [
+    {"product": "Wool Beanie", "case_types": ["shopping"], "max_discount": 15}
+  ],
   "tool_limits": {
-    "iniciar_reembolso": {"risk": "medium", "approval_over": 100, "max_amount": 1000},
-    "cancelar_pedido": {"approval_over": 500, "amount_from": "order.total"},
+    "iniciar_reembolso": {
+      "risk": "medium",
+      "approval_over": 100,
+      "max_amount": 1000,
+      "retention": ["iniciar_cambio", "ofrecer_cupon"]
+    },
+    "cancelar_pedido": {
+      "approval_over": 500,
+      "amount_from": "order.total",
+      "retention": ["ofrecer_cupon"]
+    },
     "ofrecer_cupon": {
       "max_amount": 10,
       "amount_from": "input.percent",

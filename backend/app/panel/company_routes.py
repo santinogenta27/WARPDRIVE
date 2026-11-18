@@ -31,6 +31,7 @@ from app.panel.guides import guides_html
 from app.panel.html import esc, local_time, page
 from app.panel.labels import money, tool_label, type_label
 from app.panel.routes import Ctx, Deps, Form, PanelDeps, _forbidden, _not_found, _user_id, enter
+from app.sales import upsell
 
 router = APIRouter(prefix="/panel", include_in_schema=False)
 
@@ -1064,6 +1065,71 @@ def save_rules(request: Request, form: Form, deps: Deps) -> Response:
     return _back("configuracion", ok="Reglas de atención guardadas.")
 
 
+def _upsell_html(ctx: Ctx, found: list[upsell.Rule], kinds: list[str]) -> str:
+    """Ventas cruzadas (decisión 061): qué producto ofrecer, cuándo y con qué descuento máximo.
+    Las aplica el guardián: una oferta por conversación, nunca con el cliente enojado ni en un
+    reclamo."""
+    rows = "".join(
+        f"<tr><td>{esc(r.product)}</td>"
+        f"<td>{esc(', '.join(type_label(k) for k in r.case_types))}</td>"
+        f'<td class="mono">{r.max_discount:g} %</td><td>'
+        f'<form method="post" action="/panel/configuracion/ventas/{r.id}/borrar">{_csrf(ctx)}'
+        '<button type="submit" class="secondary">Quitar</button></form></td></tr>'
+        for r in found
+    )
+    table = (
+        "<table><thead><tr><th>Producto</th><th>Cuándo</th><th>Descuento máximo</th><th></th>"
+        f"</tr></thead><tbody>{rows}</tbody></table>"
+        if found
+        else '<p class="muted">Todavía no hay productos para ofrecer.</p>'
+    )
+    boxes = "".join(
+        f'<label style="font-weight:400"><input type="checkbox" name="tipo_{esc(k)}" value="si">'
+        f" {esc(type_label(k))}</label> "
+        for k in kinds
+    )
+    form = (
+        f"""<form method="post" action="/panel/configuracion/ventas">{_csrf(ctx)}
+<label for="producto">Producto (con el nombre que tiene en tu tienda)</label>
+<input id="producto" name="producto" style="max-width:360px">
+<label>Cuándo ofrecerlo</label><div class="row small">{boxes}</div>
+<label for="descuento">Descuento máximo (%)</label>
+<input id="descuento" name="descuento" inputmode="decimal" value="0" style="max-width:120px">
+<button type="submit">Agregar</button></form>"""
+        if kinds
+        else '<p class="muted small">No hay tipos de caso activos donde ofrecer algo.</p>'
+    )
+    return f"""<div class="card">{table}
+<p class="muted small">El asistente ofrece como mucho un producto por conversación, después de
+resolver lo que pidió el cliente, y nunca si está enojado o en medio de un reclamo. El descuento
+no pasa el máximo.</p>{form}</div>"""
+
+
+@router.post("/configuracion/ventas")
+def add_upsell(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    kinds = [key.removeprefix("tipo_") for key, value in form.items() if key.startswith("tipo_")]
+    try:
+        discount = upsell.parse_discount(form.get("descuento", "0"))
+        with deps.connection() as conn:
+            upsell.add(conn, ctx.tenant_id, form.get("producto", ""), kinds, discount)
+    except upsell.UpsellError as error:
+        return _back("configuracion", error=str(error))
+    return _back("configuracion", ok="Producto para ofrecer agregado.")
+
+
+@router.post("/configuracion/ventas/{rule_id}/borrar")
+def remove_upsell(rule_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        upsell.remove(conn, ctx.tenant_id, rule_id)
+    return _back("configuracion", ok="Producto quitado.")
+
+
 @router.post("/configuracion/modelo")
 def save_model(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
@@ -1111,6 +1177,9 @@ def settings_page(request: Request, deps: Deps) -> Response:
         behind_on = behind.enabled(conn, ctx.tenant_id)
         model = _model_html(ctx, conn)
         attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
+        offers = _upsell_html(
+            ctx, upsell.load(conn, ctx.tenant_id), upsell.eligible_types(conn, ctx.tenant_id)
+        )
     approved = {t.name for t in tools if t.approved}
     chat = (
         f"<p>Probá el asistente de {esc(ctx.session.company)} en su propio chat: "
@@ -1129,6 +1198,7 @@ queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Idioma</h2>{_language_html(ctx, language)}
 <h2>Modelo y gasto</h2>{model}
 <h2>Reglas de atención</h2>{attention}
+<h2>Ventas cruzadas</h2>{offers}
 <h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
 <h2>Herramientas</h2>{_tools_html(ctx, tools)}
 <h2>Sistema de la empresa</h2>{_system_html(ctx, found, mode)}

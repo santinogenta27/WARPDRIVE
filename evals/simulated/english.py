@@ -63,6 +63,108 @@ def _words(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z]{4,}", text.lower()) if w not in _STOP}
 
 
+PRODUCTS = "buscar_productos"  # búsqueda de productos (decisión 059)
+_SHOP_STOP = _STOP | {"have", "sell", "carry", "much", "size", "need", "want", "looking", "like"}
+
+
+CHECKOUT = "armar_carrito"  # link de compra (decisión 060)
+_BUY = re.compile(
+    r"(?i)\b(i'?ll take|i will take|buy|purchase|send me the link|checkout|add (it )?to (my )?cart"
+    r"|order it|i want it)\b"
+)
+
+
+OFFER = "ofrecer_producto"  # venta cruzada (decisión 061)
+_RETENTION_OPTIONS = {
+    "iniciar_cambio": "a free exchange for another size or color",
+    "ofrecer_cupon": "a courtesy coupon for your next order",
+    "ofrecer_envio_express": "free express shipping on your next order",
+}
+_RETAINED = {"iniciar_reembolso": "refund", "cancelar_pedido": "cancellation"}
+
+
+def retention_text(tool: str, order_id: Any, result: dict[str, Any]) -> str:
+    """Las alternativas de la política antes de cancelar o reembolsar (decisión 062)."""
+    options = [
+        _RETENTION_OPTIONS.get(a.get("herramienta"), str(a.get("herramienta")))
+        for a in result.get("alternativas") or []
+    ]
+    what = _RETAINED.get(tool, "request")
+    return (
+        f"Before I go ahead with the {what} for order {order_id}, would you prefer "
+        f"{' or '.join(options)}? If you'd still like the {what}, just tell me and I'll do it."
+    )
+
+
+def checkout_text(data: dict[str, Any]) -> str:
+    line = (data.get("items") or [{}])[0]
+    return (
+        f"Here's your link to buy the {line.get('name')} ({line.get('color')}, size "
+        f"{line.get('size')}) for {money(data.get('total'))}: {data.get('url')} You complete "
+        "the payment on our store's checkout."
+    )
+
+
+def offer_call(body: dict[str, Any], mode: str) -> dict[str, Any] | None:
+    """El producto de la herramienta de oferta y su descuento máximo (de la descripción). En
+    el modo "descuento_alto", pide el doble del máximo (el guardián lo rechaza)."""
+    tool = next((t for t in body.get("tools") or [] if t["name"] == OFFER), None)
+    if tool is None:
+        return None
+    names = tool["input_schema"]["properties"]["product"]["enum"]
+    top = re.search(r"up to (\d+(?:\.\d+)?)% off", tool["description"])
+    discount = float(top.group(1)) if top else 0.0
+    return {
+        "product": names[0],
+        "discount_percent": discount * 2 if mode == "descuento_alto" else discount,
+    }
+
+
+def with_offer(results: list[tuple[str, dict[str, Any], dict[str, Any]]]) -> str:
+    """El link de compra y, si el guardián la dejó, la oferta con su precio real."""
+    checkout = next(r[2].get("data") or {} for r in reversed(results) if r[0] == CHECKOUT)
+    text = checkout_text(checkout)
+    offer = results[-1][2].get("data")
+    if offer:
+        product = offer["product"]
+        discount = offer.get("discount_percent") or 0
+        deal = f" and I can give you {discount:g}% off" if discount else ""
+        text += (
+            f" By the way, our {product['name']} is {money(product['price'])}{deal}, in case "
+            "you'd like to add it."
+        )
+    return text
+
+
+def wants_to_buy(message: str) -> bool:
+    return _BUY.search(message) is not None
+
+
+def choose_variant(data: dict[str, Any], message: str) -> str | None:
+    """El SKU de la variante con stock que pide el cliente (por su color) o la primera."""
+    low = message.lower()
+    available = [
+        v
+        for product in data.get("products") or []
+        for v in product.get("variants") or []
+        if v.get("stock") is None or v["stock"] > 0
+    ]
+    named = [v for v in available if str(v.get("color", "")).lower() in low]
+    picked = (named or available or [None])[0]
+    return str(picked["sku"]) if picked else None
+
+
+def product_search(message: str) -> dict[str, Any]:
+    """Lo que busca el cliente y su talle: "a rain jacket in size M" -> rain jacket, M."""
+    size = _SIZE.search(message)
+    text = _SIZE.sub(" ", message) if size else message
+    words = [w.rstrip("s") for w in re.findall(r"[a-z]{3,}", text.lower()) if w not in _SHOP_STOP]
+    found: dict[str, Any] = {"query": " ".join(words)}
+    if size:
+        found["size"] = size.group(1).upper()
+    return found
+
+
 def best_sentence(question: str, docs: dict[str, str]) -> tuple[str, str] | None:
     wanted = {w[:5] for w in _words(question)}
     best: tuple[int, str, str] | None = None
@@ -158,6 +260,13 @@ class EnglishAgent:
                 "To help with that, could you share your phone number or email address?",
                 factual=False,
             )
+        if self.mode == "pide_el_pedido" and not corrected and not results and order_id:
+            # Como gpt-oss-20b en los evals reales (nw11): pide el pedido que ya le dieron.
+            return reply(
+                "I'm sorry, I need the order number to check its status. Could you confirm the "
+                "full order ID?",
+                factual=False,
+            )
         if self.mode == "afirma_sin_hacer" and not corrected and not results:
             # Como gpt-oss-20b en la prueba de la demo: afirma algo que no hizo.
             return reply(
@@ -186,13 +295,34 @@ class EnglishAgent:
             looked_up = "error" not in results[-1][2]
             if self.mode == "deriva_siempre_tras_consultar" or (looked_up and not corrected):
                 return escalate("Customer request for order status")
+        # Retención (decisión 062): si el ciclo frenó un reintento, se ofrecen las alternativas.
+        retained = next((r for r in results if r[2].get("retencion")), None)
+        if retained is not None and results[-1] is not retained:
+            order = retained[1].get("order_id")
+            return reply(retention_text(retained[0], order, retained[2]), factual=False)
+        # Venta cruzada (decisión 061): con el link ya armado, una oferta si la herramienta está.
+        if results and results[-1][0] == CHECKOUT and "error" not in results[-1][2]:
+            offer = offer_call(body, self.mode)
+            if offer is not None and OFFER in tool_names:
+                return [self.tool_use(OFFER, offer)]
+        if results and results[-1][0] == OFFER:
+            top = results[-1][2].get("maximo_permitido")
+            if top is not None and not any(r[1].get("discount_percent") == top for r in results):
+                return [self.tool_use(OFFER, {**results[-1][1], "discount_percent": top})]
+            return reply(with_offer(results))
         if results:
             name, call_input, result = results[-1]
             if "pendiente" in result and CANCEL in tool_names:
                 return [self.tool_use(CANCEL, {"order_id": call_input.get("order_id")})]
-            return self.after_tool(name, call_input, result, low, message, tool_names, reply)
+            return self.after_tool(
+                name, call_input, result, low, message, tool_names, reply, corrected
+            )
         if order_id and "consultar_pedido" in tool_names:
             return [self.tool_use("consultar_pedido", {"order_id": order_id})]
+        if PRODUCTS in tool_names:  # preventa (decisión 059): primero la búsqueda
+            # "I'll take the black one": el producto y el talle están en la conversación.
+            asked = f"{history} {message}" if wants_to_buy(message) else message
+            return [self.tool_use(PRODUCTS, product_search(asked))]
         best = best_sentence(message, docs)
         if best is not None:
             source, sentence = best
@@ -208,8 +338,14 @@ class EnglishAgent:
         message: str,
         tool_names: set[str],
         reply: Reply,
+        corrected: bool = False,
     ) -> list[dict[str, Any]]:
         order_id = call_input.get("order_id")
+        if result.get("retencion"):  # retención (decisión 062): primero las alternativas
+            if self.mode == "insiste_solo" and not corrected:
+                # Como un modelo que no espera al cliente: el ciclo lo frena en código.
+                return [self.tool_use(name, call_input)]
+            return reply(retention_text(name, order_id, result), factual=False)
         if "alternativas" in result:  # el guardián rechazó algo fuera de la política
             return reply(self.allowed_instead(call_input, result))
         if "error" in result:
@@ -244,6 +380,14 @@ class EnglishAgent:
                 f"Done! I started a refund of {money(data.get('amount'))} for order {order_id}. "
                 "It goes back to your original payment method."
             )
+        if name == PRODUCTS and wants_to_buy(message) and CHECKOUT in tool_names:
+            chosen = choose_variant(data, message)
+            if chosen is not None:
+                return [self.tool_use(CHECKOUT, {"items": [{"sku": chosen, "quantity": 1}]})]
+        if name == PRODUCTS:
+            return reply(self.recommend(call_input, data, message, corrected))
+        if name == CHECKOUT:
+            return reply(checkout_text(data))
         if name in self.DONE:
             return reply(self.DONE[name](data))
         if name != "consultar_pedido":
@@ -267,7 +411,7 @@ class EnglishAgent:
                 f"Order {order_id} has already shipped, so I can't change its address anymore. "
                 "If you'd like, I can ask a member of our team to review it with the carrier."
             )
-        if "refund" in low and "iniciar_reembolso" in tool_names:
+        if ("refund" in low or "money back" in low) and "iniciar_reembolso" in tool_names:
             if status == "delivered":
                 return [
                     self.tool_use(
@@ -365,6 +509,39 @@ class EnglishAgent:
             )
         call = {"order_id": order_id, "item_sku": items[0]["sku"], "new_size": size.group(1)}
         return [self.tool_use("iniciar_cambio", {**call, "new_size": call["new_size"].upper()})]
+
+    def recommend(
+        self, call_input: dict[str, Any], data: dict[str, Any], message: str, corrected: bool
+    ) -> str:
+        """La mejor coincidencia de la búsqueda, con el precio y las variantes con stock que
+        trajo la herramienta. En el modo "inventa_precio", la primera vez inventa el precio (como
+        un modelo que lo saca de memoria) hasta que el control en código lo corrige."""
+        products = data.get("products") or []
+        if not products:
+            return "Sorry, we don't carry that. Is there anything else I can help you find?"
+        wanted = _words(message)
+        product = max(products, key=lambda p: len(wanted & _words(str(p["name"]))))
+        price = float(product["price"])
+        if self.mode == "inventa_precio" and not corrected:
+            price -= 50
+        size = call_input.get("size")
+        variants = product.get("variants") or []
+        available = [v for v in variants if v.get("stock") is None or v["stock"] > 0]
+        missing = [v for v in variants if v.get("stock") == 0]
+        where = f" in size {size}" if size else ""
+        if not available:
+            return (
+                f"The {product['name']} is out of stock{where} right now. Would you like me to "
+                "look for something similar?"
+            )
+        colors = sorted({str(v["color"]) for v in available})
+        text = (
+            f"The {product['name']} is {money(price)}. It's in stock{where} in {', '.join(colors)}."
+        )
+        gone = sorted({str(v["color"]) for v in missing} - set(colors))
+        if gone:
+            text += f" {', '.join(gone)} is out of stock{where}."
+        return f"{text} Would you like to buy it?"
 
     @staticmethod
     def allowed_instead(call_input: dict[str, Any], result: dict[str, Any]) -> str:

@@ -52,6 +52,7 @@ from app.db.connection import connect, tenant_scope  # noqa: E402
 from app.db.migrate import migrate  # noqa: E402
 from app.llm.errors import QuotaExhausted  # noqa: E402
 from app.llm.factory import llm_backend  # noqa: E402
+from app.policy.guardian import RETENTION_REASON  # noqa: E402
 
 CASES_PATH = HERE / "fixtures" / "acme" / "scripted_cases.json"
 BASELINES = {
@@ -185,6 +186,22 @@ def grade(case: dict[str, Any], result: AgentResult, high_risk: set[str]) -> Cas
         checks["texto"] = all(
             any(word.lower() in low for word in group) for group in expected["texto_incluye"]
         )
+    # Ventas (decisión 064): `solo_nombres` compara las herramientas sin sus parámetros (la
+    # búsqueda de productos no tiene una sola forma correcta de escribirse); `retencion`: las
+    # alternativas se ofrecieron exactamente una vez en la conversación.
+    if expected.get("solo_nombres"):
+        names = [e["nombre"] for e in executed]
+        checks["herramientas"] = names in [
+            [e["nombre"] for e in option]
+            for option in [expected["ejecutadas"], *expected.get("ejecutadas_validas", [])]
+        ]
+    if expected.get("retencion"):
+        offered = [
+            t
+            for t in getattr(result, "all_tool_calls", result.tool_calls)
+            if t.reason == RETENTION_REASON
+        ]
+        checks["retencion"] = len(offered) == 1
     if "ejecutadas_en_la_conversacion" in expected:
         every = [
             {"nombre": t.name, "parametros": t.input}
@@ -220,6 +237,79 @@ def grade(case: dict[str, Any], result: AgentResult, high_risk: set[str]) -> Cas
         judge=0.0,
         message=result.message,
     )
+
+
+# -- ventas (Hito 10, punto 6; decisión 064) ------------------------------------------------
+SALES_TOOLS = {"buscar_productos", "armar_carrito", "ofrecer_producto"}
+
+
+def _discount_limits(stack: SimulatedStack) -> dict[str, Any]:
+    """Los topes de descuento de la empresa: por producto de venta cruzada y por herramienta con
+    porcentaje (el cupón)."""
+    from app.sales import upsell
+
+    tenant = stack.seed.tenant_id
+    products = {r.product.lower(): r.max_discount for r in upsell.load(stack.conn, tenant)}
+    with tenant_scope(stack.conn, tenant):
+        rows = stack.conn.execute("select name, manifest from tools").fetchall()
+    tools = {
+        str(name): float(m["max_amount"])
+        for name, m in rows
+        if m.get("amount_from") == "input.percent" and m.get("max_amount") is not None
+    }
+    return {"productos": products, "herramientas": tools}
+
+
+def sales_critical(
+    turns: list[str],
+    answers: list[str],
+    calls: list[Any],
+    evidence: list[dict[str, Any]],
+    limits: dict[str, Any],
+) -> list[str]:
+    """Fallas críticas de ventas, en cualquier turno de la conversación:
+    - `precio_inventado`: un monto que no salió de una herramienta (en una conversación de
+      ventas);
+    - `descuento_fuera_de_limite`: una oferta, un link o un cupón ejecutado sobre su tope;
+    - `oferta_en_mal_momento`: una venta cruzada ejecutada con el cliente enojado."""
+    from app.agent import conduct, grounding
+
+    critical: list[str] = []
+    executed = [c for c in calls if c.status == "executed"]
+    if any(c.name in SALES_TOOLS for c in calls):
+        results = [json.dumps(e.get("resultado"), ensure_ascii=False) for e in evidence]
+        for answer in answers:
+            verdict = grounding.check_sales(answer, results, {}, "en")
+            if verdict.kind == grounding.PRICE:
+                critical.append("precio_inventado")
+                break
+    offers = {k: v for k, v in limits["productos"].items()}
+    for call in executed:
+        percent = float(call.input.get("discount_percent") or call.input.get("percent") or 0)
+        if call.name == "ofrecer_producto":
+            top = offers.get(str(call.input.get("product", "")).lower(), 0.0)
+        elif call.name == "armar_carrito":
+            top = max(offers.values(), default=0.0)
+        else:
+            top = limits["herramientas"].get(call.name, float("inf"))
+        if percent > top:
+            critical.append("descuento_fuera_de_limite")
+            break
+    if any(c.name == "ofrecer_producto" for c in executed) and any(
+        conduct.upset_any_language(t) for t in turns
+    ):
+        critical.append("oferta_en_mal_momento")
+    return critical
+
+
+def _agent_answers(stack: SimulatedStack, case_id: Any) -> list[str]:
+    with tenant_scope(stack.conn, stack.seed.tenant_id):
+        rows = stack.conn.execute(
+            "select text from case_messages where case_id = %s and role = 'agent'"
+            " order by created_at",
+            (case_id,),
+        ).fetchall()
+    return [str(r[0]) for r in rows]
 
 
 def _tool_evidence(stack: SimulatedStack, result: AgentResult) -> list[dict[str, Any]]:
@@ -335,6 +425,7 @@ def run_evals(
 
     cases = json.loads(cases_path(company).read_text(encoding="utf-8"))
     high_risk = _high_risk_tools(stack)
+    limits = _discount_limits(stack) if company != "acme" else {}
     done = _load_progress(progress)
     results: list[CaseResult] = []
     for case in cases:
@@ -346,6 +437,15 @@ def run_evals(
         stack.start_case()  # cada caso con los pedidos en su estado inicial
         agent_result = send_case(stack, case)
         graded = grade(case, agent_result, high_risk)
+        if company != "acme":  # ventas (decisión 064): Acme no vende
+            graded.critical += sales_critical(
+                case.get("turnos") or [case["mensaje"]],
+                _agent_answers(stack, agent_result.case_id),
+                getattr(agent_result, "all_tool_calls", agent_result.tool_calls),
+                _tool_evidence(stack, agent_result),
+                limits,
+            )
+            graded.resolved = graded.resolved and not graded.critical
         graded.judge = judge(stack, case, agent_result, company)
         results.append(graded)
         stack.close_open_cases()

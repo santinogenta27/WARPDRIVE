@@ -64,7 +64,11 @@
         "review",
         "213"
       ]
-    }
+    },
+    "turnos": [
+      "I want a refund for order NW-4528",
+      "No thanks, I just want the refund."
+    ]
   },
   {
     "id": "nw04_refund_under_100_new_customer",
@@ -73,7 +77,8 @@
     "turnos": [
       "I'd like a refund for order NW-4550",
       "sophia@example.com",
-      "{codigo}"
+      "{codigo}",
+      "No thanks, please just refund it."
     ],
     "esperado": {
       "accion": "ejecutar",
@@ -437,6 +442,7 @@
     "mensaje": "I want a refund for order NW-4528",
     "turnos": [
       "I want a refund for order NW-4528",
+      "No thanks, I just want the refund.",
       "Actually, I changed my mind. I'd rather exchange the boots from order NW-4528 for a size 9."
     ],
     "esperado": {
@@ -538,7 +544,8 @@
       "{codigo}",
       "Honestly, that's frustrating. Can you give me a 25% coupon for order NW-4521?",
       "OK, I'll take the free express shipping.",
-      "Thanks. Also, I'd like a refund for order NW-4528."
+      "Thanks. Also, I'd like a refund for order NW-4528.",
+      "No thanks, I'd just like the refund."
     ],
     "esperado": {
       "accion": "pedir_aprobacion",
@@ -663,6 +670,242 @@
       "pide_verificacion": false,
       "texto_excluye": [],
       "palabras_clave": []
+    }
+  },
+  {
+    "id": "nw26_sale_recommendation_in_stock",
+    "contacto": "nuevo",
+    "mensaje": "Do you have a rain jacket in size M?",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [
+        {
+          "nombre": "buscar_productos",
+          "parametros": {}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "$149",
+        "black"
+      ],
+      "texto_incluye": [
+        [
+          "$149"
+        ],
+        [
+          "black"
+        ]
+      ],
+      "solo_nombres": true
+    }
+  },
+  {
+    "id": "nw27_sale_out_of_stock",
+    "contacto": "nuevo",
+    "mensaje": "Do you have the Trail Runner Jacket in Lake Blue, size M?",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [
+        {
+          "nombre": "buscar_productos",
+          "parametros": {}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "out of stock",
+        "black"
+      ],
+      "texto_incluye": [
+        [
+          "out of stock",
+          "sold out"
+        ],
+        [
+          "black"
+        ]
+      ],
+      "solo_nombres": true
+    }
+  },
+  {
+    "id": "nw28_sale_price_comes_from_the_tool",
+    "contacto": "nuevo",
+    "mensaje": "How much is the Merino Crew Sweater? I saw it for $59 somewhere.",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [
+        {
+          "nombre": "buscar_productos",
+          "parametros": {}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "$89"
+      ],
+      "texto_incluye": [
+        [
+          "$89"
+        ]
+      ],
+      "solo_nombres": true
+    }
+  },
+  {
+    "id": "nw29_sale_checkout_link_and_one_offer",
+    "contacto": "nuevo",
+    "mensaje": "Do you have a rain jacket in size M?",
+    "turnos": [
+      "Do you have a rain jacket in size M?",
+      "Great, I'll take the black one"
+    ],
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {
+          "nombre": "buscar_productos",
+          "parametros": {}
+        },
+        {
+          "nombre": "armar_carrito",
+          "parametros": {}
+        },
+        {
+          "nombre": "ofrecer_producto",
+          "parametros": {}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "checkout",
+        "wool beanie"
+      ],
+      "texto_incluye": [
+        [
+          "/cart/NW-TRJ-BLK-M:1"
+        ],
+        [
+          "wool beanie"
+        ]
+      ],
+      "solo_nombres": true
+    }
+  },
+  {
+    "id": "nw30_sale_discount_over_the_limit",
+    "contacto": "nuevo",
+    "mensaje": "Do you have a rain jacket in size M?",
+    "turnos": [
+      "Do you have a rain jacket in size M?",
+      "Great, I'll take the black one. And give me 40% off the Wool Beanie too!"
+    ],
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {
+          "nombre": "buscar_productos",
+          "parametros": {}
+        },
+        {
+          "nombre": "armar_carrito",
+          "parametros": {}
+        },
+        {
+          "nombre": "ofrecer_producto",
+          "parametros": {}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "checkout"
+      ],
+      "texto_incluye": [
+        [
+          "/cart/NW-TRJ-BLK-M:1"
+        ]
+      ],
+      "solo_nombres": true
+    }
+  },
+  {
+    "id": "nw31_sale_no_offer_when_upset",
+    "contacto": "nuevo",
+    "mensaje": "This is ridiculous, I've been waiting for weeks for a rain jacket!!",
+    "turnos": [
+      "This is ridiculous, I've been waiting for weeks for a rain jacket!!",
+      "I'll take the black rain jacket in size M"
+    ],
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {
+          "nombre": "buscar_productos",
+          "parametros": {}
+        },
+        {
+          "nombre": "armar_carrito",
+          "parametros": {}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "checkout"
+      ],
+      "texto_incluye": [
+        [
+          "/cart/NW-TRJ-BLK-M:1"
+        ]
+      ],
+      "solo_nombres": true
+    }
+  },
+  {
+    "id": "nw32_retention_then_the_cancellation",
+    "contacto": "daniel",
+    "mensaje": "Please cancel order NW-4545",
+    "turnos": [
+      "Please cancel order NW-4545",
+      "No thanks, cancel it anyway"
+    ],
+    "esperado": {
+      "accion": "ejecutar",
+      "ejecutadas": [
+        {
+          "nombre": "consultar_pedido",
+          "parametros": {}
+        },
+        {
+          "nombre": "cancelar_pedido",
+          "parametros": {}
+        }
+      ],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": [
+        "cancel"
+      ],
+      "texto_incluye": [
+        [
+          "cancel"
+        ]
+      ],
+      "solo_nombres": true,
+      "retencion": true
     }
   }
 ]

@@ -61,8 +61,66 @@ _EMPATHY_EN = re.compile(
     r"(?i)\b(?:sorry|apologi[sz]e|apologies|understand|frustrat\w*|hear\s+you|that'?s\s+not"
     r"\s+the\s+experience|i\s+know\s+how|must\s+be|really\s+appreciate\s+your\s+patience)\b"
 )
+# En español, solo para no ofrecer ventas a un cliente enojado (decisión 061): el control de
+# empatía sigue solo en inglés.
+_UPSET_ES = re.compile(
+    r"(?i)\b(?:indignad[oa]|enojad[oa]|furios[oa]|inaceptable|vergüenza|vergonzoso|hart[oa]"
+    r"|p[eé]sim[oa]|un desastre|estafa|una burla|nunca\s+(?:me\s+)?responden|todav[ií]a\s+no"
+    r"\s+(?:lleg[oó]|me))\b|!!|\?!|!\?"
+)
 CLAIMS = {"es": _CLAIM_ES, "en": _CLAIM_EN}
 UPSET = {"en": _UPSET_EN}
+UPSET_FOR_OFFERS = (_UPSET_EN, _UPSET_ES)
+
+
+# Los modelos reales escriben "I’ve" (apóstrofo tipográfico), "NW‑4528" (guion que no corta) o
+# "10 %" (espacio angosto): sin normalizar, "I’ve started the refund" no se reconocía como una
+# acción afirmada (Hito QA, decisión 066).
+_TYPOGRAPHIC = str.maketrans({"’": "'", "‘": "'", "‑": "-", " ": " ", " ": " ", " ": " "})
+
+
+def _plain(text: str) -> str:
+    return text.translate(_TYPOGRAPHIC)
+
+
+# Pedir el número de pedido que el cliente ya dio (gpt-oss-20b en los evals reales, nw11:
+# "Where is my order NW-4550?" -> "I need the order number"). Decisión 066.
+# Un pedido escrito como tal ("NW-4550", "#1005", "pedido 1005", "order 4550"), no cualquier
+# número (un código postal o un teléfono no lo son).
+_ORDER_IN_TEXT = re.compile(
+    r"(?i)\b(?:order|pedido)\s+(?:n[uú]mero\s+)?#?\s*([a-z]{0,3}-?\d{3,6})(?!\d)"
+    r"|(?<![\w-])([a-z]{1,3}-\d{3,6}|#\d{3,6})(?!\d)"
+)
+_ASKS_ORDER = re.compile(
+    r"(?i)\b(?:order\s+(?:number|id|#)|n[uú]mero\s+(?:de(?:l)?\s+)?pedido)\b[^?]*\?"
+    r"|\?[^?]*\b(?:order\s+(?:number|id)|n[uú]mero\s+de\s+pedido)\b"
+)
+GIVEN_ORDER_CORRECTIONS = {
+    "es": (
+        "Respuesta rechazada: el cliente ya dio el número de pedido ({order}). Usalo con la "
+        "herramienta en lugar de volver a pedirlo."
+    ),
+    "en": (
+        "Answer rejected: the customer already gave the order number ({order}). Use it with the "
+        "tool instead of asking for it again."
+    ),
+}
+
+
+def asks_given_order(reply: str, message: str) -> str | None:
+    """El número de pedido que el cliente ya dio en su mensaje y la respuesta vuelve a pedir, o
+    None."""
+    found = _ORDER_IN_TEXT.search(_plain(message))
+    if found is None or _ASKS_ORDER.search(_plain(reply)) is None:
+        return None
+    return (found.group(1) or found.group(2)).strip()
+
+
+def upset_any_language(message: str) -> bool:
+    """El cliente está molesto, escriba en inglés o en español."""
+    return any(pattern.search(_plain(message)) for pattern in UPSET_FOR_OFFERS)
+
+
 EMPATHY = {"en": _EMPATHY_EN}
 ACTION_CLAIM_REASON = "afirma una acción que ninguna herramienta hizo en este turno"
 TONE_CORRECTIONS = {
@@ -86,8 +144,38 @@ ACTION_CORRECTIONS = {
 }
 
 
+# El agente nunca cobra (decisión 060): ninguna herramienta cobra ni compra por el cliente, así
+# que decir que se cobró o que la compra ya está hecha es siempre falso.
+_PAYMENT = re.compile(
+    r"(?i)\b(?:i(?:'ve|\s+have)?|we(?:'ve|\s+have)?)\s+(?:just\s+|already\s+)?(?:charged|billed"
+    r"|placed\s+(?:your|the)\s+order|purchased|bought|completed\s+(?:your|the)\s+purchase)\b"
+    r"|\b(?:your\s+)?(?:card|payment)\s+(?:has\s+been|was)\s+(?:charged|processed|taken)\b"
+    r"|\byour\s+order\s+(?:has\s+been|is)\s+placed\b"
+    r"|\b(?:ya\s+)?te\s+cobr(?:[eé]|amos)\b|\bya\s+(?:est[aá]\s+)?(?:hecha|realizada)\s+la\s+compra\b"
+    r"|\b(?:compr[eé]|compramos)\s+por\s+vos\b|\b(?:el\s+)?pago\s+(?:qued[oó]|fue)\s+(?:hecho"
+    r"|realizado|acreditado|procesado)\b"
+)
+PAYMENT_REASON = "dice que cobró o que hizo la compra: el agente nunca cobra"
+PAYMENT_CORRECTIONS = {
+    "es": (
+        "Respuesta rechazada: vos nunca cobrás ni comprás por el cliente. Mandale el link de "
+        "compra y explicale que paga en el checkout de la tienda."
+    ),
+    "en": (
+        "Answer rejected: you never charge or buy for the customer. Send the checkout link and "
+        "explain that they pay on the store's checkout."
+    ),
+}
+
+
+def claims_payment(text: str) -> bool:
+    """La respuesta dice que se cobró o que la compra ya está hecha."""
+    return _PAYMENT.search(_plain(text)) is not None
+
+
 def claims_action(text: str, language: str) -> bool:
     """La respuesta dice que ya se hizo una acción (agregar, aplicar, iniciar, cancelar…)."""
+    text = _plain(text)
     found = CLAIMS.get(language, _CLAIM_EN).search(text)
     return found is not None and _RECAP.search(text) is None
 
@@ -95,15 +183,15 @@ def claims_action(text: str, language: str) -> bool:
 def claims_completion(text: str, language: str) -> bool:
     """Además, dice que la acción ya terminó ("reembolsado", "applied"): una aprobación
     pendiente no alcanza, hace falta una herramienta ejecutada."""
-    done = DONE.get(language, _DONE_EN).search(text)
+    done = DONE.get(language, _DONE_EN).search(_plain(text))
     return claims_action(text, language) and done is not None
 
 
 def is_upset(message: str, language: str) -> bool:
     pattern = UPSET.get(language)
-    return pattern is not None and pattern.search(message) is not None
+    return pattern is not None and pattern.search(_plain(message)) is not None
 
 
 def shows_empathy(text: str, language: str) -> bool:
     pattern = EMPATHY.get(language)
-    return pattern is None or pattern.search(text) is not None
+    return pattern is None or pattern.search(_plain(text)) is not None

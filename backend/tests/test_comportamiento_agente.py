@@ -201,6 +201,8 @@ EXCHANGE = {"order_id": "NW-4528", "item_sku": "NW-CHB-BRN-8", "new_size": "9"}
 def test_con_algo_pendiente_lo_nuevo_sobre_el_mismo_pedido_espera_la_cancelacion(
     store: Any,
 ) -> None:
+    # Retención (decisión 062): la primera vez trae las alternativas; el cliente insiste.
+    _run(store, "iniciar_reembolso", {"order_id": "NW-4528", "amount": 213})
     assert _run(store, "iniciar_reembolso", {"order_id": "NW-4528", "amount": 213}).status == (
         "approval_required"
     )
@@ -215,7 +217,8 @@ def test_con_algo_pendiente_lo_nuevo_sobre_el_mismo_pedido_espera_la_cancelacion
 
 def test_cancelar_lo_pendiente_y_hacer_lo_nuevo(store: Any) -> None:
     guardian, seed, case_id, _ = store
-    _run(store, "iniciar_reembolso", {"order_id": "NW-4528", "amount": 213})
+    for _ in range(2):  # retención (decisión 062): el cliente insiste
+        _run(store, "iniciar_reembolso", {"order_id": "NW-4528", "amount": 213})
     cancelled = guardian.cancel_pending(seed.tenant_id, case_id, {"order_id": "NW-4528"})
     assert cancelled.status == "executed"
     assert cancelled.result["canceladas"][0]["herramienta"] == "iniciar_reembolso"

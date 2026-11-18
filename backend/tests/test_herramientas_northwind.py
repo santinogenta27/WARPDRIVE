@@ -23,7 +23,7 @@ from app.db.connection import tenant_scope
 from app.demo import northwind
 from app.llm.client import PostgresUsageRecorder
 from app.llm.embedder import VoyageEmbedder
-from app.policy.guardian import ContactContext, GuardDecision, Guardian
+from app.policy.guardian import RETENTION_REASON, ContactContext, GuardDecision, Guardian
 from app.tools.manifest import MANIFEST_SCHEMA
 from app.tools.runtime import ToolRuntime
 
@@ -220,6 +220,9 @@ def test_el_envio_express_se_ejecuta_y_no_se_suma_a_un_cupon(store: Store) -> No
 
 # -- 5. los reembolsos siguen con su regla ----------------------------------------------------
 def test_el_reembolso_de_mas_de_100_usd_pide_aprobacion(store: Store) -> None:
+    # Retención (decisión 062): la primera vez trae las alternativas; el cliente insiste.
+    first = store.run("iniciar_reembolso", {"order_id": "NW-4528", "amount": 213})
+    assert first.reason == RETENTION_REASON
     high = store.run("iniciar_reembolso", {"order_id": "NW-4528", "amount": 213})
     assert high.status == "approval_required"
     # Un monto parcial de hasta 100 USD del mismo pedido no pide aprobación.
@@ -228,5 +231,7 @@ def test_el_reembolso_de_mas_de_100_usd_pide_aprobacion(store: Store) -> None:
 
 
 def test_el_reembolso_de_hasta_100_usd_se_hace_solo(store: Store) -> None:
+    first = store.run("iniciar_reembolso", {"order_id": "NW-4550", "amount": 56}, who="sophia")
+    assert first.reason == RETENTION_REASON  # decisión 062
     low = store.run("iniciar_reembolso", {"order_id": "NW-4550", "amount": 56}, who="sophia")
     assert low.status == "executed", low.result

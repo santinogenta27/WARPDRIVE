@@ -138,7 +138,11 @@ Escribí: **`OK, I'll take the free express shipping.`**
 
 Escribí: **`Thanks. Also, I'd like a refund for order NW-4528.`**
 
-**La respuesta:** el reembolso de $213 queda en revisión de una persona, porque supera los $100.
+**La respuesta:** antes de reembolsar, el asistente ofrece lo que permite la política: un cambio por otro talle o color, o un cupón (retención, decisión 062). En el panel, la herramienta **Refund** aparece frenada con las alternativas ofrecidas.
+
+Escribí: **`No thanks, I'd just like the refund.`**
+
+**La respuesta:** el asistente no vuelve a ofrecer nada. El reembolso de $213 queda en revisión de una persona, porque supera los $100.
 
 **Qué mostrar en el panel:**
 
@@ -191,6 +195,19 @@ Escribí: **`Thanks. Also, I'd like a refund for order NW-4528.`**
 **Qué mostrar:** el panel completo, bajando por los mensajes. En cada uno se ven la latencia, el costo y los tokens.
 
 **Texto en pantalla o voz:** *"Every step is verified, guarded and audited — and it costs cents per conversation."* Con Groq gratuito el panel muestra `$0.0000`; con Claude muestra el costo real de cada mensaje.
+
+## Paso de venta (Hito 10, decisión 065)
+
+Un clip aparte, de unos 20 segundos, en una conversación nueva (recargá `/demo/northwind-outfitters`). Es el caso de evals nw29, que el CI corre con el modelo simulado.
+
+1. Tocá la sugerencia *Do you have a rain jacket in size M?*.
+   - **La respuesta:** la Trail Runner Jacket a $149, con stock en talle M en Black. Lake Blue y Moss no tienen stock en M.
+   - **Qué mostrar en el panel:** la herramienta **Product search** y su resultado con el stock de cada variante. El precio y el stock salen de ahí, nunca del modelo.
+   - **Qué decir:** *"Prices and stock come from the store, live — never from the model."*
+2. Escribí: **`Great, I'll take the black one`**
+   - **La respuesta:** el link de compra (`/demo/northwind-outfitters/cart/NW-TRJ-BLK-M:1?ref=…`) con el total. Además, una sola oferta de la regla de la tienda: el Wool Beanie, con hasta 15 % de descuento.
+   - **Qué mostrar:** abrí el link. Es la página de carrito de la demo, con **Complete purchase (demo, nothing is charged)**. Tocala y después, en el panel, **Metrics → Update sales**: aparece **1 venta atribuida al agente**.
+   - **Qué decir:** *"It builds the cart and sends the store's checkout link. It never takes a payment — and every sale is attributed to the conversation."*
 
 ## En tema claro
 

@@ -47,6 +47,24 @@ SIZE_L = {"item_sku": "NW-MCS-NVY-M", "new_size": "L"}
 EXAMPLES: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str], int]] = [
     ("get", "/orders", "/orders?customer_phone=%2B15555550101", None, {}, 200),
     ("get", "/customers", "/customers?email=emily%40example.com", None, {}, 200),
+    ("get", "/products", "/products?query=jacket&size=M", None, {}, 200),
+    (
+        "post",
+        "/checkouts",
+        "/checkouts",
+        {"items": [{"sku": "NW-TRJ-BLK-M", "quantity": 1}]},
+        {},
+        201,
+    ),
+    (
+        "post",
+        "/checkouts",
+        "/checkouts",
+        {"items": [{"sku": "NW-TRJ-BLU-M", "quantity": 1}]},
+        {},
+        409,
+    ),
+    ("get", "/checkouts/{ref}", "/checkouts/ea-sin-compra", None, {}, 404),
     ("get", "/orders/{order_id}", "/orders/NW-4521", None, {}, 200),
     ("get", "/orders/{order_id}", "/orders/NW-9999", None, {}, 404),
     ("patch", "/orders/{order_id}/address", "/orders/NW-4545/address", ADDRESS, {}, 200),
@@ -114,6 +132,23 @@ def test_la_api_responde_segun_su_contrato(
     Draft202012Validator({**schema, "components": SPEC["components"]}).validate(response.json())
 
 
+def test_la_compra_de_una_conversacion_responde_segun_su_contrato() -> None:
+    """`GET /checkouts/{ref}` necesita un link armado antes (decisión 063)."""
+    client = TestClient(create_app())
+    made = client.post(
+        "/checkouts", json={"items": [{"sku": "NW-WBN-NVY-OS", "quantity": 1}], "ref": "ea-1"}
+    )
+    assert made.status_code == 201 and made.json()["url"].endswith("?ref=ea-1")
+    for expected in ("open", "completed"):
+        if expected == "completed":
+            client.post("/checkouts/ea-1/complete")
+        response = client.get("/checkouts/ea-1")
+        assert response.status_code == 200 and response.json()["status"] == expected
+        documented = _resolve(SPEC["paths"]["/checkouts/{ref}"]["get"]["responses"]["200"])
+        schema = documented["content"]["application/json"]["schema"]
+        Draft202012Validator({**schema, "components": SPEC["components"]}).validate(response.json())
+
+
 @pytest.mark.parametrize(("method", "path", "body"), COURTESY_CONFLICTS)
 def test_una_segunda_cortesia_para_el_mismo_pedido_es_un_conflicto(
     method: str, path: str, body: dict[str, Any] | None
@@ -136,6 +171,7 @@ def test_todas_las_respuestas_documentadas_estan_probadas() -> None:
     }
     tested = {(m, p, s) for m, p, _, _, _, s in EXAMPLES}
     tested |= {(m, p, 409) for m, p, _ in COURTESY_CONFLICTS}
+    tested |= {("get", "/checkouts/{ref}", 200)}  # la compra de una conversación (decisión 063)
     assert documented == tested
 
 
@@ -259,24 +295,24 @@ def test_el_reembolso_sobre_100_usd_pide_aprobacion_y_el_menor_se_hace(
     assert case is not None
     emily = ContactContext(seed.contacts["emily"], hash_phone("+15555550101"), verified=True)
     allowed = {"iniciar_reembolso"}
-    high = guardian.execute(
-        tenant_id=seed.tenant_id,
-        case_id=case[0],
-        contact=emily,
-        tool_name="iniciar_reembolso",
-        tool_input={"order_id": "NW-4528", "amount": 213},
-        allowed=allowed,
-    )
+
+    def refund(contact: ContactContext, params: dict[str, Any]) -> Any:
+        # Retención (decisión 062): la primera vez trae las alternativas; el cliente insiste.
+        for _ in range(2):
+            decision = guardian.execute(
+                tenant_id=seed.tenant_id,
+                case_id=case[0],
+                contact=contact,
+                tool_name="iniciar_reembolso",
+                tool_input=params,
+                allowed=allowed,
+            )
+        return decision
+
+    high = refund(emily, {"order_id": "NW-4528", "amount": 213})
     assert high.status == "approval_required"
     sophia = ContactContext(seed.contacts["sophia"], hash_phone("+15555550103"), verified=True)
-    low = guardian.execute(
-        tenant_id=seed.tenant_id,
-        case_id=case[0],
-        contact=sophia,
-        tool_name="iniciar_reembolso",
-        tool_input={"order_id": "NW-4550", "amount": 56},
-        allowed=allowed,
-    )
+    low = refund(sophia, {"order_id": "NW-4550", "amount": 56})
     assert low.status == "executed", low.result
 
 

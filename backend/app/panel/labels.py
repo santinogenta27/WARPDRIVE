@@ -75,8 +75,11 @@ ACTIONS_EN = {
     "ofrecer_cupon": "Coupon",
     "ofrecer_envio_express": "Express shipping",
     "cancelar_pendiente": "Pending request cancelled",
+    "buscar_productos": "Product search",
 }
 _PARAMS_EN = {
+    "query": "Search",
+    "size": "Size",
     "address": "Address",
     "direccion": "Address",
     "reason": "Reason",

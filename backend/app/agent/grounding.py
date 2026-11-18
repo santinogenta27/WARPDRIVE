@@ -14,6 +14,7 @@ Lo que no cubre (relevancia de la cita, afirmaciones sin números) se mide con e
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 _NUMBER = re.compile(r"\d+")
 # Montos con separador de miles ("$35.000", "1.500.000"): son el número entero (35000), como lo
@@ -100,7 +101,8 @@ def _plain(number: str) -> str:
 
 # Qué control rechazó la respuesta, sin los datos (decisión 045): lo muestra "Behind the scenes".
 INVALID_SOURCE, NO_SOURCE, NUMBER, DATE = "fuente_inexistente", "sin_fuente", "numero", "fecha"
-KINDS = (INVALID_SOURCE, NO_SOURCE, NUMBER, DATE)
+PRICE, STOCK, LINK = "precio", "stock", "link"  # ventas (decisiones 059 y 060)
+KINDS = (INVALID_SOURCE, NO_SOURCE, NUMBER, DATE, PRICE, STOCK, LINK)
 
 
 @dataclass(frozen=True)
@@ -152,4 +154,60 @@ def check_grounding(
     if dates:
         shown = [f"{day:02d}/{month:02d}" for month, day in sorted(dates)]
         return GroundingVerdict(False, f"fechas sin respaldo en las fuentes: {shown}", DATE)
+    return GroundingVerdict(True)
+
+
+# -- ventas: precio y stock solo de una herramienta (decisión 059) -----------------------------
+# "$149", "$ 85.000", "US$ 20", "149 USD", "85000 pesos".
+_MONEY = re.compile(
+    r"(?i)(?:US)?\$\s?\d[\d.,]*|\b\d[\d.,]*\s?(?:USD|ARS|dollars?|d[oó]lares|pesos)\b"
+)
+# Un documento que es una lista de precios (el catálogo) no respalda un precio: puede estar
+# viejo. Las políticas sí ("envío gratis desde $75").
+PRICE_LIST = re.compile(r"(?i)catal|product|precio|price|stock")
+_STOCK_CLAIM = re.compile(
+    r"(?i)\b(?:in\s+stock|out\s+of\s+stock|sold\s+out|back\s+in\s+stock|units?\s+left|only\s+\d+"
+    r"\s+left|we\s+(?:still\s+)?have\s+(?:it|them|one|some)|(?:is|are)\s+available\s+in"
+    r"|hay\s+stock|sin\s+stock|agotad[oa]s?|nos\s+quedan?|(?:est[aá]n?|hay)\s+disponibles?)\b"
+)
+
+
+_URL = re.compile(r"https?://\S+")
+
+
+def is_product_tool(manifest: dict[str, Any]) -> bool:
+    """La búsqueda de productos de la API canónica de tienda (`GET /products`)."""
+    upstream = manifest.get("upstream") or {}
+    return upstream.get("method") == "GET" and str(upstream.get("path")).startswith("/products")
+
+
+def check_sales(
+    message: str, tool_evidence: list[str], documents: dict[str, str], language: str = "es"
+) -> GroundingVerdict:
+    """En un turno de ventas (con la búsqueda de productos): cada monto de la respuesta sale de
+    un resultado de herramienta o de una política, nunca de una lista de precios ni del mensaje
+    del cliente; y decir que hay o no hay stock exige una herramienta ejecutada en el turno."""
+    allowed = " ".join(
+        [
+            *tool_evidence,
+            *(text for source, text in documents.items() if not PRICE_LIST.search(source)),
+        ]
+    )
+    known = {
+        _plain(n) for n in [*_NUMBER.findall(allowed), *_numbers(allowed), *_numbers(allowed, "en")]
+    }
+    amounts = [n for token in _MONEY.findall(message) for n in _numbers(token, language)]
+    unsupported = sorted({n for n in amounts if _plain(n) not in known})
+    if unsupported:
+        return GroundingVerdict(
+            False, f"precio sin respaldo en una herramienta: {unsupported}", PRICE
+        )
+    if not tool_evidence and _STOCK_CLAIM.search(message):
+        return GroundingVerdict(False, "afirma stock sin consultar la herramienta", STOCK)
+    # Un link de compra inventado lleva al cliente a cualquier lado (decisión 060): cada link
+    # sale de un resultado de herramienta o de un documento.
+    linked = " ".join([*tool_evidence, *documents.values()])
+    invented = [url for url in _URL.findall(message) if url.rstrip(".,;:)") not in linked]
+    if invented:
+        return GroundingVerdict(False, f"link que no salió de una herramienta: {invented}", LINK)
     return GroundingVerdict(True)

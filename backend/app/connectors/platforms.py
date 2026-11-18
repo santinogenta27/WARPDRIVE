@@ -29,8 +29,20 @@ PLATFORMS = {"shopify": "Shopify", "tiendanube": "Tiendanube"}
 CANONICAL_SPEC = REPO_ROOT / "mocks" / "northwind-api" / "openapi.json"
 # Las operaciones de la API canónica que cada plataforma implementa.
 OPERATIONS = {
-    "shopify": ["consultarPedido", "iniciarReembolso", "ofrecerCupon"],
-    "tiendanube": ["consultarPedido", "iniciarReembolso", "ofrecerCupon"],
+    "shopify": [
+        "consultarPedido",
+        "iniciarReembolso",
+        "ofrecerCupon",
+        "buscarProductos",
+        "armarCarrito",
+    ],
+    "tiendanube": [
+        "consultarPedido",
+        "iniciarReembolso",
+        "ofrecerCupon",
+        "buscarProductos",
+        "armarCarrito",
+    ],
 }
 
 
