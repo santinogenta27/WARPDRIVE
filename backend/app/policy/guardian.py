@@ -269,6 +269,11 @@ class Guardian:
         if not offered:
             return None
         key = _resource_key(manifest, tool_input) or ""
+        # El pedido como lo devuelve la tienda ("NW-4528"), no como lo escribió el modelo
+        # ("4528"): si no, insistir con otra forma del número volvía a ofrecer (decisión 066).
+        found = next((r for r in resources.values() if isinstance(r, dict) and r.get("id")), None)
+        if found is not None and key.startswith("order_id="):
+            key = f"order_id={found['id']}"
         with tenant_scope(self._conn, tenant_id):
             made = self._conn.execute(
                 "insert into retention_offers (tenant_id, case_id, tool, resource_key,"

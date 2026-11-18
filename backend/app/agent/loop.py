@@ -665,6 +665,9 @@ class Agent:
                 if name not in tool_names
             ]
             instructions = f"{instructions.strip()}\n---\n{second.strip()}"
+        retained = self._retention_note(turn, tool_names)
+        if retained:
+            instructions = f"{instructions.strip()}\n{retained}"
         manifests = self._guardian.manifests(tenant_id, tool_names)
         turn.needs_identity = any(m.get("requires_verified_contact") for m in manifests)
         # La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el
@@ -1053,6 +1056,36 @@ class Agent:
             chat,
             {"tipo": "limite_pasos"},
         )
+
+    def _retention_note(self, turn: _Turn, tool_names: list[str]) -> str:
+        """Retención (decisión 062): en un turno posterior el modelo no ve la respuesta del
+        guardián, solo el historial. Con gpt-oss-20b, cuando el cliente insistía, volvía a
+        ofrecer, derivaba o afirmaba el reembolso sin hacerlo (Hito QA, decisión 066). Se le
+        dice qué ya se ofreció; el guardián controla igual."""
+        with tenant_scope(self._conn, turn.tenant_id):
+            rows = self._conn.execute(
+                "select tool, resource_key from retention_offers where case_id = %s"
+                " order by created_at",
+                (turn.case_id,),
+            ).fetchall()
+        offered = [(str(t), str(k).replace("order_id=", "")) for t, k in rows if t in tool_names]
+        if not offered:
+            return ""
+        if turn.lang == "en":
+            lines = [
+                f"- The policy alternatives for {tool} on order {order} were already offered in "
+                f"this conversation. Don't offer them again: if the customer still wants it, "
+                f"call {tool} now."
+                for tool, order in offered
+            ]
+            return "already_offered:\n" + "\n".join(lines)
+        lines = [
+            f"- Las alternativas de la política para {tool} del pedido {order} ya se ofrecieron "
+            f"en esta conversación. No las vuelvas a ofrecer: si el cliente lo sigue queriendo, "
+            f"llamá {tool} ahora."
+            for tool, order in offered
+        ]
+        return "ya_ofrecido:\n" + "\n".join(lines)
 
     @staticmethod
     def _has_tool_data(turn: _Turn) -> bool:

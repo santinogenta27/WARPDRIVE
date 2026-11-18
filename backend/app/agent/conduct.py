@@ -73,9 +73,19 @@ UPSET = {"en": _UPSET_EN}
 UPSET_FOR_OFFERS = (_UPSET_EN, _UPSET_ES)
 
 
+# Los modelos reales escriben "I’ve" (apóstrofo tipográfico), "NW‑4528" (guion que no corta) o
+# "10 %" (espacio angosto): sin normalizar, "I’ve started the refund" no se reconocía como una
+# acción afirmada (Hito QA, decisión 066).
+_TYPOGRAPHIC = str.maketrans({"’": "'", "‘": "'", "‑": "-", " ": " ", " ": " ", " ": " "})
+
+
+def _plain(text: str) -> str:
+    return text.translate(_TYPOGRAPHIC)
+
+
 def upset_any_language(message: str) -> bool:
     """El cliente está molesto, escriba en inglés o en español."""
-    return any(pattern.search(message) for pattern in UPSET_FOR_OFFERS)
+    return any(pattern.search(_plain(message)) for pattern in UPSET_FOR_OFFERS)
 
 
 EMPATHY = {"en": _EMPATHY_EN}
@@ -127,11 +137,12 @@ PAYMENT_CORRECTIONS = {
 
 def claims_payment(text: str) -> bool:
     """La respuesta dice que se cobró o que la compra ya está hecha."""
-    return _PAYMENT.search(text) is not None
+    return _PAYMENT.search(_plain(text)) is not None
 
 
 def claims_action(text: str, language: str) -> bool:
     """La respuesta dice que ya se hizo una acción (agregar, aplicar, iniciar, cancelar…)."""
+    text = _plain(text)
     found = CLAIMS.get(language, _CLAIM_EN).search(text)
     return found is not None and _RECAP.search(text) is None
 
@@ -139,15 +150,15 @@ def claims_action(text: str, language: str) -> bool:
 def claims_completion(text: str, language: str) -> bool:
     """Además, dice que la acción ya terminó ("reembolsado", "applied"): una aprobación
     pendiente no alcanza, hace falta una herramienta ejecutada."""
-    done = DONE.get(language, _DONE_EN).search(text)
+    done = DONE.get(language, _DONE_EN).search(_plain(text))
     return claims_action(text, language) and done is not None
 
 
 def is_upset(message: str, language: str) -> bool:
     pattern = UPSET.get(language)
-    return pattern is not None and pattern.search(message) is not None
+    return pattern is not None and pattern.search(_plain(message)) is not None
 
 
 def shows_empathy(text: str, language: str) -> bool:
     pattern = EMPATHY.get(language)
-    return pattern is None or pattern.search(text) is not None
+    return pattern is None or pattern.search(_plain(text)) is not None
