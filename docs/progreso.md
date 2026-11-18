@@ -556,6 +556,128 @@ Los demás casos de las tareas 4 y 5 salieron bien:
 - **Que el panel "detrás de escena" muestre cada paso mientras pasa:** hoy aparece al terminar la respuesta, porque el turno se guarda en una sola transacción.
 - **Grabar el video.**
 
+## Hito 9 — Listo para vender a pymes (desde el 17 de noviembre de 2026)
+
+Auditoría en `docs/listo-para-vender.md`. Una tarea por rama y pull request a `main`, sin mergear. Las ramas están apiladas (decisión 047): conviene aprobarlas en orden.
+
+| Tarea | Rama | Pull request | Decisión |
+|---|---|---|---|
+| 1. Acciones prometidas y casos adversariales | `h9-calidad` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-calidad) | 048 |
+| 2. API key por empresa y tope de gasto | `h9-modelo-gasto` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-modelo-gasto) | 049 |
+| 3. Carga de documentos desde el panel | `h9-documentos` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-documentos) | 050 |
+| 4. Reglas de atención en el panel | `h9-reglas` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-reglas) | 051 |
+| 5. Nombre y saludo del asistente | `h9-marca` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-marca) | 052 |
+| 6. Guías de instalación | `h9-instalacion` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-instalacion) | 053 |
+| 7. Aviso al equipo por email | `h9-bandeja` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-bandeja) | 054 |
+| 8. Probar antes de salir en vivo | `h9-go-live` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-go-live) | 056 |
+| 9. Producción mínima | `h9-produccion` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-produccion) | 055 |
+| 10. Shopify, Tiendanube y registro self-service | `h9-conectores-y-registro` | [abrir](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-conectores-y-registro) | 057, 058 |
+
+Los pull requests no se abrieron desde acá (no hay `gh`): cada enlace "abrir" crea el suyo. Como las ramas están apiladas, al abrirlo elegí como base la rama anterior, o `main` si querés ver todo junto.
+
+### Tarea 1 — Acciones prometidas y casos adversariales (decisión 048)
+
+- **Hecho:** "reembolsado", "aplicado", "acreditado" o "cancelado" necesitan una herramienta ejecutada en el turno; una aprobación pendiente no alcanza. También se reconocen "te envié", "ya te reembolsamos" y "está aplicado". Se reescribe una vez; si insiste, deriva y el motivo se ve en Why.
+- **Evals:** 4 casos adversariales nuevos en Acme (18 en total) y 4 en Northwind (25): fuera de tema, falso gerente, datos de otro cliente por email e idiomas mezclados. Simulados en verde, sin regresiones. Una acción prometida sin herramienta es falla crítica.
+- **Clasificador:** pedir datos de otro cliente va a la negativa fija, sin derivar.
+- **Falta:** medir con Groq real (no se corrió).
+- **Qué tenés que hacer vos:** nada.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_acciones_prometidas.py` y `python evals/runner.py --simulated` (también con `--company northwind`).
+
+### Tarea 2 — API key por empresa y tope de gasto (decisión 049)
+
+- **Hecho:** Configuración → **Modelo y gasto**: proveedor (Anthropic, OpenAI, Groq o Gemini), key cifrada que nunca se muestra, y tope mensual en USD. Muestra el gasto del mes contra el tope.
+- **Sin key propia:** usa la tuya, con un tope de USD 5 y 2000 llamadas por mes (`SHARED_MONTHLY_USD`, `SHARED_MONTHLY_CALLS`). Acme y Northwind no tienen límite de llamadas.
+- **Al 80 %:** alerta por email al operador. **Al 100 %:** cada mensaje va a una persona sin llamar al modelo; Why dice "La empresa llegó al tope de gasto del mes".
+- **Métricas** (resueltos, derivados, CSAT, costo): ya estaban.
+- **Falta:** probar una key real de cada proveedor; verificar los precios de `gpt-5-mini`.
+- **Qué tenés que hacer vos:** si querés otros límites, cargar `SHARED_MONTHLY_USD` y `SHARED_MONTHLY_CALLS` en Render.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_modelo_y_gasto.py`.
+
+### Tarea 3 — Carga de documentos desde el panel (decisión 050)
+
+- **Hecho:** en Onboarding, un CSV que no es de tickets (catálogo, precios) se indexa como documento; **"Sitio web de la empresa"** lee hasta 30 páginas de tu dominio, nunca una dirección interna; **"Documentos indexados"** lista lo que el asistente puede citar y lo borra. Subir un archivo con el mismo nombre lo reemplaza.
+- **Ya estaba:** PDF, DOCX, TXT, MD, chats y tickets (CSV y JSON, que cubren los exportes de Zendesk, Freshdesk e Intercom), las 6 etapas con su avance y los avisos por archivo.
+- **Datos personales en documentos:** se mantiene la decisión 035 (tarjetas y DNI se reemplazan; un documento con datos de varias personas espera tu confirmación). El motivo de no anonimizar todo está en la 050.
+- **Falta:** OCR para PDF escaneados; sitios que arman el texto con JavaScript.
+- **Qué tenés que hacer vos:** nada.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_documentos.py`.
+
+### Tarea 4 — Reglas de atención en el panel (decisión 051)
+
+- **Hecho:** en cada herramienta, "Exige identidad verificada" y "Siempre pide aprobación"; en Configuración → **Reglas de atención**, el horario del equipo y el email que recibe los derivados. Fuera de horario, al derivar, el asistente dice cuándo responden.
+- **Ya estaba:** aprobar herramientas, monto máximo y monto que pide aprobación. Todo lo aplica el guardián o el ciclo, nunca el prompt.
+- **Falta:** nada de lo pedido.
+- **Qué tenés que hacer vos:** nada.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_reglas.py`.
+
+### Tarea 5 — Nombre y saludo del asistente (decisión 052)
+
+- **Hecho:** en Configuración → Widget → Marca, el nombre del asistente (se presenta con él) y el saludo al abrir el chat, con vista previa.
+- **Ya estaba:** nombre que ve el cliente, color, logo, sugerencias e idioma con su tono.
+- **Falta:** atender en dos idiomas a la vez en la misma empresa (hoy uno por empresa).
+- **Qué tenés que hacer vos:** nada.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_tono_y_marca.py`.
+
+### Tarea 6 — Guías de instalación (decisión 053)
+
+- **Hecho:** debajo del código para copiar, guías desplegables para Shopify, WordPress, Tiendanube y WhatsApp, en el idioma de la empresa. También en `docs/instalacion.md`, para mandarlas por email.
+- **Ya estaba:** el snippet con "Copiar código", los dominios permitidos y la vista previa.
+- **Falta:** probar los pasos en una tienda real de cada plataforma (los menús cambian seguido).
+- **Qué tenés que hacer vos:** nada. Para WhatsApp de un cliente, el trámite con Meta sigue siendo manual.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_instalacion.py`. Solo toca el panel: los evals no cambian.
+
+### Tarea 7 — Aviso al equipo por email (decisión 054)
+
+- **Hecho:** cuando un caso se deriva o una acción espera aprobación, un email al equipo con el motivo y el enlace al caso o a Aprobaciones. Una sola vez por caso y por aprobación, sin lo que escribió el cliente. Va al email de "Reglas de atención" o, si no hay, a los usuarios de la empresa. Acme y Northwind no avisan a nadie.
+- **Ya estaba:** la bandeja (Casos con los derivados primero, Aprobaciones) y la respuesta desde el panel.
+- **Falta:** aviso dentro del panel en tiempo real (hoy, el contador del menú al recargar).
+- **Qué tenés que hacer vos:** en Render, `PUBLIC_BASE_URL` con la dirección del servicio (para los enlaces del email) y el email real (Resend).
+- **Cómo probarlo:** `python -m pytest backend/tests/test_bandeja.py`.
+
+### Tarea 8 — Probar antes de salir en vivo (decisión 056)
+
+- **Hecho:** en Reporte, **Probar el asistente** abre el playground (el chat de la empresa con "detrás de escena" al lado, sin activar la vista pública) y **Salir en vivo**, que se habilita si el reporte estima al menos 60 % de resolución (`GO_LIVE_MIN_RESOLUTION`) y frena todos los ataques. Antes de salir, el widget no atiende en el sitio de la empresa; el panel y `/c/…` sí. "Pausar" lo saca.
+- **Ya estaba:** evals generados con el historial y el reporte de preparación.
+- **Acme y Northwind** están siempre en vivo: la demo no cambia.
+- **Falta:** que la empresa revise y edite una muestra de los evals generados antes de salir (la spec lo pide como mitigación).
+- **Qué tenés que hacer vos:** nada; si querés otro umbral, `GO_LIVE_MIN_RESOLUTION` en Render.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_go_live.py`.
+
+### Tarea 9 — Producción mínima (decisión 055)
+
+- **Hecho:**
+  - plantillas de términos y privacidad en `docs/legal/`, marcadas como BORRADOR para un abogado;
+  - Empresas → **Exportar**: un .zip con los datos de la empresa, sin secretos;
+  - `ENCRYPTION_KEY` acepta "nueva,vieja" y `python -m app.rotate_keys` vuelve a cifrar todo, sin perder datos;
+  - `docs/render.md`: backups (Neon más un `pg_dump` semanal y la restauración probada), límites y alertas, y cómo rotar cada secreto.
+- **Ya estaba:** borrar una empresa, límites de uso y alertas por email.
+- **Falta:** que un abogado revise las plantillas; backups automáticos (hoy, a mano y gratis).
+- **Qué tenés que hacer vos:**
+  - mandar `docs/legal/` a un abogado;
+  - hacer el primer `pg_dump` y probar la restauración (pasos en `docs/render.md`);
+  - cargar `ALERT_EMAIL_TO` en Render.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_produccion.py`.
+
+### Tarea 10 — Conectores de Shopify y Tiendanube, y registro self-service (decisiones 057 y 058)
+
+Rama `h9-conectores-y-registro`, [abrir PR](https://github.com/santinogenta27/WARPDRIVE/pull/new/h9-conectores-y-registro).
+
+- **Hecho:**
+  - **Shopify y Tiendanube:** Configuración → Sistema → "Conectar tienda" (tienda y token, cifrado). Pedidos, envíos y cupones; reembolsos en Shopify (en Tiendanube los hace una persona, porque su API no reembolsa). Las herramientas quedan sin aprobar, con los controles de siempre del guardián.
+  - **Probar herramientas:** cada herramienta de consulta, con un pedido de ejemplo, contra el sistema real.
+  - **Registro en `/registro`:** la empresa se crea recién al confirmar el email; ese usuario queda como admin. Enlace desde el login.
+  - **Equipo:** invitaciones con rol (admin o persona del equipo). La persona del equipo no entra a Configuración, Onboarding ni Equipo.
+  - Migración 0022, aditiva.
+- **Ya estaba:** OpenAPI con credenciales cifradas, prueba de conexión y activación.
+- **Falta:** probar contra una tienda real de cada plataforma (los tests usan respuestas de ejemplo de su documentación).
+- **Qué tenés que hacer vos:** crear una tienda de desarrollo de Shopify (gratis) con una app propia y su token, y probar "Conectar tienda". Sin Resend, el enlace del registro sale en el log del servidor.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_conectores.py backend/tests/test_registro.py`.
+
+### Cierre del Hito 9
+
+Las diez tareas están en sus ramas, apiladas: conviene mergearlas en orden, de `h9-calidad` a `h9-conectores-y-registro`. Ninguna está mergeada. No se hizo ninguna llamada a Groq real.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

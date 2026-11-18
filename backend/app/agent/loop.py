@@ -31,10 +31,12 @@ from app.agent.classifier import (
 from app.agent.grounding import GroundingVerdict, check_grounding
 from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
-from app.cases import billing, closing, csat
+from app.cases import billing, closing, csat, team_notify
 from app.channels.whatsapp.format import to_whatsapp
+from app.companies import rules
 from app.db.connection import tenant_scope
 from app.identity import email_code
+from app.llm import spending
 from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
 from app.llm.pricing import cost_usd
@@ -230,6 +232,7 @@ HANDOFF_CAUSES = (
     "formato",  # detalle: el problema de presentable.ISSUES
     "reverificar",
     "accion_sin_herramienta",
+    "tope_de_gasto",
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
     "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
@@ -374,6 +377,7 @@ class Agent:
         self._model = model
         self._max_steps = max_steps
         self._mailer = mailer or mailer_from_env()
+        self._assistant = ""  # nombre del asistente de la empresa del turno (decisión 052)
 
     # -- entrada ---------------------------------------------------------------------------
     def handle_message(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
@@ -388,7 +392,25 @@ class Agent:
             timing.log_turn(result.case_id, summary)
             audit_log.record(self._conn, tenant_id, result.case_id, "turn_timing", summary)
             self._observe(tenant_id, result, timer, summary)
+            self._notify_team(tenant_id, result)
         return result
+
+    def _notify_team(self, tenant_id: uuid.UUID, result: AgentResult) -> None:
+        """Un caso derivado o una aprobación pendiente: aviso por email al equipo (decisión
+        054), una sola vez por caso y por aprobación."""
+        if result.action == "derivar":
+            reason = str((result.escalation_summary or {}).get("motivo") or "")
+            team_notify.notify(self._conn, tenant_id, result.case_id, "escalated", reason=reason)
+        elif result.action == "pedir_aprobacion":
+            pending = [t.name for t in result.tool_calls if t.status == "approval_required"]
+            team_notify.notify(
+                self._conn,
+                tenant_id,
+                result.case_id,
+                "approval",
+                reason=", ".join(pending) or "una acción",
+                approval_id=result.approval_id,
+            )
 
     def _observe(
         self,
@@ -420,6 +442,9 @@ class Agent:
             case_cost=Decimal(row[0]) if row else Decimal(0),
             turn_cost=turn_cost,
         )
+        # Aviso al cruzar el 80 % y el 100 % del tope de gasto del mes (decisión 049).
+        calls = sum(1 for r in timer.records if "llm.cost_usd" in r["attrs"])
+        spending.check_turn(self._conn, tenant_id, turn_cost=turn_cost, turn_calls=calls)
 
     def _handle(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
         company, tone, lang = self._tenant(tenant_id)
@@ -427,13 +452,21 @@ class Agent:
         rated = self._csat_answer(tenant_id, contact, text, tone, lang)
         if rated is not None:
             return rated
-        case_id, classification = self._open_case(tenant_id, contact_id, company, text, lang)
+        # Tope de gasto mensual alcanzado (decisión 049): deriva sin llamar al modelo.
+        capped = spending.over(self._conn, tenant_id)
+        case_id, classification = self._open_case(
+            tenant_id, contact_id, company, text, lang, classify_reopen=not capped
+        )
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(
             tenant_id=tenant_id, case_id=case_id, contact=contact, text=text, tone=tone, lang=lang
         )
         turn.classification = classification
         self._audit(turn, "message_received", {"text": text, "verified": contact.verified})
+        if capped:
+            return self._escalate(
+                turn, "Tope de gasto mensual alcanzado.", {"tipo": "tope_de_gasto"}
+            )
         pending: email_code.Verification | None = None
         if not contact.verified:
             pending = email_code.open_verification(self._conn, tenant_id, contact_id)
@@ -637,7 +670,7 @@ class Agent:
                 "chunk_ids": [str(d.chunk_id) for d in turn.documents],
             },
         )
-        system = prompt.system_prompt(company, tone, instructions)
+        system = prompt.system_prompt(company, tone, instructions, self._assistant)
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
@@ -657,7 +690,7 @@ class Agent:
         goals = "; ".join(goal for goal, _ in case_types.values()) or turn.say("store_questions")
         template = CHAT_INSTRUCTIONS_EN if turn.lang == "en" else CHAT_INSTRUCTIONS
         instructions = template.format(empresa=company, capacidades=goals)
-        system = prompt.system_prompt(company, tone, instructions)
+        system = prompt.system_prompt(company, tone, instructions, self._assistant)
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
@@ -790,7 +823,13 @@ class Agent:
                     # Controles de conducta (decisión 040): una acción afirmada sin herramienta
                     # es una respuesta inventada; con el cliente molesto, primero la empatía.
                     said = str(final_input.get("mensaje") or "")
-                    if not self._acted(turn) and _check(conduct.claims_action, said, turn.lang):
+                    # "Reembolsado" con la aprobación pendiente tampoco vale (decisión 048).
+                    if (
+                        not self._acted(turn) and _check(conduct.claims_action, said, turn.lang)
+                    ) or (
+                        not self._executed(turn)
+                        and _check(conduct.claims_completion, said, turn.lang)
+                    ):
                         self._audit(
                             turn,
                             "grounding_rejected",
@@ -971,6 +1010,11 @@ class Agent:
             d.side_effect and d.status in ("executed", "approval_required") for d in turn.decisions
         )
 
+    @staticmethod
+    def _executed(turn: _Turn) -> bool:
+        """En este turno una herramienta modificó algo con éxito (no solo pidió aprobación)."""
+        return any(d.side_effect and d.status == "executed" for d in turn.decisions)
+
     def _asks_personal_data(self, turn: _Turn, data: dict[str, Any]) -> bool:
         """Sin verificar, el modelo le pide al cliente el email, el teléfono u otro dato personal
         en texto: eso no verifica a nadie."""
@@ -1083,7 +1127,12 @@ class Agent:
                 (json.dumps(summary, ensure_ascii=False), turn.case_id),
             )
         self._audit(turn, "escalated", {**summary, "causa": cause})
-        return self._finish(turn, "derivar", turn.say("escalation"), summary=summary)
+        message = turn.say("escalation")
+        # Fuera del horario del equipo, cuándo responden (decisión 051).
+        note = rules.closed_note(self._conn, turn.tenant_id, turn.lang)
+        return self._finish(
+            turn, "derivar", f"{message} {note}" if note else message, summary=summary
+        )
 
     def _finish(
         self,
@@ -1159,6 +1208,8 @@ class Agent:
         tone = str(settings.get("tone", "rioplatense"))
         if lang == "en" and not prompt.is_english(tone):
             tone = "english"
+        # El nombre que eligió la empresa para el asistente (decisión 052), para el prompt.
+        self._assistant = str((settings.get("brand") or {}).get("assistant") or "")
         return row[0], tone, lang
 
     def _contact(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> ContactContext:
@@ -1173,7 +1224,14 @@ class Agent:
         return ContactContext(id=row[0], phone_hash=row[1], verified=row[2])
 
     def _open_case(
-        self, tenant_id: uuid.UUID, contact_id: uuid.UUID, company: str, text: str, lang: str = "es"
+        self,
+        tenant_id: uuid.UUID,
+        contact_id: uuid.UUID,
+        company: str,
+        text: str,
+        lang: str = "es",
+        *,
+        classify_reopen: bool = True,
     ) -> tuple[uuid.UUID, Classification | None]:
         """El caso del mensaje: el que el contacto tiene abierto; si no, el que resolvió hace
         menos de 7 días por el mismo tema, que se reabre (regla de reapertura); si no, uno
@@ -1191,7 +1249,7 @@ class Agent:
             return row[0], None
         classification: Classification | None = None
         candidate = billing.reopen_candidate(self._conn, tenant_id, contact_id)
-        if candidate is not None and not closing.is_confirmation(text):
+        if candidate is not None and classify_reopen and not closing.is_confirmation(text):
             case_types = self._active_case_types(tenant_id)
             classification = classify(
                 self._llm,

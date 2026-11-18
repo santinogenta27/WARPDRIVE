@@ -13,13 +13,14 @@ URL base tiene que ser HTTPS y pública: el servidor no hace pedidos a direccion
 import ipaddress
 import json
 import os
+import re
 import socket
 import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 import psycopg
@@ -259,6 +260,12 @@ def http_client(connection: SystemConnection, secret: str | None) -> HttpClient:
     """Cliente HTTP hacia el sistema de la empresa. No sigue redirecciones (podrían llevar a
     una dirección interna) y verifica que el dominio sea público."""
     assert connection.base_url is not None
+    from app.connectors import platforms
+
+    if platforms.is_platform(connection.base_url):
+        # Shopify o Tiendanube (decisión 057): el conector habla con su API, siempre HTTPS a su
+        # dominio, y traduce la API canónica de tienda.
+        return platforms.client(connection.base_url, secret)
     check_public_host(connection.base_url)
     basic = None
     if connection.auth_kind == "basic" and secret:
@@ -336,6 +343,50 @@ def test_connection(
             (Jsonb(result), bool(result["ok"]), tenant_id),
         )
     return result
+
+
+def probe_tools(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    sample: str,
+    *,
+    client_factory: ClientFactory = http_client,
+) -> list[dict[str, Any]]:
+    """Prueba cada herramienta de solo lectura contra el sistema de la empresa con un dato de
+    ejemplo (un número de pedido), como la prueba de conexión: un pedido GET y nada más. Las que
+    modifican algo no se prueban contra el sistema real (decisión 057)."""
+    from app.companies import review
+
+    connection = load(conn, tenant_id)
+    if connection is None or not connection.base_url:
+        raise ConnectionError_("Primero cargá la URL base del sistema.")
+    client = client_factory(connection, _secret(conn, tenant_id))
+    found: list[dict[str, Any]] = []
+    for tool in review.tools(conn, tenant_id):
+        upstream = tool.manifest["upstream"]
+        row: dict[str, Any] = {"herramienta": tool.name, "operacion": upstream["path"]}
+        if upstream["method"] != "GET":
+            found.append(row | {"ok": None, "detalle": "Modifica datos: no se prueba acá."})
+            continue
+        fields = re.findall(r"{(\w+)}", upstream["path"])
+        path = upstream["path"].format(**{f: quote(sample.strip(), safe="") for f in fields})
+        try:
+            response = client.request("GET", path, timeout=10.0)
+        except Exception as error:  # noqa: BLE001 — cualquier falla de red es "no responde"
+            found.append(row | {"ok": False, "detalle": f"No respondió ({type(error).__name__})."})
+            continue
+        status = response.status_code
+        detail = (
+            "Respondió bien."
+            if status == 200
+            else "El sistema no encontró ese dato de ejemplo."
+            if status == 404
+            else "El sistema rechazó las credenciales."
+            if status in (401, 403)
+            else f"Respondió con un error ({status})."
+        )
+        found.append(row | {"ok": status == 200, "detalle": detail})
+    return found
 
 
 def activate(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:

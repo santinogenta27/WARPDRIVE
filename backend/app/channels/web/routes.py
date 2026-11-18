@@ -363,9 +363,10 @@ def widget_config(request: Request, deps: Deps, canal: str = "") -> JSONResponse
         if tenant_id is None:
             raise HTTPException(status_code=404, detail="Chat inexistente")
         found = widget.load(conn, tenant_id)
+        live = widget.live_domains(conn, tenant_id)
     headers = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
     origin, host = request.headers.get("origin"), request.headers.get("host", "")
-    if not widget.origin_allowed(origin, host, found.domains):
+    if not widget.origin_allowed(origin, host, live):
         return JSONResponse({"allowed": False}, headers=headers)
     version = int(found.updated_at.timestamp()) if found.updated_at else 0
     return JSONResponse(
@@ -374,7 +375,7 @@ def widget_config(request: Request, deps: Deps, canal: str = "") -> JSONResponse
             "name": found.name,
             "accent": found.accent,
             "logo": f"/chat/widget/logo/{slug}?v={version}" if found.has_logo else None,
-            "greeting": widget.greeting(found.name, found.language),
+            "greeting": widget.greeting_for(found),
             "suggestions": list(found.suggestions)
             or (DEMO_SUGGESTIONS if slug == _slug(deps, "") else []),
             "limit": MESSAGE_LIMIT,
@@ -414,7 +415,7 @@ def create_session(
     with deps.connection() as conn:
         tenant_id = _tenant(conn, address)
         try:
-            response.headers.update(_cors(request, widget.load(conn, tenant_id).domains))
+            response.headers.update(_cors(request, widget.live_domains(conn, tenant_id)))
         except OriginNotAllowed as error:
             raise HTTPException(status_code=403, detail=FORBIDDEN) from error
         with tenant_scope(conn, tenant_id):
@@ -433,7 +434,7 @@ def _precheck(
     with deps.connection() as conn:
         tenant_id, address = _route(conn, token)
         found = widget.load(conn, tenant_id)
-        cors = _cors(request, found.domains)
+        cors = _cors(request, widget.live_domains(conn, tenant_id))
         scope = _exceeded(deps, _usage(conn, tenant_id, token, ip_hash, lock=False))
         return scope, address, tenant_id, cors, found.language
 
@@ -552,7 +553,7 @@ def updates(
     with deps.connection() as conn:
         try:
             tenant_id, _ = _route(conn, session)
-            response.headers.update(_cors(request, widget.load(conn, tenant_id).domains))
+            response.headers.update(_cors(request, widget.live_domains(conn, tenant_id)))
         except UnknownSession as error:
             raise HTTPException(status_code=401, detail="Sesión inválida") from error
         except OriginNotAllowed as error:

@@ -13,6 +13,7 @@ from datetime import datetime
 from urllib.parse import urlsplit
 
 import psycopg
+from psycopg.types.json import Jsonb
 
 from app import i18n
 from app.db.connection import tenant_scope
@@ -43,13 +44,17 @@ class WidgetSettings:
     has_logo: bool
     updated_at: datetime | None
     language: str = "es"  # el de la empresa (decisión 036)
+    # Nombre del asistente y saludo propio (decisión 052): vacíos, los de siempre.
+    assistant: str = ""
+    greeting: str = ""
 
 
 def load(conn: psycopg.Connection, tenant_id: uuid.UUID) -> WidgetSettings:
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
             "select t.name, w.display_name, w.accent, w.domains, w.suggestions,"
-            " w.logo is not null, w.updated_at, t.settings ->> 'language' from tenants t"
+            " w.logo is not null, w.updated_at, t.settings ->> 'language',"
+            " t.settings #>> '{brand,assistant}', t.settings #>> '{brand,greeting}' from tenants t"
             " left join widget_settings w on w.tenant_id = t.id where t.id = %s",
             (tenant_id,),
         ).fetchone()
@@ -62,7 +67,42 @@ def load(conn: psycopg.Connection, tenant_id: uuid.UUID) -> WidgetSettings:
         has_logo=bool(row[5]),
         updated_at=row[6],
         language=i18n.normalize(row[7]),
+        assistant=str(row[8] or ""),
+        greeting=str(row[9] or ""),
     )
+
+
+def live_domains(conn: psycopg.Connection, tenant_id: uuid.UUID) -> tuple[str, ...]:
+    """Los dominios donde el chat atiende ahora: los de la empresa si salió en vivo; si no,
+    ninguno ajeno (el panel y la página propia siguen andando, decisión 056)."""
+    from app.companies import go_live
+
+    return load(conn, tenant_id).domains if go_live.is_live(conn, tenant_id) else ()
+
+
+def greeting_for(found: WidgetSettings) -> str:
+    """El saludo propio de la empresa o, si no cargó uno, el de siempre."""
+    return found.greeting or greeting(found.name, found.language)
+
+
+def assistant_name(conn: psycopg.Connection, tenant_id: uuid.UUID) -> str:
+    """Con qué nombre se presenta el asistente ("" si la empresa no eligió uno)."""
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "select settings #>> '{brand,assistant}' from tenants where id = %s", (tenant_id,)
+        ).fetchone()
+    return str(row[0] or "") if row else ""
+
+
+def _clean_brand(assistant: str, text: str) -> tuple[str, str]:
+    assistant, text = assistant.strip(), text.strip()
+    if assistant and not 2 <= len(assistant) <= 40:
+        raise WidgetError("El nombre del asistente tiene que tener entre 2 y 40 caracteres.")
+    if len(text) > 300:
+        raise WidgetError("El saludo puede tener hasta 300 caracteres.")
+    if any(c in assistant + text for c in "<>"):
+        raise WidgetError("El nombre y el saludo no pueden llevar < ni >.")
+    return assistant, text
 
 
 def logo(conn: psycopg.Connection, tenant_id: uuid.UUID) -> tuple[bytes, str] | None:
@@ -117,8 +157,16 @@ def save(
     suggestions: str,
     logo: bytes | None = None,
     remove_logo: bool = False,
+    assistant: str | None = None,
+    greeting: str | None = None,
 ) -> WidgetSettings:
+    """`assistant` y `greeting`: None los deja como estaban."""
     name, accent = name.strip(), accent.strip().lower()
+    brand = (
+        _clean_brand(assistant or "", greeting or "")
+        if assistant is not None or greeting is not None
+        else None
+    )
     if not 2 <= len(name) <= 60:
         raise WidgetError("El nombre tiene que tener entre 2 y 60 caracteres.")
     if not _ACCENT.match(accent):
@@ -153,6 +201,11 @@ def save(
             conn.execute(
                 "update widget_settings set logo = null, logo_type = null where tenant_id = %s",
                 (tenant_id,),
+            )
+        if brand is not None:
+            conn.execute(
+                "update tenants set settings = settings || %s where id = %s",
+                (Jsonb({"brand": {"assistant": brand[0], "greeting": brand[1]}}), tenant_id),
             )
     return load(conn, tenant_id)
 

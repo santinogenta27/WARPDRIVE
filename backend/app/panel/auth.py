@@ -44,6 +44,9 @@ class Session:
     tenant_id: uuid.UUID | None  # None: operador sin empresa de demo cargada
     company: str
     admin: bool  # operador de la plataforma (login de entorno)
+    # Rol en la empresa (decisión 058): `owner` (admin) o `agent` (persona del equipo). Las
+    # sesiones de antes no lo traen y valen como admin.
+    role: str = "owner"
 
 
 def _env(name: str) -> str:
@@ -112,6 +115,7 @@ class CompanyUser:
     tenant_id: uuid.UUID
     company: str
     email: str
+    role: str = "owner"
 
 
 def company_login(conn: psycopg.Connection, email: str, password: str) -> CompanyUser | None:
@@ -119,7 +123,7 @@ def company_login(conn: psycopg.Connection, email: str, password: str) -> Compan
     ruteo de un webhook: todavía no se sabe de qué empresa es. El índice único garantiza que un
     email con clave pertenece a una sola empresa."""
     row = conn.execute(
-        "select u.id, u.tenant_id, t.name, u.email, u.password_hash from users u"
+        "select u.id, u.tenant_id, t.name, u.email, u.password_hash, u.role from users u"
         " join tenants t on t.id = u.tenant_id"
         " where lower(u.email) = %s and u.password_hash is not null and t.status = 'active'",
         (email.strip().lower(),),
@@ -127,7 +131,9 @@ def company_login(conn: psycopg.Connection, email: str, password: str) -> Compan
     # Sin usuario se verifica igual contra un hash cualquiera: el tiempo no revela si existe.
     if not verify_password(password, row[4] if row else _DUMMY_HASH) or row is None:
         return None
-    return CompanyUser(user_id=row[0], tenant_id=row[1], company=row[2], email=row[3])
+    return CompanyUser(
+        user_id=row[0], tenant_id=row[1], company=row[2], email=row[3], role=str(row[5])
+    )
 
 
 def too_many_failures(email: str, now: float | None = None) -> bool:
@@ -156,6 +162,7 @@ def new_session(
     tenant_id: uuid.UUID | None = None,
     company: str = "",
     admin: bool = True,
+    role: str = "owner",
 ) -> str:
     """Cookie de sesión. Sin `tenant_id` es la del operador: entra a la empresa de demo."""
     claims = {
@@ -163,6 +170,7 @@ def new_session(
         "t": str(tenant_id) if tenant_id else None,
         "c": company,
         "a": admin,
+        "r": role,
         "x": int((now or time.time()) + SESSION_SECONDS),
     }
     payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode()
@@ -182,7 +190,12 @@ def read_claims(token: str | None, now: float | None = None) -> Session | None:
             return None
         tenant = uuid.UUID(claims["t"]) if claims.get("t") else None
         return Session(
-            token, str(claims["e"]), tenant, str(claims.get("c") or ""), bool(claims["a"])
+            token,
+            str(claims["e"]),
+            tenant,
+            str(claims.get("c") or ""),
+            bool(claims["a"]),
+            str(claims.get("r") or "owner"),
         )
     except (ValueError, KeyError, TypeError):
         return None

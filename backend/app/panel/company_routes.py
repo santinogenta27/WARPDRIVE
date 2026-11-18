@@ -8,6 +8,7 @@ uno que no existe. Los POST exigen el token anti-CSRF.
 
 import re
 import uuid
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
@@ -18,12 +19,15 @@ from app import i18n
 from app.channels.web import widget
 from app.companies import connection as system
 from app.companies import delete as removal
-from app.companies import onboarding, review
+from app.companies import export, onboarding, review, rules
 from app.companies.create import CompanyError, chat_slug, create_company
+from app.connectors import platforms
 from app.demo import behind
+from app.llm import spending, tenant_llm
 from app.onboarding import ingest as ingestion
 from app.onboarding.ingest import Upload
 from app.panel import auth
+from app.panel.guides import guides_html
 from app.panel.html import esc, local_time, page
 from app.panel.labels import money, tool_label, type_label
 from app.panel.routes import Ctx, Deps, Form, PanelDeps, _forbidden, _not_found, _user_id, enter
@@ -160,7 +164,8 @@ def _companies_page(ctx: Ctx, deps: PanelDeps, notice: str, created: str = "") -
         f"<tr><td><b>{esc(name)}</b></td><td>{esc(users)}</td>"
         f'<td class="mono">/c/{esc(str(address or "")[4:])}</td>'
         f"<td>{local_time(created_at, '%d/%m/%Y')}</td>"
-        f'<td><a href="/panel/empresas/{tenant_id}/borrar">Borrar…</a></td></tr>'
+        f'<td><a href="/panel/empresas/{tenant_id}/exportar">Exportar</a> · '
+        f'<a href="/panel/empresas/{tenant_id}/borrar">Borrar…</a></td></tr>'
         for tenant_id, name, created_at, users, address in _companies(deps)
     )
     table = (
@@ -246,6 +251,7 @@ def onboarding_page(request: Request, deps: Deps) -> Response:
         names = sorted(onboarding.business_names(conn, ctx.tenant_id) - {ctx.session.company})
         run = onboarding.state(conn, ctx.tenant_id)
         waiting = ingestion.pending_documents(conn, ctx.tenant_id)
+        indexed = ingestion.indexed_documents(conn, ctx.tenant_id)
     source_rows = "".join(
         f"<tr><td>{esc(name)}</td><td>{esc(KINDS.get(kind, kind))}</td>"
         f'<td class="num">{count or "—"}</td><td>{local_time(created)}</td></tr>'
@@ -299,7 +305,8 @@ pruebas y te dice qué parte de la atención resolvería solo.</p>{_notice(reque
 <input id="archivos" name="archivos" type="file" multiple required
  accept=".txt,.zip,.csv,.json,.md,.docx,.pdf">
 <p class="muted small">Chats de WhatsApp exportados (.txt, o un .zip con varios), tickets de
-helpdesk (.csv o .json) y documentos de políticas (.md, .txt, .docx o .pdf con texto). Hasta
+helpdesk (.csv o .json) y documentos de políticas (.md, .txt, .docx, .pdf con texto o una tabla
+.csv, como un catálogo). Hasta
 50 MB. En los chats y tickets, los datos personales se reemplazan por marcadores antes de
 guardar. En los documentos se reemplazan los números de tarjeta y los DNI; los emails y
 teléfonos de tu empresa quedan como están. El archivo original no se conserva.</p>
@@ -310,7 +317,13 @@ teléfonos de tu empresa quedan como están. El archivo original no se conserva.
  placeholder="Por ejemplo: Soporte Tienda, Ana de Tienda">
 <p class="muted small">Sirve para saber qué mensajes son del equipo y cuáles del cliente.
 Separá los nombres con comas y cargalos antes de subir los chats.</p>
-<button type="submit">Guardar nombres</button></form></div>
+<button type="submit">Guardar nombres</button></form>
+<form method="post" action="/panel/onboarding/sitio" style="margin-top:16px">{_csrf(ctx)}
+<label for="sitio">Sitio web de la empresa</label>
+<input id="sitio" name="sitio" type="url" required placeholder="https://www.tutienda.com">
+<p class="muted small">Se leen hasta 30 páginas, sin salir de tu dominio. Volver a cargarlo
+actualiza las páginas.</p><button type="submit">Leer el sitio</button></form></div>
+{_indexed_html(ctx, indexed)}
 <div class="card"><h2 style="margin-top:0">2. Análisis</h2>
 <ol class="steps">{steps}</ol><div style="margin-top:12px">{action}</div></div>"""
     return HTMLResponse(
@@ -322,6 +335,51 @@ Separá los nombres con comas y cargalos antes de subir los chats.</p>
             refresh=8 if running else None,
         )
     )
+
+
+def _indexed_html(ctx: Ctx, indexed: list[ingestion.IndexedDocument]) -> str:
+    """Lo que el asistente puede citar (decisión 050). Subir un archivo con el mismo nombre lo
+    reemplaza; borrarlo lo saca de las respuestas en el momento."""
+    if not indexed:
+        return ""
+    rows = "".join(
+        f"<tr><td>{esc(doc.title)}</td><td class=mono>{esc(doc.source)}</td>"
+        f'<td class="num">{doc.chunks}</td><td>{local_time(doc.created_at)}</td>'
+        f'<td><form method="post" action="/panel/onboarding/indexados/{doc.id}/borrar">'
+        f'{_csrf(ctx)}<button type="submit">Borrar</button></form></td></tr>'
+        for doc in indexed
+    )
+    return f"""<div class="card"><h2 style="margin-top:0">Documentos indexados</h2>
+<p class="muted small">Lo que el asistente puede citar. Para actualizar uno, subí el archivo de
+nuevo con el mismo nombre: reemplaza al anterior.</p>
+<table><tr><th>Título</th><th>Archivo</th><th class=num>Fragmentos</th><th>Indexado</th><th></th>
+</tr>{rows}</table></div>"""
+
+
+@router.post("/onboarding/indexados/{document_id}/borrar")
+def delete_indexed(document_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        found = ingestion.delete_document(conn, ctx.tenant_id, document_id)
+    if not found:
+        return _not_found("Ese documento", ctx.session)
+    return _back("onboarding", ok="Documento borrado: el asistente ya no lo usa.")
+
+
+@router.post("/onboarding/sitio")
+async def read_site(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    url = form.get("sitio", "").strip()
+    if not url.lower().startswith(("http://", "https://")):
+        return _back("onboarding", error="La dirección tiene que empezar con https://.")
+    result = await run_in_threadpool(_ingest, deps, ctx.tenant_id, [Upload(url, b"")])
+    if result.unreadable:
+        return _back("onboarding", error=" ".join(result.unreadable))
+    return _back("onboarding", ok=f"Se leyeron {result.documents} páginas del sitio.")
 
 
 def _pending_html(ctx: Ctx, waiting: list[ingestion.PendingDocument]) -> str:
@@ -373,6 +431,8 @@ async def upload_sources(request: Request, data: Files, deps: Deps) -> Response:
     )
     if result.skipped:
         summary += f" {result.skipped} ya estaban subidos."
+    if result.replaced:
+        summary += f" {result.replaced} reemplazaron a uno anterior con el mismo nombre."
     # Un documento sin texto (PDF escaneado) se avisa acá: el resto de la carga ya quedó.
     waiting = [
         f"{note} Parece tener datos de personas: no se indexó. Confirmalo o descartalo acá abajo."
@@ -435,6 +495,26 @@ def start_onboarding(request: Request, form: Form, deps: Deps) -> Response:
 
 
 ONLY_OPERATOR_DELETES = "Solo el operador de la plataforma puede borrar una empresa."
+
+
+@router.get("/empresas/{tenant_id}/exportar")
+def export_company_route(tenant_id: uuid.UUID, request: Request, deps: Deps) -> Response:
+    """Los datos de la empresa en un .zip, sin secretos (decisión 055). Solo el operador."""
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    if not ctx.session.admin:
+        return _forbidden("Solo el operador de la plataforma puede exportar una empresa.")
+    try:
+        with deps.connection() as conn:
+            data = export.export_company(conn, tenant_id, operator=ctx.session.email)
+    except ValueError:
+        return _not_found("Esa empresa", ctx.session)
+    return Response(
+        data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="empresa-{tenant_id}.zip"'},
+    )
 
 
 @router.get("/empresas/{tenant_id}/borrar", response_class=HTMLResponse)
@@ -573,6 +653,20 @@ def _tools_html(ctx: Ctx, tools: list[review.Tool]) -> str:
             facts.append(f"tope {m['max_amount']}%")  # un descuento (decisión 039)
         elif m.get("max_amount") is not None:
             facts.append(f"tope {money(m['max_amount'])}")
+        checked = " checked" if m.get("requires_verified_contact") else ""
+        always = " checked" if high else ""
+        rules_form = f"""<form method="post" action="/panel/configuracion/herramientas/{tool.id}"
+ class="row small" style="margin-top:8px;gap:16px">{_csrf(ctx)}
+<input type="hidden" name="reglas" value="si">
+<label style="font-weight:400"><input type="checkbox" name="identidad" value="si"{checked}>
+Exige identidad verificada</label>
+{
+            f'<label style="font-weight:400"><input type="checkbox" name="siempre" value="si"'
+            f"{always}> Siempre pide aprobación</label>"
+            if writes
+            else ""
+        }
+<button type="submit">Guardar reglas</button></form>"""
         cards.append(
             f"""<div class="card"><div class="row"><div class="grow">
 <span class="badge {"resolved" if tool.approved else ""}">
@@ -583,7 +677,8 @@ def _tools_html(ctx: Ctx, tools: list[review.Tool]) -> str:
 <form method="post" action="/panel/configuracion/herramientas/{tool.id}">{_csrf(ctx)}
 <button class="{"" if tool.approved else "primary"}" name="aprobada"
  value="{"no" if tool.approved else "si"}">
-{"Quitar aprobación" if tool.approved else "Aprobar"}</button></form></div>{limits}</div>"""
+{"Quitar aprobación" if tool.approved else "Aprobar"}</button></form></div>{rules_form}{limits}
+</div>"""
         )
     return "".join(cards)
 
@@ -654,7 +749,28 @@ def _system_html(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> 
         if found and found.base_url
         else ""
     )
+    tools_probe = (
+        f'<form method="post" action="/panel/configuracion/sistema/herramientas" class="row"'
+        f' style="align-items:flex-end">{_csrf(ctx)}<div><label for="ejemplo">Número de pedido'
+        ' de ejemplo</label><input id="ejemplo" name="ejemplo" required placeholder="1001"'
+        ' style="max-width:200px"></div><button type="submit">Probar herramientas</button></form>'
+        if found and found.base_url
+        else ""
+    )
+    platforms_html = f"""<h3>¿Usás Shopify o Tiendanube?</h3><p class="muted small">Conectá tu
+tienda sin OpenAPI: se crean las herramientas de pedidos, envíos, reembolsos y cupones, sin
+aprobar. Después probá la conexión y aprobalas más arriba.</p>
+<form method="post" action="/panel/configuracion/sistema/plataforma">{_csrf(ctx)}
+<label for="plataforma">Plataforma</label><select id="plataforma" name="plataforma"
+ style="max-width:220px"><option value="shopify">Shopify</option>
+<option value="tiendanube">Tiendanube</option></select>
+<label for="tienda">Tienda (Shopify: mitienda.myshopify.com · Tiendanube: el número de tu
+tienda)</label><input id="tienda" name="tienda" required style="max-width:360px">
+<label for="token">Token de acceso (de una app propia de tu tienda)</label>
+<input id="token" name="token" type="password" autocomplete="off" required
+ style="max-width:420px"><button type="submit">Conectar tienda</button></form>"""
     return f"""<div class="card"><span class="badge {badge}">{label}</span>
+{platforms_html}
 <h3>1. OpenAPI de tu sistema</h3><p class="muted small">{esc(spec_note)} Con el OpenAPI, el
 análisis genera las herramientas del asistente. Subí el archivo (.json o .yaml) o pegalo.</p>
 <form method="post" action="/panel/configuracion/sistema/openapi" enctype="multipart/form-data">
@@ -678,7 +794,7 @@ mostrar. Cualquier cambio obliga a probar la conexión de nuevo.</p>
 <button type="submit">Guardar acceso</button></form>
 <h3>3. Probar y activar</h3><p class="muted small">La prueba hace una consulta de solo lectura
 a tu sistema con tus credenciales. Hasta que actives, el asistente usa respuestas simuladas.</p>
-<div class="row">{probe}{activate}</div>{test}</div>"""
+<div class="row">{probe}{activate}</div>{test}{tools_probe}</div>"""
 
 
 def _public_url(request: Request) -> str:
@@ -693,8 +809,9 @@ WIDGET_PREVIEW_JS = """(function(){var f=document.getElementById("widget-form");
 var logo=null;function v(n){return f.elements[n].value}
 function push(){if(!window.EnterpriseChat)return;var c={name:v("nombre").trim(),accent:v("color"),
 suggestions:v("sugerencias").split("\\n").map(function(s){return s.trim()}).filter(Boolean)
-.slice(0,4)};
+.slice(0,4),greeting:v("saludo").trim()};
 if(logo!==null)c.logo=logo;window.EnterpriseChat.setBrand(c)}
+f.elements.saludo.addEventListener("input",push);
 f.elements.pick.addEventListener("input",function(){f.elements.color.value=this.value;push()});
 f.elements.color.addEventListener("input",function(){if(/^#[0-9a-fA-F]{6}$/.test(this.value))
 f.elements.pick.value=this.value;push()});
@@ -724,6 +841,7 @@ def _widget_html(ctx: Ctx, request: Request, slug: str, found: widget.WidgetSett
 donde quieras el chat. Aparece una burbuja abajo a la derecha.</p>
 <pre id="snippet">{esc(code)}</pre>
 <button type="button" id="copy-snippet" data-done="Copiado">Copiar código</button>
+{guides_html()}
 <form method="post" action="/panel/configuracion/widget" enctype="multipart/form-data"
  id="widget-form">{_csrf(ctx)}
 <h3>2. Dominios permitidos</h3>
@@ -744,6 +862,12 @@ subdominios y <span class="mono">localhost</span> para probar en tu computadora.
  pattern="#[0-9a-fA-F]{{6}}" value="{esc(found.accent)}"></div>
 <label for="logo">Logo (PNG, JPG o WebP, cuadrado, hasta 200 KB)</label>
 <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">{logo_note}
+<label for="asistente">Nombre del asistente (opcional)</label>
+<input id="asistente" name="asistente" maxlength="40" value="{esc(found.assistant)}"
+ placeholder="Por ejemplo: Nina">
+<label for="saludo">Saludo al abrir el chat (opcional)</label>
+<textarea id="saludo" name="saludo" maxlength="300" style="min-height:70px"
+ placeholder="{esc(widget.greeting(found.name, found.language))}">{esc(found.greeting)}</textarea>
 <label for="sugerencias">Preguntas sugeridas (hasta 4, una por línea)</label>
 <textarea id="sugerencias" name="sugerencias" style="min-height:96px"
  placeholder="¿Hacen envíos?">{esc(chr(10).join(found.suggestions))}</textarea>
@@ -776,6 +900,8 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
                 suggestions=fields.get("sugerencias", ""),
                 logo=data.files[0].data if data.files else None,
                 remove_logo=fields.get("quitar_logo") == "si",
+                assistant=fields.get("asistente", ""),
+                greeting=fields.get("saludo", ""),
             )
     except widget.WidgetError as error:
         return _back("configuracion", error=str(error))
@@ -844,6 +970,131 @@ def save_behind(request: Request, form: Form, deps: Deps) -> Response:
     return _back("configuracion", ok=f"Vista detrás de escena {state}.")
 
 
+def _model_html(ctx: Ctx, conn: Any) -> str:
+    """API key propia y tope de gasto mensual (decisión 049). La key nunca se muestra."""
+    own = tenant_llm.own_provider(conn, ctx.tenant_id)
+    limits = spending.budget(conn, ctx.tenant_id)
+    spent = spending.month_spend(conn, ctx.tenant_id)
+    used = spending.ratio(spent, limits)
+    cap = (
+        f'<span>Tope:</span> <span class="mono">USD {limits.cap_usd:.2f}</span>'
+        if limits.cap_usd is not None
+        else "<span>Sin tope</span>"
+    )
+    calls = (
+        f' · <span>Llamadas al modelo:</span> <span class="mono">{spent.calls} / '
+        f"{limits.cap_calls}</span>"
+        if limits.cap_calls
+        else ""
+    )
+    chosen = (
+        f'<span class="mono">{esc(tenant_llm.PROVIDERS[own])}</span>'
+        if own
+        else "<span>La de la plataforma, con límites</span>"
+    )
+    options = "".join(
+        f'<option value="{value}"{" selected" if value == (own or "plataforma") else ""}>'
+        f"{esc(label)}</option>"
+        for value, label in [
+            ("plataforma", "Usar la de la plataforma"),
+            *tenant_llm.PROVIDERS.items(),
+        ]
+    )
+    tope = esc(str(spending._setting(conn, ctx.tenant_id) or ""))
+    warn = ' style="color:#b45309"' if used >= spending.WARN_AT else ""
+    return f"""<div class="card"><p><strong>Key en uso:</strong> {chosen}</p>
+<p{warn}><strong>Gasto del mes:</strong> <span class="mono">USD {spent.usd:.2f} ·
+{used:.0%}</span> · {cap}{calls}</p>
+<p class="muted small">Al 80 % se envía un aviso; al 100 %, el asistente pasa cada mensaje a una
+persona del equipo hasta el mes siguiente o hasta que subas el tope.</p>
+<form method="post" action="/panel/configuracion/modelo">{_csrf(ctx)}
+<label for="proveedor">Proveedor</label><select id="proveedor" name="proveedor"
+style="max-width:320px">{options}</select>
+<label for="clave">API key (se guarda cifrada; dejala vacía para conservar la guardada)</label>
+<input id="clave" name="clave" type="password" autocomplete="off" style="max-width:420px">
+<label for="tope">Tope mensual en USD (vacío: sin tope propio)</label>
+<input id="tope" name="tope" inputmode="decimal" value="{tope}" style="max-width:160px">
+<div class="row"><button type="submit">Guardar</button></div></form></div>"""
+
+
+DAYS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+
+
+def _rules_html(ctx: Ctx, found: rules.Rules) -> str:
+    """Horario del equipo y a quién derivar (decisión 051). Las reglas por herramienta están en
+    cada herramienta, más abajo."""
+    hours = found.hours
+    days = "".join(
+        f'<label style="font-weight:400"><input type="checkbox" name="dia_{n}" value="si"'
+        f"{' checked' if hours and n in hours.days else ''}> {label}</label> "
+        for n, label in enumerate(DAYS, start=1)
+    )
+    start = esc(hours.start if hours else "")
+    end = esc(hours.end if hours else "")
+    return f"""<div class="card"><form method="post" action="/panel/configuracion/reglas">
+{_csrf(ctx)}<label>Días en que atiende el equipo</label><div class="row small">{days}</div>
+<div class="row"><div><label for="desde">Desde</label>
+<input id="desde" name="desde" type="time" value="{start}"></div>
+<div><label for="hasta">Hasta</label><input id="hasta" name="hasta" type="time" value="{end}">
+</div></div>
+<p class="muted small">El asistente atiende siempre. Fuera de este horario, cuando pasa un caso a
+una persona, le dice al cliente cuándo le responden. Sin días marcados, no se avisa nada.</p>
+<label for="derivar_a">Email que recibe los casos derivados y las aprobaciones</label>
+<input id="derivar_a" name="derivar_a" type="email" value="{esc(found.handoff_email or "")}"
+ placeholder="soporte@tutienda.com" style="max-width:360px">
+<p class="muted small">Vacío: el aviso va a los usuarios de la empresa.</p>
+<button type="submit">Guardar reglas</button></form></div>"""
+
+
+@router.post("/configuracion/reglas")
+def save_rules(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    days = ",".join(str(n) for n in range(1, 8) if form.get(f"dia_{n}") == "si")
+    try:
+        hours = (
+            rules.parse_hours(days, form.get("desde", ""), form.get("hasta", "")) if days else None
+        )
+        handoff = rules.parse_handoff_email(form.get("derivar_a", ""))
+    except rules.RulesError as error:
+        return _back("configuracion", error=str(error))
+    with deps.connection() as conn:
+        rules.save(conn, ctx.tenant_id, hours, handoff)
+    return _back("configuracion", ok="Reglas de atención guardadas.")
+
+
+@router.post("/configuracion/modelo")
+def save_model(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    choice = form.get("proveedor", "")
+    key = form.get("clave", "").strip()
+    raw = form.get("tope", "").strip().replace(",", ".")
+    try:
+        cap = Decimal(raw) if raw else None
+    except InvalidOperation:
+        return _back("configuracion", error="El tope tiene que ser un número.")
+    if cap is not None and cap < 0:
+        return _back("configuracion", error="El tope no puede ser negativo.")
+    with deps.connection() as conn:
+        if choice == "plataforma":
+            tenant_llm.clear_key(conn, ctx.tenant_id)
+        elif choice in tenant_llm.PROVIDERS:
+            if key:
+                try:
+                    tenant_llm.save_key(conn, ctx.tenant_id, choice, key)
+                except ValueError as error:
+                    return _back("configuracion", error=str(error))
+            elif tenant_llm.own_provider(conn, ctx.tenant_id) != choice:
+                return _back("configuracion", error="Falta la API key de ese proveedor.")
+        else:
+            return _back("configuracion", error="Elegí un proveedor de la lista.")
+        spending.set_budget(conn, ctx.tenant_id, cap)
+    return _back("configuracion", ok="Modelo y tope guardados.")
+
+
 @router.get("/configuracion", response_class=HTMLResponse)
 def settings_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
@@ -858,6 +1109,8 @@ def settings_page(request: Request, deps: Deps) -> Response:
         brand = widget.load(conn, ctx.tenant_id)
         language = i18n.tenant_language(conn, ctx.tenant_id)
         behind_on = behind.enabled(conn, ctx.tenant_id)
+        model = _model_html(ctx, conn)
+        attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
     approved = {t.name for t in tools if t.approved}
     chat = (
         f"<p>Probá el asistente de {esc(ctx.session.company)} en su propio chat: "
@@ -874,6 +1127,8 @@ def settings_page(request: Request, deps: Deps) -> Response:
 qué usa el asistente. Lo que activás o aprobás acá pasa al asistente en vivo en el momento; nada
 queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Idioma</h2>{_language_html(ctx, language)}
+<h2>Modelo y gasto</h2>{model}
+<h2>Reglas de atención</h2>{attention}
 <h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
 <h2>Herramientas</h2>{_tools_html(ctx, tools)}
 <h2>Sistema de la empresa</h2>{_system_html(ctx, found, mode)}
@@ -917,8 +1172,18 @@ def update_tool(tool_id: uuid.UUID, request: Request, form: Form, deps: Deps) ->
         return ctx
     approved = {"si": True, "no": False}.get(form.get("aprobada", ""))
     limits = form.get("limites") == "si"
+    # Reglas por herramienta (decisión 051): casillas sin marcar no llegan en el formulario.
+    rules_sent = form.get("reglas") == "si"
     try:
         with deps.connection() as conn:
+            writes = next(
+                (
+                    t.manifest["upstream"]["method"] != "GET"
+                    for t in review.tools(conn, ctx.tenant_id)
+                    if t.id == tool_id
+                ),
+                False,
+            )
             found = review.set_tool(
                 conn,
                 ctx.tenant_id,
@@ -926,6 +1191,8 @@ def update_tool(tool_id: uuid.UUID, request: Request, form: Form, deps: Deps) ->
                 approved=approved,
                 max_amount=form.get("monto_maximo", "") if limits else review.UNSET,
                 approval_over=form.get("aprobacion_sobre", "") if limits else review.UNSET,
+                requires_verified=form.get("identidad") == "si" if rules_sent else None,
+                always_approval=form.get("siempre") == "si" if rules_sent and writes else None,
             )
     except review.ReviewError as error:
         return _back("configuracion", error=str(error))
@@ -989,6 +1256,47 @@ def test_system(request: Request, form: Form, deps: Deps) -> Response:
     if result["ok"]:
         return _back("configuracion", ok="La prueba de conexión pasó. Ya podés activar.")
     return _back("configuracion", error=f"La prueba de conexión falló: {result['detalle']}")
+
+
+@router.post("/configuracion/sistema/plataforma")
+def connect_platform(request: Request, form: Form, deps: Deps) -> Response:
+    """Shopify o Tiendanube, sin OpenAPI (decisión 057)."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    try:
+        with deps.connection() as conn:
+            platforms.connect(
+                conn,
+                ctx.tenant_id,
+                form.get("plataforma", ""),
+                form.get("tienda", ""),
+                form.get("token", ""),
+            )
+    except ValueError as error:
+        return _back("configuracion", error=str(error))
+    return _back(
+        "configuracion",
+        ok="Tienda conectada. Probá la conexión y aprobá sus herramientas.",
+    )
+
+
+@router.post("/configuracion/sistema/herramientas")
+def probe_system_tools(request: Request, form: Form, deps: Deps) -> Response:
+    """Prueba cada herramienta de solo lectura con un pedido de ejemplo (decisión 057)."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    try:
+        with deps.connection() as conn:
+            results = system.probe_tools(
+                conn, ctx.tenant_id, form.get("ejemplo", ""), client_factory=deps.client_factory
+            )
+    except system.ConnectionError_ as error:
+        return _back("configuracion", error=str(error))
+    summary = " · ".join(f"{tool_label(r['herramienta'])}: {r['detalle']}" for r in results)
+    failed = any(r["ok"] is False for r in results)
+    return _back("configuracion", **({"warning": summary} if failed else {"ok": summary}))
 
 
 @router.post("/configuracion/sistema/activar")

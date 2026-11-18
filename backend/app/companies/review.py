@@ -141,13 +141,19 @@ def set_tool(
     amount_from: Any = UNSET,
     risk: Any = UNSET,
     alternatives: Any = UNSET,
+    requires_verified: bool | None = None,
+    always_approval: bool | None = None,
 ) -> bool:
     """Aprueba una herramienta o cambia sus límites. `max_amount`: sobre ese monto se rechaza
     siempre. `approval_over`: sobre ese monto pide aprobación humana. Una herramienta de riesgo
     alto pide aprobación siempre: ese límite no se puede quitar. `risk`: la empresa puede
     corregir el riesgo que estimó el generador (un reembolso que solo pide aprobación sobre un
     monto es de riesgo medio, decisión 038). `alternatives`: herramientas que la política permite
-    cuando la acción supera el máximo (decisión 039). False si no es de la empresa."""
+    cuando la acción supera el máximo (decisión 039). `requires_verified`: exige identidad
+    verificada para usarla. `always_approval`: siempre pide aprobación (riesgo alto); al sacarlo,
+    queda de riesgo medio (decisión 051). False si no es de la empresa."""
+    if always_approval:
+        risk = "high"
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
             "select manifest from tools where id = %s for update", (tool_id,)
@@ -155,11 +161,15 @@ def set_tool(
         if row is None:
             return False
         manifest: dict[str, Any] = dict(row[0])
+        if always_approval is False and manifest["risk"] == "high":
+            risk = "medium"  # sin "siempre pide aprobación", vuelve a valer el monto
         if risk is not UNSET and risk is not None:
             if risk not in RISKS:
                 raise ReviewError("Riesgo desconocido.")
             manifest["risk"] = risk
-            if risk != "high" and manifest.get("approval_over") == 0:
+            if risk == "high":
+                manifest["approval_over"] = 0
+            elif manifest.get("approval_over") == 0:
                 manifest["approval_over"] = None
             conn.execute("update tools set risk = %s where id = %s", (risk, tool_id))
         if max_amount is not UNSET:
@@ -167,6 +177,8 @@ def set_tool(
         if approval_over is not UNSET:
             limit = _amount(approval_over, "El monto que pide aprobación")
             manifest["approval_over"] = 0 if manifest["risk"] == "high" else limit
+        if requires_verified is not None:
+            manifest["requires_verified_contact"] = requires_verified
         if amount_from is not UNSET and amount_from:
             if amount_from not in AMOUNT_SOURCES:
                 raise ReviewError("Origen del monto desconocido.")

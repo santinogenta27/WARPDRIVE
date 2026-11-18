@@ -212,6 +212,130 @@ PHRASES: dict[str, str] = {
     "Ya hay una solicitud pendiente de aprobación para el mismo recurso.": (
         "There's already a pending approval for the same resource."
     ),
+    # modelo y gasto (decisión 049)
+    "Modelo y gasto": "Model and spending",
+    "Key en uso:": "Key in use:",
+    "La de la plataforma, con límites": "The platform's, with limits",
+    "Gasto del mes:": "This month's spending:",
+    "Tope:": "Cap:",
+    "Llamadas al modelo:": "Model calls:",
+    "Al 80 % se envía un aviso; al 100 %, el asistente pasa cada mensaje a una persona del equipo "
+    "hasta el mes siguiente o hasta que subas el tope.": (
+        "At 80% you get an alert; at 100%, the assistant hands every message to a person on "
+        "your team until next month or until you raise the cap."
+    ),
+    "Proveedor": "Provider",
+    "Usar la de la plataforma": "Use the platform's",
+    "API key (se guarda cifrada; dejala vacía para conservar la guardada)": (
+        "API key (stored encrypted; leave it empty to keep the saved one)"
+    ),
+    "Tope mensual en USD (vacío: sin tope propio)": (
+        "Monthly cap in USD (empty: no cap of your own)"
+    ),
+    "Guardar": "Save",
+    "Modelo y tope guardados.": "Model and cap saved.",
+    "El tope tiene que ser un número.": "The cap has to be a number.",
+    "El tope no puede ser negativo.": "The cap can't be negative.",
+    "Falta la API key de ese proveedor.": "The API key for that provider is missing.",
+    "Elegí un proveedor de la lista.": "Choose a provider from the list.",
+    # conectar una tienda y probar herramientas (decisión 057)
+    "¿Usás Shopify o Tiendanube?": "Do you use Shopify or Tiendanube?",
+    "Conectá tu tienda sin OpenAPI: se crean las herramientas de pedidos, envíos, reembolsos y "
+    "cupones, sin aprobar. Después probá la conexión y aprobalas más arriba.": (
+        "Connect your store without an OpenAPI: the order, shipping, refund and coupon tools are "
+        "created, unapproved. Then test the connection and approve them above."
+    ),
+    "Plataforma": "Platform",
+    "Tienda (Shopify: mitienda.myshopify.com · Tiendanube: el número de tu tienda)": (
+        "Store (Shopify: mystore.myshopify.com · Tiendanube: your store number)"
+    ),
+    "Token de acceso (de una app propia de tu tienda)": (
+        "Access token (from a custom app of your store)"
+    ),
+    "Conectar tienda": "Connect store",
+    "Número de pedido de ejemplo": "Sample order number",
+    "Probar herramientas": "Test tools",
+    "Tienda conectada. Probá la conexión y aprobá sus herramientas.": (
+        "Store connected. Test the connection and approve its tools."
+    ),
+    # equipo e invitaciones (decisión 058)
+    "¿Tu empresa no tiene cuenta?": "Your company doesn't have an account?",
+    "Creala acá": "Create it here",
+    "Esta sección es solo para los admins de la empresa.": "This section is for admins only.",
+    "Equipo": "Team",
+    "Email": "Email",
+    "Rol": "Role",
+    "Estado": "Status",
+    "Admin": "Admin",
+    "Persona del equipo": "Team member",
+    "Invitación enviada": "Invitation sent",
+    "Invitar": "Invite",
+    "Enviar invitación": "Send invitation",
+    "Un admin ve y cambia todo. Una persona del equipo atiende Casos y Aprobaciones, pero no "
+    "cambia la configuración.": (
+        "An admin sees and changes everything. A team member handles Cases and Approvals but "
+        "doesn't change the settings."
+    ),
+    # nombre y saludo del asistente (decisión 052)
+    "Nombre del asistente (opcional)": "Assistant's name (optional)",
+    "Saludo al abrir el chat (opcional)": "Greeting when the chat opens (optional)",
+    "Por ejemplo: Nina": "For example: Nina",
+    "El nombre del asistente tiene que tener entre 2 y 40 caracteres.": (
+        "The assistant's name has to be 2 to 40 characters long."
+    ),
+    "El saludo puede tener hasta 300 caracteres.": "The greeting can be up to 300 characters.",
+    "El nombre y el saludo no pueden llevar < ni >.": "The name and greeting can't contain < or >.",
+    # reglas de atención (decisión 051)
+    "Reglas de atención": "Service rules",
+    "Exige identidad verificada": "Requires a verified identity",
+    "Siempre pide aprobación": "Always asks for approval",
+    "Guardar reglas": "Save rules",
+    "Días en que atiende el equipo": "Days your team is available",
+    "Lun": "Mon",
+    "Mar": "Tue",
+    "Mié": "Wed",
+    "Jue": "Thu",
+    "Vie": "Fri",
+    "Sáb": "Sat",
+    "Dom": "Sun",
+    "Desde": "From",
+    "Hasta": "To",
+    "El asistente atiende siempre. Fuera de este horario, cuando pasa un caso a una persona, le "
+    "dice al cliente cuándo le responden. Sin días marcados, no se avisa nada.": (
+        "The assistant is always on. Outside these hours, when it hands a case to a person, it "
+        "tells the customer when they'll get a reply. With no days checked, nothing is said."
+    ),
+    "Email que recibe los casos derivados y las aprobaciones": (
+        "Email that receives handed-off cases and approvals"
+    ),
+    "Vacío: el aviso va a los usuarios de la empresa.": "Empty: the alert goes to your users.",
+    "Reglas de atención guardadas.": "Service rules saved.",
+    "Elegí al menos un día de atención.": "Choose at least one day.",
+    "El horario va en formato HH:MM, por ejemplo 09:00.": "Hours go as HH:MM, for example 09:00.",
+    "La hora de cierre tiene que ser posterior a la de apertura.": (
+        "The closing time has to be after the opening time."
+    ),
+    "El email para derivar no es válido.": "The handoff email isn't valid.",
+    # documentos indexados y sitio web (decisión 050)
+    "Sitio web de la empresa": "Company website",
+    "Se leen hasta 30 páginas, sin salir de tu dominio. Volver a cargarlo actualiza las páginas.": (
+        "Up to 30 pages are read, without leaving your domain. Loading it again updates the pages."
+    ),
+    "Leer el sitio": "Read the website",
+    "Documentos indexados": "Indexed documents",
+    "Lo que el asistente puede citar. Para actualizar uno, subí el archivo de nuevo con el mismo "
+    "nombre: reemplaza al anterior.": (
+        "What the assistant can cite. To update one, upload the file again with the same name: "
+        "it replaces the previous one."
+    ),
+    "Título": "Title",
+    "Fragmentos": "Chunks",
+    "Indexado": "Indexed",
+    "Borrar": "Delete",
+    "Documento borrado: el asistente ya no lo usa.": (
+        "Document deleted: the assistant no longer uses it."
+    ),
+    "La dirección tiene que empezar con https://.": "The address has to start with https://.",
     # vista detrás de escena (decisión 041)
     "Vista detrás de escena": "Behind the scenes",
     "Activada": "On",
@@ -291,12 +415,14 @@ PHRASES: dict[str, str] = {
     "1. Subí tus fuentes": "1. Upload your sources",
     "Historial de chats y documentos": "Chat history and documents",
     "Chats de WhatsApp exportados (.txt, o un .zip con varios), tickets de helpdesk (.csv o "
-    ".json) y documentos de políticas (.md, .txt, .docx o .pdf con texto). Hasta 50 MB. En los "
+    ".json) y documentos de políticas (.md, .txt, .docx, .pdf con texto o una tabla .csv, como un "
+    "catálogo). Hasta 50 MB. En los "
     "chats y tickets, los datos personales se reemplazan por marcadores antes de guardar. En los "
     "documentos se reemplazan los números de tarjeta y los DNI; los emails y teléfonos de tu "
     "empresa quedan como están. El archivo original no se conserva.": (
         "Exported WhatsApp chats (.txt, or a .zip with several), helpdesk tickets (.csv or "
-        ".json) and policy documents (.md, .txt, .docx or .pdf with text). Up to 50 MB. In chats "
+        ".json) and policy documents (.md, .txt, .docx, .pdf with text or a .csv table, like a "
+        "catalog). Up to 50 MB. In chats "
         "and tickets, personal data is replaced with placeholders before saving. In documents, "
         "card numbers and national ID numbers are replaced; your company's emails and phone "
         "numbers stay as they are. The original file isn't kept."

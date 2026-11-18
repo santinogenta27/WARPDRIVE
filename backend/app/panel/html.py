@@ -101,7 +101,10 @@ NAV = [
     ("reporte", "Reporte"),
     ("configuracion", "Configuración"),
     ("metricas", "Métricas"),
+    ("equipo", "Equipo"),
 ]
+# Lo que una persona del equipo (rol `agent`) no ve ni puede abrir (decisión 058).
+ADMIN_ONLY = {"onboarding", "configuracion", "equipo"}
 # Solo el operador de la plataforma.
 ADMIN_NAV = [("empresas", "Empresas"), ("facturacion", "Facturación")]
 # Aprobaciones pendientes de la empresa de la sesión: `enter` lo fija en cada pedido.
@@ -162,6 +165,8 @@ def page(
     if english.english():  # el panel de una empresa en inglés (decisión 037)
         title = english.translate_text(title)
     items = NAV + (ADMIN_NAV if admin else [])
+    if session is not None and session.role == "agent":
+        items = [(slug, label) for slug, label in items if slug not in ADMIN_ONLY]
     waiting = PENDING.get()
     # Las aprobaciones pendientes se ven desde cualquier pantalla (demo en inglés, cambio D).
     count = (

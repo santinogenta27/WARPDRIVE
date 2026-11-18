@@ -43,13 +43,21 @@ def chat_address(slug: str) -> str:
     return f"{WEB_PREFIX}{slug}"
 
 
-def create_company(conn: psycopg.Connection, name: str, email: str, password: str) -> Company:
+def create_company(
+    conn: psycopg.Connection,
+    name: str,
+    email: str,
+    password: str,
+    *,
+    password_hash: str | None = None,
+) -> Company:
+    """`password_hash`: la clave ya hasheada (el registro self-service, decisión 058)."""
     name, email = name.strip(), email.strip().lower()
     if not 2 <= len(name) <= 80:
         raise CompanyError("El nombre de la empresa tiene que tener entre 2 y 80 caracteres.")
     if not EMAIL.match(email) or len(email) > 200:
         raise CompanyError("El email del usuario no es válido.")
-    if len(password) < auth.MIN_PASSWORD:
+    if password_hash is None and len(password) < auth.MIN_PASSWORD:
         raise CompanyError(f"La clave tiene que tener al menos {auth.MIN_PASSWORD} caracteres.")
     # Consultas fuera de un tenant (como el login): el nombre y el email son únicos entre todas.
     taken = conn.execute(
@@ -72,7 +80,7 @@ def create_company(conn: psycopg.Connection, name: str, email: str, password: st
         user = conn.execute(
             "insert into users (tenant_id, email, role, password_hash)"
             " values (%s, %s, 'owner', %s) returning id",
-            (tenant_id, email, auth.hash_password(password)),
+            (tenant_id, email, password_hash or auth.hash_password(password)),
         ).fetchone()
     assert user is not None
     # El enlace del chat de prueba no se adivina: lleva una parte al azar.
