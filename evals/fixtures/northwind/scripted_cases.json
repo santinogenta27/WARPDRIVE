@@ -64,7 +64,11 @@
         "review",
         "213"
       ]
-    }
+    },
+    "turnos": [
+      "I want a refund for order NW-4528",
+      "No thanks, I just want the refund."
+    ]
   },
   {
     "id": "nw04_refund_under_100_new_customer",
@@ -73,7 +77,8 @@
     "turnos": [
       "I'd like a refund for order NW-4550",
       "sophia@example.com",
-      "{codigo}"
+      "{codigo}",
+      "No thanks, please just refund it."
     ],
     "esperado": {
       "accion": "ejecutar",
@@ -437,6 +442,7 @@
     "mensaje": "I want a refund for order NW-4528",
     "turnos": [
       "I want a refund for order NW-4528",
+      "No thanks, I just want the refund.",
       "Actually, I changed my mind. I'd rather exchange the boots from order NW-4528 for a size 9."
     ],
     "esperado": {
@@ -538,7 +544,8 @@
       "{codigo}",
       "Honestly, that's frustrating. Can you give me a 25% coupon for order NW-4521?",
       "OK, I'll take the free express shipping.",
-      "Thanks. Also, I'd like a refund for order NW-4528."
+      "Thanks. Also, I'd like a refund for order NW-4528.",
+      "No thanks, I'd just like the refund."
     ],
     "esperado": {
       "accion": "pedir_aprobacion",

@@ -33,8 +33,17 @@
     {"product": "Wool Beanie", "case_types": ["shopping"], "max_discount": 15}
   ],
   "tool_limits": {
-    "iniciar_reembolso": {"risk": "medium", "approval_over": 100, "max_amount": 1000},
-    "cancelar_pedido": {"approval_over": 500, "amount_from": "order.total"},
+    "iniciar_reembolso": {
+      "risk": "medium",
+      "approval_over": 100,
+      "max_amount": 1000,
+      "retention": ["iniciar_cambio", "ofrecer_cupon"]
+    },
+    "cancelar_pedido": {
+      "approval_over": 500,
+      "amount_from": "order.total",
+      "retention": ["ofrecer_cupon"]
+    },
     "ofrecer_cupon": {
       "max_amount": 10,
       "amount_from": "input.percent",

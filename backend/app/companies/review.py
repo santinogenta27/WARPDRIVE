@@ -141,6 +141,7 @@ def set_tool(
     amount_from: Any = UNSET,
     risk: Any = UNSET,
     alternatives: Any = UNSET,
+    retention: Any = UNSET,
     requires_verified: bool | None = None,
     always_approval: bool | None = None,
 ) -> bool:
@@ -189,6 +190,13 @@ def set_tool(
                 manifest["alternatives"] = names
             else:
                 manifest.pop("alternatives", None)
+        if retention is not UNSET and retention is not None:
+            # Retención (decisión 062): lo que se ofrece antes de cancelar o reembolsar.
+            kept = [str(name) for name in retention]
+            if kept:
+                manifest["retention"] = kept
+            else:
+                manifest.pop("retention", None)
         conn.execute(
             "update tools set manifest = %s, max_amount = %s, approved = coalesce(%s, approved)"
             " where id = %s",

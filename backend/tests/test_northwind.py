@@ -276,24 +276,24 @@ def test_el_reembolso_sobre_100_usd_pide_aprobacion_y_el_menor_se_hace(
     assert case is not None
     emily = ContactContext(seed.contacts["emily"], hash_phone("+15555550101"), verified=True)
     allowed = {"iniciar_reembolso"}
-    high = guardian.execute(
-        tenant_id=seed.tenant_id,
-        case_id=case[0],
-        contact=emily,
-        tool_name="iniciar_reembolso",
-        tool_input={"order_id": "NW-4528", "amount": 213},
-        allowed=allowed,
-    )
+
+    def refund(contact: ContactContext, params: dict[str, Any]) -> Any:
+        # Retención (decisión 062): la primera vez trae las alternativas; el cliente insiste.
+        for _ in range(2):
+            decision = guardian.execute(
+                tenant_id=seed.tenant_id,
+                case_id=case[0],
+                contact=contact,
+                tool_name="iniciar_reembolso",
+                tool_input=params,
+                allowed=allowed,
+            )
+        return decision
+
+    high = refund(emily, {"order_id": "NW-4528", "amount": 213})
     assert high.status == "approval_required"
     sophia = ContactContext(seed.contacts["sophia"], hash_phone("+15555550103"), verified=True)
-    low = guardian.execute(
-        tenant_id=seed.tenant_id,
-        case_id=case[0],
-        contact=sophia,
-        tool_name="iniciar_reembolso",
-        tool_input={"order_id": "NW-4550", "amount": 56},
-        allowed=allowed,
-    )
+    low = refund(sophia, {"order_id": "NW-4550", "amount": 56})
     assert low.status == "executed", low.result
 
 

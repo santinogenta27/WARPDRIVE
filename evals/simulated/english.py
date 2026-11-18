@@ -75,6 +75,25 @@ _BUY = re.compile(
 
 
 OFFER = "ofrecer_producto"  # venta cruzada (decisión 061)
+_RETENTION_OPTIONS = {
+    "iniciar_cambio": "a free exchange for another size or color",
+    "ofrecer_cupon": "a courtesy coupon for your next order",
+    "ofrecer_envio_express": "free express shipping on your next order",
+}
+_RETAINED = {"iniciar_reembolso": "refund", "cancelar_pedido": "cancellation"}
+
+
+def retention_text(tool: str, order_id: Any, result: dict[str, Any]) -> str:
+    """Las alternativas de la política antes de cancelar o reembolsar (decisión 062)."""
+    options = [
+        _RETENTION_OPTIONS.get(a.get("herramienta"), str(a.get("herramienta")))
+        for a in result.get("alternativas") or []
+    ]
+    what = _RETAINED.get(tool, "request")
+    return (
+        f"Before I go ahead with the {what} for order {order_id}, would you prefer "
+        f"{' or '.join(options)}? If you'd still like the {what}, just tell me and I'll do it."
+    )
 
 
 def checkout_text(data: dict[str, Any]) -> str:
@@ -269,6 +288,11 @@ class EnglishAgent:
             looked_up = "error" not in results[-1][2]
             if self.mode == "deriva_siempre_tras_consultar" or (looked_up and not corrected):
                 return escalate("Customer request for order status")
+        # Retención (decisión 062): si el ciclo frenó un reintento, se ofrecen las alternativas.
+        retained = next((r for r in results if r[2].get("retencion")), None)
+        if retained is not None and results[-1] is not retained:
+            order = retained[1].get("order_id")
+            return reply(retention_text(retained[0], order, retained[2]), factual=False)
         # Venta cruzada (decisión 061): con el link ya armado, una oferta si la herramienta está.
         if results and results[-1][0] == CHECKOUT and "error" not in results[-1][2]:
             offer = offer_call(body, self.mode)
@@ -310,6 +334,11 @@ class EnglishAgent:
         corrected: bool = False,
     ) -> list[dict[str, Any]]:
         order_id = call_input.get("order_id")
+        if result.get("retencion"):  # retención (decisión 062): primero las alternativas
+            if self.mode == "insiste_solo" and not corrected:
+                # Como un modelo que no espera al cliente: el ciclo lo frena en código.
+                return [self.tool_use(name, call_input)]
+            return reply(retention_text(name, order_id, result), factual=False)
         if "alternativas" in result:  # el guardián rechazó algo fuera de la política
             return reply(self.allowed_instead(call_input, result))
         if "error" in result:
@@ -375,7 +404,7 @@ class EnglishAgent:
                 f"Order {order_id} has already shipped, so I can't change its address anymore. "
                 "If you'd like, I can ask a member of our team to review it with the carrier."
             )
-        if "refund" in low and "iniciar_reembolso" in tool_names:
+        if ("refund" in low or "money back" in low) and "iniciar_reembolso" in tool_names:
             if status == "delivered":
                 return [
                     self.tool_use(

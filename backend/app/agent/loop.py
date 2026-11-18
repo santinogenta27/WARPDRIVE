@@ -46,6 +46,7 @@ from app.obs import alerts, timing, tracing
 from app.policy.guardian import (
     ALREADY_PENDING_REASON,
     CANCEL_PENDING,
+    RETENTION_REASON,
     UNVERIFIED_REASON,
     ContactContext,
     GuardDecision,
@@ -53,6 +54,11 @@ from app.policy.guardian import (
 )
 from app.rag.search import SearchResult, hybrid_search
 from app.sales import upsell
+
+RETENTION_WAIT = {
+    "es": "Las alternativas se acaban de ofrecer: respondé y esperá lo que diga el cliente.",
+    "en": "The alternatives were just offered: answer and wait for what the customer says.",
+}
 
 AGENT_MODEL = "claude-sonnet-5-5"
 MAX_STEPS = 8
@@ -317,6 +323,7 @@ class _Turn:
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
     sales: bool = False  # el turno ofrece la búsqueda de productos (decisión 059)
+    retained: set[str] = field(default_factory=set)  # retención ofrecida en el turno (062)
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
     classification: Classification | None = None
     tone: str = "rioplatense"
@@ -954,6 +961,14 @@ class Agent:
                         decision = self._guardian.cancel_pending(
                             turn.tenant_id, turn.case_id, call.input
                         )
+                    elif call.name in turn.retained:
+                        # Retención (decisión 062): las alternativas se acaban de ofrecer; la
+                        # acción espera a que el cliente conteste, no se repite en este turno.
+                        decision = GuardDecision(
+                            "denied",
+                            {"error": RETENTION_WAIT[turn.lang]},
+                            reason=RETENTION_WAIT["es"],
+                        )
                     elif call.name == upsell.OFFER_PRODUCT and call.name in allowed:
                         decision = self._guardian.offer_product(
                             tenant_id=turn.tenant_id,
@@ -970,6 +985,8 @@ class Agent:
                             tool_input=call.input,
                             allowed=allowed,
                         )
+                    if decision.reason == RETENTION_REASON:
+                        turn.retained.add(call.name)
                     turn.decisions.append(decision)
                     turn.tool_calls.append(
                         ToolExecution(call.name, call.input, decision.status, decision.reason)

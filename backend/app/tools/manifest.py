@@ -35,6 +35,8 @@ MANIFEST_SCHEMA: dict[str, Any] = {
         # Herramientas que la política permite en lugar de una acción sobre el máximo: el
         # rechazo del guardián las ofrece (decisión 039).
         "alternatives": {"type": "array", "items": {"type": "string"}},
+        # Retención (decisión 062): herramientas que se ofrecen antes de cancelar o reembolsar.
+        "retention": {"type": "array", "items": {"type": "string"}},
         "owner_check": {"type": ["string", "null"]},
         "owner_lookup": {
             "type": "object",

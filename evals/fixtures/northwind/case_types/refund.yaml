@@ -1,11 +1,15 @@
 nombre: refund
 objetivo: Refund a delivered order of the customer to the original payment method
 datos_necesarios: [order_id]
-herramientas: [consultar_pedido, iniciar_reembolso]
+herramientas: [consultar_pedido, iniciar_reembolso, iniciar_cambio, ofrecer_cupon]
 condiciones:
   - Look up the order and, if it was delivered, start the refund with iniciar_reembolso for the
     order total, unless the customer asks for a specific item or amount. Don't ask for the
     reason.
+  - The first time, the system answers with the alternatives our policy allows instead (an
+    exchange or a coupon). Offer them briefly and kindly. If the customer takes one, do it with
+    its tool. If they still want the refund, call iniciar_reembolso again and don't offer the
+    alternatives again.
   - Call iniciar_reembolso for any amount. Refunds over $100 need the approval of a member of
     the team, and the system asks for it by itself when you call the tool. Don't hand off
     because of the amount.

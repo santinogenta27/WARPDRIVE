@@ -185,6 +185,7 @@ def configure(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
             approval_over=mine.get("approval_over"),
             amount_from=mine.get("amount_from"),
             alternatives=mine.get("alternatives"),
+            retention=mine.get("retention", []),
         )
     active = {kind["name"]: bool(kind["active"]) for kind in data["case_types"]}
     for kind in review.case_types(conn, tenant_id):

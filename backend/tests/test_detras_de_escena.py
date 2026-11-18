@@ -80,6 +80,7 @@ def _conversation(web: TestClient, stack: SimulatedStack) -> str:
     _chat(web, session, "My email is emily@example.com")
     _chat(web, session, stack.last_code())
     _chat(web, session, "Thanks. Also, I'd like a refund for order NW-4528.")
+    _chat(web, session, "No thanks, I'd just like the refund.")  # retención (decisión 062)
     return session
 
 
@@ -107,8 +108,10 @@ def test_el_panel_muestra_cada_paso_del_caso(web: TestClient, stack: SimulatedSt
     session = _conversation(web, stack)
     data = _live(web, session)
     turns = data["turns"]
-    assert len(turns) == 4
-    order, refund = turns[2], turns[3]
+    assert len(turns) == 5
+    order, retained, refund = turns[2], turns[3], turns[4]
+    offered = next(t for t in retained["tools"] if t["name"] == "iniciar_reembolso")
+    assert offered["status"] == "denied" and offered["alternatives"]  # retención (decisión 062)
 
     assert turns[0]["intent"]["name"] == "where_is_my_order"
     assert any(step["kind"] == "code_sent" for step in turns[1]["verification"])
@@ -186,7 +189,7 @@ def test_solo_la_conversacion_de_la_sesion(web: TestClient, stack: SimulatedStac
     mine = _conversation(web, stack)
     other = web.post(f"/chat/session?canal={SLUG}").json()["session"]
     assert _live(web, other)["turns"] == []
-    assert len(_live(web, mine)["turns"]) == 4
+    assert len(_live(web, mine)["turns"]) == 5
     assert web.get(f"/demo/{SLUG}/live", params={"session": "x" * 40}).status_code == 401
     assert web.get(f"/demo/{SLUG}/live").status_code == 401
     assert web.post(f"/demo/{SLUG}/live", params={"session": mine}).status_code == 405

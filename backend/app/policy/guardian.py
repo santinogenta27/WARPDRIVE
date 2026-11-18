@@ -35,6 +35,7 @@ CANCEL_PENDING = "cancelar_pendiente"
 CHANGED_MIND_REASON = "Hay una solicitud pendiente para el mismo recurso en este caso."
 _HIDDEN_FIELDS = {"customer_phone"}  # el modelo no necesita el teléfono en claro
 ONE_OFFER_REASON = "Ya hubo una oferta en esta conversación."  # decisión 061
+RETENTION_REASON = "Primero se ofrecen las alternativas de la política (retención)."  # 062
 
 
 def _resource_key(manifest: dict[str, Any], tool_input: dict[str, Any]) -> str | None:
@@ -162,6 +163,9 @@ class Guardian:
             unoffered = self._discount_without_offer(tenant_id, case_id, tool_input)
             if unoffered is not None:
                 return unoffered
+        retained = self._retention(tenant_id, case_id, manifest, tool_input, resources)
+        if retained is not None:
+            return retained
         decision = self._apply_risk_policy(
             tenant_id=tenant_id,
             case_id=case_id,
@@ -236,6 +240,48 @@ class Guardian:
                 "pendiente": {"herramienta": row[0], "parametros": row[1]},
             },
             reason=CHANGED_MIND_REASON,
+        )
+
+    # -- retención (decisión 062) ----------------------------------------------------------
+    def _retention(
+        self,
+        tenant_id: uuid.UUID,
+        case_id: uuid.UUID,
+        manifest: dict[str, Any],
+        tool_input: dict[str, Any],
+        resources: dict[str, Any],
+    ) -> GuardDecision | None:
+        """Antes de cancelar o reembolsar, las alternativas que la política permite (cambio,
+        crédito, cupón), una sola vez por caso y pedido. La primera llamada no se hace y trae las
+        alternativas; si el cliente insiste, la próxima sigue sin volver a ofrecer. Solo las
+        alternativas aprobadas cuentan: sin ninguna, no hay retención."""
+        wanted = [str(name) for name in manifest.get("retention") or []]
+        offered = [m["name"] for m in self.manifests(tenant_id, wanted)] if wanted else []
+        if not offered:
+            return None
+        key = _resource_key(manifest, tool_input) or ""
+        with tenant_scope(self._conn, tenant_id):
+            made = self._conn.execute(
+                "insert into retention_offers (tenant_id, case_id, tool, resource_key,"
+                " alternatives) values (%s, %s, %s, %s, %s)"
+                " on conflict (tenant_id, case_id, tool, resource_key) do nothing returning id",
+                (tenant_id, case_id, manifest["name"], key, offered),
+            ).fetchone()
+        if made is None:
+            return None  # ya se ofrecieron y el cliente insiste: sigue
+        return GuardDecision(
+            "denied",
+            {
+                "retencion": True,
+                "mensaje": (
+                    "Todavía no se hizo. Primero ofrecé estas alternativas de la política. Si el "
+                    "cliente insiste, en su próximo mensaje volvé a llamar esta herramienta y se "
+                    "hace, sin volver a ofrecer."
+                ),
+                "alternativas": [{"herramienta": name} for name in offered],
+            },
+            reason=RETENTION_REASON,
+            resources=resources,
         )
 
     # -- ventas cruzadas (decisión 061) -----------------------------------------------------

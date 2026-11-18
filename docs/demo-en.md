@@ -138,7 +138,11 @@ Escribí: **`OK, I'll take the free express shipping.`**
 
 Escribí: **`Thanks. Also, I'd like a refund for order NW-4528.`**
 
-**La respuesta:** el reembolso de $213 queda en revisión de una persona, porque supera los $100.
+**La respuesta:** antes de reembolsar, el asistente ofrece lo que permite la política: un cambio por otro talle o color, o un cupón (retención, decisión 062). En el panel, la herramienta **Refund** aparece frenada con las alternativas ofrecidas.
+
+Escribí: **`No thanks, I'd just like the refund.`**
+
+**La respuesta:** el asistente no vuelve a ofrecer nada. El reembolso de $213 queda en revisión de una persona, porque supera los $100.
 
 **Qué mostrar en el panel:**
 
