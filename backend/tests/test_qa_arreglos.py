@@ -29,7 +29,35 @@ def test_el_enojo_con_apostrofo_tipografico() -> None:
     assert conduct.upset_any_language("It still hasn’t arrived!!")
 
 
-# -- 2. retención: el turno siguiente sabe qué ya se ofreció ------------------------------------
+# -- 2. no pedir el número de pedido que el cliente ya dio --------------------------------------
+@pytest.mark.parametrize(
+    ("reply", "message", "order"),
+    [
+        (
+            "I need the order number to check it. Could you confirm the order ID?",
+            "Where is my order NW-4550?",
+            "NW-4550",
+        ),
+        ("¿Me pasás el número de pedido?", "¿Dónde está el pedido 1005?", "1005"),
+        ("What's your order number?", "Change the address to 500 Pine St, WA 98101", None),
+        ("Your order NW-4550 was delivered.", "Where is my order NW-4550?", None),
+    ],
+)
+def test_pedir_un_pedido_ya_dado(reply: str, message: str, order: str | None) -> None:
+    assert conduct.asks_given_order(reply, message) == order
+
+
+def test_el_agente_no_vuelve_a_pedir_el_pedido(conn: psycopg.Connection) -> None:
+    from app.audit.log import reconstruct_case
+
+    stack = build_simulated_stack(conn, mode="pide_el_pedido", company="northwind")
+    result = stack.send("sophia", "Where is my order NW-4550?")
+    events = reconstruct_case(stack.conn, stack.seed.tenant_id, result.case_id)
+    assert any(e.kind == "grounding_rejected" for e in events)
+    assert result.verification_requested  # usó el pedido: la herramienta pidió la verificación
+
+
+# -- 3. retención: el turno siguiente sabe qué ya se ofreció ------------------------------------
 @pytest.fixture
 def northwind(conn: psycopg.Connection) -> Any:
     return build_simulated_stack(conn, company="northwind")

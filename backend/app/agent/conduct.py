@@ -83,6 +83,39 @@ def _plain(text: str) -> str:
     return text.translate(_TYPOGRAPHIC)
 
 
+# Pedir el número de pedido que el cliente ya dio (gpt-oss-20b en los evals reales, nw11:
+# "Where is my order NW-4550?" -> "I need the order number"). Decisión 066.
+# Un pedido escrito como tal ("NW-4550", "#1005", "pedido 1005", "order 4550"), no cualquier
+# número (un código postal o un teléfono no lo son).
+_ORDER_IN_TEXT = re.compile(
+    r"(?i)\b(?:order|pedido)\s+(?:n[uú]mero\s+)?#?\s*([a-z]{0,3}-?\d{3,6})(?!\d)"
+    r"|(?<![\w-])([a-z]{1,3}-\d{3,6}|#\d{3,6})(?!\d)"
+)
+_ASKS_ORDER = re.compile(
+    r"(?i)\b(?:order\s+(?:number|id|#)|n[uú]mero\s+(?:de(?:l)?\s+)?pedido)\b[^?]*\?"
+    r"|\?[^?]*\b(?:order\s+(?:number|id)|n[uú]mero\s+de\s+pedido)\b"
+)
+GIVEN_ORDER_CORRECTIONS = {
+    "es": (
+        "Respuesta rechazada: el cliente ya dio el número de pedido ({order}). Usalo con la "
+        "herramienta en lugar de volver a pedirlo."
+    ),
+    "en": (
+        "Answer rejected: the customer already gave the order number ({order}). Use it with the "
+        "tool instead of asking for it again."
+    ),
+}
+
+
+def asks_given_order(reply: str, message: str) -> str | None:
+    """El número de pedido que el cliente ya dio en su mensaje y la respuesta vuelve a pedir, o
+    None."""
+    found = _ORDER_IN_TEXT.search(_plain(message))
+    if found is None or _ASKS_ORDER.search(_plain(reply)) is None:
+        return None
+    return (found.group(1) or found.group(2)).strip()
+
+
 def upset_any_language(message: str) -> bool:
     """El cliente está molesto, escriba en inglés o en español."""
     return any(pattern.search(_plain(message)) for pattern in UPSET_FOR_OFFERS)

@@ -324,6 +324,7 @@ class _Turn:
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
     sales: bool = False  # el turno ofrece la búsqueda de productos (decisión 059)
     retained: set[str] = field(default_factory=set)  # retención ofrecida en el turno (062)
+    asked_given_order: bool = False  # ya se corrigió que pidiera el pedido dado (066)
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
     classification: Classification | None = None
     tone: str = "rioplatense"
@@ -895,6 +896,23 @@ class Agent:
                         messages.append(
                             _correction(final_id, conduct.ACTION_CORRECTIONS[turn.lang])
                         )
+                        continue
+                    given = _check(conduct.asks_given_order, said, turn.text)
+                    if given and not turn.asked_given_order:
+                        # Pide el número de pedido que el cliente ya dio (decisión 066): se le
+                        # pide usarlo, una sola vez.
+                        self._audit(
+                            turn,
+                            "grounding_rejected",
+                            {
+                                "reason": "Pidió un dato que el cliente ya dio.",
+                                "rejected_message": final_input,
+                            },
+                        )
+                        turn.asked_given_order = True
+                        messages.append({"role": "assistant", "content": response.content})
+                        correction = conduct.GIVEN_ORDER_CORRECTIONS[turn.lang].format(order=given)
+                        messages.append(_correction(final_id, correction))
                         continue
                     if turn.tone_retries == 0 and _check(
                         _lacks_empathy, turn.text, said, turn.lang

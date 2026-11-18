@@ -260,6 +260,13 @@ class EnglishAgent:
                 "To help with that, could you share your phone number or email address?",
                 factual=False,
             )
+        if self.mode == "pide_el_pedido" and not corrected and not results and order_id:
+            # Como gpt-oss-20b en los evals reales (nw11): pide el pedido que ya le dieron.
+            return reply(
+                "I'm sorry, I need the order number to check its status. Could you confirm the "
+                "full order ID?",
+                factual=False,
+            )
         if self.mode == "afirma_sin_hacer" and not corrected and not results:
             # Como gpt-oss-20b en la prueba de la demo: afirma algo que no hizo.
             return reply(
