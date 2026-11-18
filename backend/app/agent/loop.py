@@ -232,6 +232,7 @@ HANDOFF_CAUSES = (
     "formato",  # detalle: el problema de presentable.ISSUES
     "reverificar",
     "accion_sin_herramienta",
+    "cobro_afirmado",  # dijo que cobró o compró (decisión 060)
     "tope_de_gasto",
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
@@ -825,6 +826,25 @@ class Agent:
                     # Controles de conducta (decisión 040): una acción afirmada sin herramienta
                     # es una respuesta inventada; con el cliente molesto, primero la empatía.
                     said = str(final_input.get("mensaje") or "")
+                    if _check(conduct.claims_payment, said):  # nunca cobra (decisión 060)
+                        self._audit(
+                            turn,
+                            "grounding_rejected",
+                            {"reason": conduct.PAYMENT_REASON, "rejected_message": final_input},
+                        )
+                        if turn.grounding_retries >= 1:
+                            return self._give_up(
+                                turn,
+                                f"Control de fundamento: {conduct.PAYMENT_REASON}.",
+                                chat,
+                                {"tipo": "cobro_afirmado"},
+                            )
+                        turn.grounding_retries += 1
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append(
+                            _correction(final_id, conduct.PAYMENT_CORRECTIONS[turn.lang])
+                        )
+                        continue
                     # "Reembolsado" con la aprobación pendiente tampoco vale (decisión 048).
                     if (
                         not self._acted(turn) and _check(conduct.claims_action, said, turn.lang)

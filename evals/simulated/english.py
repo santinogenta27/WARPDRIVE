@@ -67,6 +67,31 @@ PRODUCTS = "buscar_productos"  # búsqueda de productos (decisión 059)
 _SHOP_STOP = _STOP | {"have", "sell", "carry", "much", "size", "need", "want", "looking", "like"}
 
 
+CHECKOUT = "armar_carrito"  # link de compra (decisión 060)
+_BUY = re.compile(
+    r"(?i)\b(i'?ll take|i will take|buy|purchase|send me the link|checkout|add (it )?to (my )?cart"
+    r"|order it|i want it)\b"
+)
+
+
+def wants_to_buy(message: str) -> bool:
+    return _BUY.search(message) is not None
+
+
+def choose_variant(data: dict[str, Any], message: str) -> str | None:
+    """El SKU de la variante con stock que pide el cliente (por su color) o la primera."""
+    low = message.lower()
+    available = [
+        v
+        for product in data.get("products") or []
+        for v in product.get("variants") or []
+        if v.get("stock") is None or v["stock"] > 0
+    ]
+    named = [v for v in available if str(v.get("color", "")).lower() in low]
+    picked = (named or available or [None])[0]
+    return str(picked["sku"]) if picked else None
+
+
 def product_search(message: str) -> dict[str, Any]:
     """Lo que busca el cliente y su talle: "a rain jacket in size M" -> rain jacket, M."""
     size = _SIZE.search(message)
@@ -211,7 +236,9 @@ class EnglishAgent:
         if order_id and "consultar_pedido" in tool_names:
             return [self.tool_use("consultar_pedido", {"order_id": order_id})]
         if PRODUCTS in tool_names:  # preventa (decisión 059): primero la búsqueda
-            return [self.tool_use(PRODUCTS, product_search(message))]
+            # "I'll take the black one": el producto y el talle están en la conversación.
+            asked = f"{history} {message}" if wants_to_buy(message) else message
+            return [self.tool_use(PRODUCTS, product_search(asked))]
         best = best_sentence(message, docs)
         if best is not None:
             source, sentence = best
@@ -264,8 +291,19 @@ class EnglishAgent:
                 f"Done! I started a refund of {money(data.get('amount'))} for order {order_id}. "
                 "It goes back to your original payment method."
             )
+        if name == PRODUCTS and wants_to_buy(message) and CHECKOUT in tool_names:
+            chosen = choose_variant(data, message)
+            if chosen is not None:
+                return [self.tool_use(CHECKOUT, {"items": [{"sku": chosen, "quantity": 1}]})]
         if name == PRODUCTS:
             return reply(self.recommend(call_input, data, message, corrected))
+        if name == CHECKOUT:
+            line = (data.get("items") or [{}])[0]
+            return reply(
+                f"Here's your link to buy the {line.get('name')} ({line.get('color')}, size "
+                f"{line.get('size')}) for {money(data.get('total'))}: {data.get('url')} You "
+                "complete the payment on our store's checkout."
+            )
         if name in self.DONE:
             return reply(self.DONE[name](data))
         if name != "consultar_pedido":

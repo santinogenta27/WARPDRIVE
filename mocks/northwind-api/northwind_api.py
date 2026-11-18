@@ -56,6 +56,18 @@ class CouponRequest(BaseModel):
     percent: int = Field(ge=1, le=100)
 
 
+class CartItem(BaseModel):
+    sku: str
+    quantity: int = Field(default=1, ge=1, le=10)
+
+
+class CheckoutRequest(BaseModel):
+    items: list[CartItem] = Field(min_length=1, max_length=10)
+
+
+CHECKOUT_BASE = "https://shop.northwind.example"  # la tienda ficticia (la demo la cambia)
+
+
 COLOR_CODES = {
     "Lake Blue": "BLU",
     "Black": "BLK",
@@ -174,10 +186,12 @@ def create_app(
     *,
     extra_customers: list[dict[str, Any]] | None = None,
     today: date | None = None,
+    checkout_base: str = CHECKOUT_BASE,
 ) -> FastAPI:
     """`extra_customers`: customers added to `data/customers.json` (the demo uses one to give a
     fixture customer a second, real email). `today`: the day the orders are relative to (by
-    default, today in the store); explicit `orders` are used as they come."""
+    default, today in the store); explicit `orders` are used as they come. `checkout_base`:
+    where the checkout links point (the demo points them to its own store page)."""
 
     def current() -> date:
         return today or store_today()
@@ -224,6 +238,45 @@ def create_app(
     @app.get("/products")
     def find_products(query: str = "", size: str | None = None) -> dict[str, Any]:
         return {"products": search_products(catalog, query, size)}
+
+    @app.post("/checkouts", status_code=201, response_model=None)
+    def create_checkout(body: CheckoutRequest) -> JSONResponse:
+        """Arma el carrito y devuelve el link del checkout de la tienda: ahí paga el cliente.
+        Acá no se cobra nada ni se reserva stock."""
+        variants = {
+            v["sku"]: (view, v) for view in map(product_view, catalog) for v in view["variants"]
+        }
+        lines = []
+        for item in body.items:
+            found = variants.get(item.sku.strip().upper())
+            if found is None:
+                return _error(409, "unknown_sku", f"There's no product with SKU {item.sku}")
+            view, variant = found
+            if variant["stock"] < item.quantity:
+                return _error(
+                    409,
+                    "out_of_stock",
+                    f"{view['name']} ({variant['color']}, {variant['size']}) is out of stock",
+                )
+            lines.append(
+                {
+                    "sku": variant["sku"],
+                    "name": view["name"],
+                    "size": variant["size"],
+                    "color": variant["color"],
+                    "quantity": item.quantity,
+                    "unit_price": view["price"],
+                }
+            )
+        cart = ",".join(f"{line['sku']}:{line['quantity']}" for line in lines)
+        total = round(sum(line["unit_price"] * line["quantity"] for line in lines), 2)
+        checkout = {
+            "url": f"{checkout_base.rstrip('/')}/cart/{cart}",
+            "items": lines,
+            "total": total,
+            "currency": "USD",
+        }
+        return JSONResponse(status_code=201, content=checkout)
 
     @app.get("/orders")
     def list_orders(customer_phone: str) -> dict[str, Any]:

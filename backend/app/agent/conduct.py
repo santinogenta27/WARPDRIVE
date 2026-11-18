@@ -86,6 +86,35 @@ ACTION_CORRECTIONS = {
 }
 
 
+# El agente nunca cobra (decisión 060): ninguna herramienta cobra ni compra por el cliente, así
+# que decir que se cobró o que la compra ya está hecha es siempre falso.
+_PAYMENT = re.compile(
+    r"(?i)\b(?:i(?:'ve|\s+have)?|we(?:'ve|\s+have)?)\s+(?:just\s+|already\s+)?(?:charged|billed"
+    r"|placed\s+(?:your|the)\s+order|purchased|bought|completed\s+(?:your|the)\s+purchase)\b"
+    r"|\b(?:your\s+)?(?:card|payment)\s+(?:has\s+been|was)\s+(?:charged|processed|taken)\b"
+    r"|\byour\s+order\s+(?:has\s+been|is)\s+placed\b"
+    r"|\b(?:ya\s+)?te\s+cobr(?:[eé]|amos)\b|\bya\s+(?:est[aá]\s+)?(?:hecha|realizada)\s+la\s+compra\b"
+    r"|\b(?:compr[eé]|compramos)\s+por\s+vos\b|\b(?:el\s+)?pago\s+(?:qued[oó]|fue)\s+(?:hecho"
+    r"|realizado|acreditado|procesado)\b"
+)
+PAYMENT_REASON = "dice que cobró o que hizo la compra: el agente nunca cobra"
+PAYMENT_CORRECTIONS = {
+    "es": (
+        "Respuesta rechazada: vos nunca cobrás ni comprás por el cliente. Mandale el link de "
+        "compra y explicale que paga en el checkout de la tienda."
+    ),
+    "en": (
+        "Answer rejected: you never charge or buy for the customer. Send the checkout link and "
+        "explain that they pay on the store's checkout."
+    ),
+}
+
+
+def claims_payment(text: str) -> bool:
+    """La respuesta dice que se cobró o que la compra ya está hecha."""
+    return _PAYMENT.search(text) is not None
+
+
 def claims_action(text: str, language: str) -> bool:
     """La respuesta dice que ya se hizo una acción (agregar, aplicar, iniciar, cancelar…)."""
     found = CLAIMS.get(language, _CLAIM_EN).search(text)

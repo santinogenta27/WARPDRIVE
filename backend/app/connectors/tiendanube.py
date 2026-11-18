@@ -131,6 +131,8 @@ class TiendanubeTransport(httpx.BaseTransport):
             return self._customers(query.get("email", ""))
         if request.method == "GET" and url.path == "/products":
             return self._products(query.get("query", ""), query.get("size"))
+        if request.method == "POST" and url.path == "/checkouts":
+            return self._checkout(body.get("items") or [])
         match = re.match(r"^/orders/([^/]+)(?:/(\w[\w-]*))?$", url.path)
         if match is None:
             return _json(404, {"code": "not_found", "message": "Operación no disponible."})
@@ -182,6 +184,50 @@ class TiendanubeTransport(httpx.BaseTransport):
             if shopify.matches(query, f"{_text(p.get('name'))} {p.get('tags') or ''}")
         ]
         return _json(200, {"products": products})
+
+    def _checkout(self, items: list[dict[str, Any]]) -> httpx.Response:
+        """Tiendanube no tiene un link de carrito armado por API: el equivalente es la página
+        del producto con la variante elegida, donde el cliente toca "Comprar". Por eso, un
+        producto por link."""
+        if len(items) != 1:
+            return _json(
+                409,
+                {
+                    "code": "one_product_per_link",
+                    "message": "En Tiendanube el link de compra es de a un producto.",
+                },
+            )
+        sku, quantity = str(items[0].get("sku", "")), int(items[0].get("quantity") or 1)
+        found = self._api.get(f"/products/sku/{sku}")
+        if found.status_code != 200:
+            return _json(409, {"code": "unknown_sku", "message": f"No hay un producto {sku}."})
+        product = found.json()
+        store = self._api.get("/store")
+        currency = store.json().get("main_currency") if store.status_code == 200 else None
+        view = product_view(product, currency)
+        pairs = zip(product.get("variants") or [], view["variants"], strict=True)
+        raw, variant = next(((r, v) for r, v in pairs if v["sku"] == sku), (None, None))
+        if raw is None or variant is None:
+            return _json(409, {"code": "unknown_sku", "message": f"No hay un producto {sku}."})
+        if variant["stock"] is not None and variant["stock"] < quantity:
+            return _json(409, {"code": "out_of_stock", "message": f"{view['name']} sin stock."})
+        line = {
+            "sku": sku,
+            "name": view["name"],
+            "size": variant["size"],
+            "color": variant["color"],
+            "quantity": quantity,
+            "unit_price": variant["price"],
+        }
+        return _json(
+            201,
+            {
+                "url": f"{_text(product.get('canonical_url'))}?variant={raw.get('id')}",
+                "items": [line],
+                "total": round(variant["price"] * quantity, 2),
+                "currency": currency or "",
+            },
+        )
 
     def _order(self, number: str) -> dict[str, Any] | None:
         found = self._api.get("/orders", params={"q": number.lstrip("#")})

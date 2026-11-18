@@ -174,6 +174,8 @@ class ShopifyTransport(httpx.BaseTransport):
             return self._customers(query.get("email", ""))
         if request.method == "GET" and path == "/products":
             return self._products(query.get("query", ""), query.get("size"))
+        if request.method == "POST" and path == "/checkouts":
+            return self._checkout(body.get("items") or [])
         match = re.match(r"^/orders/([^/]+)(?:/(\w[\w-]*))?$", path)
         if match is None:
             return _json(404, {"code": "not_found", "message": "Operación no disponible."})
@@ -206,16 +208,63 @@ class ShopifyTransport(httpx.BaseTransport):
         found = self._api.get("/products.json", params={"status": "active", "limit": 250})
         if found.status_code != 200:
             return _json(found.status_code, {"message": "Shopify no respondió."})
-        shop = self._api.get("/shop.json")
-        currency = (
-            (shop.json().get("shop") or {}).get("currency") if shop.status_code == 200 else None
-        )
+        currency = self._currency()
         products = [
             only_size(product_view(p, currency), size)
             for p in found.json().get("products") or []
             if matches(query, f"{p.get('title')} {p.get('product_type')} {p.get('tags')}")
         ]
         return _json(200, {"products": products})
+
+    def _currency(self) -> str | None:
+        shop = self._api.get("/shop.json")
+        if shop.status_code != 200:
+            return None
+        currency = (shop.json().get("shop") or {}).get("currency")
+        return str(currency) if currency else None
+
+    def _checkout(self, items: list[dict[str, Any]]) -> httpx.Response:
+        """El permalink de carrito de Shopify (`/cart/{variante}:{cantidad},...`): abre el
+        checkout de la tienda con el carrito armado. No crea nada en Shopify ni cobra."""
+        found = self._api.get("/products.json", params={"status": "active", "limit": 250})
+        if found.status_code != 200:
+            return _json(found.status_code, {"message": "Shopify no respondió."})
+        currency = self._currency()
+        lookup: dict[str, tuple[dict[str, Any], dict[str, Any], Any]] = {}
+        for product in found.json().get("products") or []:
+            view = product_view(product, currency)
+            for raw, variant in zip(product.get("variants") or [], view["variants"], strict=True):
+                lookup[variant["sku"]] = (view, variant, raw.get("id"))
+        lines: list[dict[str, Any]] = []
+        parts: list[str] = []
+        for item in items:
+            sku, quantity = str(item.get("sku", "")), int(item.get("quantity") or 1)
+            if sku not in lookup:
+                return _json(409, {"code": "unknown_sku", "message": f"No hay un producto {sku}."})
+            view, variant, variant_id = lookup[sku]
+            if variant["stock"] is not None and variant["stock"] < quantity:
+                return _json(409, {"code": "out_of_stock", "message": f"{view['name']} sin stock."})
+            parts.append(f"{variant_id}:{quantity}")
+            lines.append(
+                {
+                    "sku": sku,
+                    "name": view["name"],
+                    "size": variant["size"],
+                    "color": variant["color"],
+                    "quantity": quantity,
+                    "unit_price": variant["price"],
+                }
+            )
+        host = str(self._api.base_url.host)
+        return _json(
+            201,
+            {
+                "url": f"https://{host}/cart/{','.join(parts)}",
+                "items": lines,
+                "total": round(sum(x["unit_price"] * x["quantity"] for x in lines), 2),
+                "currency": currency or "",
+            },
+        )
 
     def _order(self, number: str) -> dict[str, Any] | None:
         name = f"#{number.lstrip('#')}"

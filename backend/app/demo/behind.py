@@ -83,6 +83,7 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
         "accion_sin_herramienta": (
             "Answer blocked by grounding check: it claimed an action no tool performed"
         ),
+        "cobro_afirmado": "Answer blocked: it said it charged or bought, and the agent never does",
         "tope_de_gasto": "The company reached its monthly spending cap",
         "limite_pasos": "Reached the step limit without a valid answer",
         "agente": "The agent chose to hand off",
@@ -101,6 +102,7 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
             "Respuesta frenada por el control de fundamento: afirmó una acción que ninguna "
             "herramienta hizo"
         ),
+        "cobro_afirmado": "Respuesta frenada: dijo que cobró o compró, y el agente nunca lo hace",
         "tope_de_gasto": "La empresa llegó al tope de gasto del mes",
         "limite_pasos": "Llegó al límite de pasos sin una respuesta válida",
         "agente": "El agente eligió derivar",
@@ -118,6 +120,7 @@ GROUNDING_DETAILS = {
         "fecha": "a date not in the documents or tool results",
         "precio": "a price that didn't come from a tool",
         "stock": "stock it didn't check with a tool",
+        "link": "a link that didn't come from a tool",
     },
     "es": {
         "fuente_inexistente": "citó un documento que no recibió",
@@ -126,6 +129,7 @@ GROUNDING_DETAILS = {
         "fecha": "una fecha que no está en los documentos ni en las herramientas",
         "precio": "un precio que no salió de una herramienta",
         "stock": "stock que no consultó con una herramienta",
+        "link": "un link que no salió de una herramienta",
     },
 }
 FORMAT_DETAILS = {

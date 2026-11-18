@@ -101,8 +101,8 @@ def _plain(number: str) -> str:
 
 # Qué control rechazó la respuesta, sin los datos (decisión 045): lo muestra "Behind the scenes".
 INVALID_SOURCE, NO_SOURCE, NUMBER, DATE = "fuente_inexistente", "sin_fuente", "numero", "fecha"
-PRICE, STOCK = "precio", "stock"  # ventas (decisión 059)
-KINDS = (INVALID_SOURCE, NO_SOURCE, NUMBER, DATE, PRICE, STOCK)
+PRICE, STOCK, LINK = "precio", "stock", "link"  # ventas (decisiones 059 y 060)
+KINDS = (INVALID_SOURCE, NO_SOURCE, NUMBER, DATE, PRICE, STOCK, LINK)
 
 
 @dataclass(frozen=True)
@@ -172,6 +172,9 @@ _STOCK_CLAIM = re.compile(
 )
 
 
+_URL = re.compile(r"https?://\S+")
+
+
 def is_product_tool(manifest: dict[str, Any]) -> bool:
     """La búsqueda de productos de la API canónica de tienda (`GET /products`)."""
     upstream = manifest.get("upstream") or {}
@@ -201,4 +204,10 @@ def check_sales(
         )
     if not tool_evidence and _STOCK_CLAIM.search(message):
         return GroundingVerdict(False, "afirma stock sin consultar la herramienta", STOCK)
+    # Un link de compra inventado lleva al cliente a cualquier lado (decisión 060): cada link
+    # sale de un resultado de herramienta o de un documento.
+    linked = " ".join([*tool_evidence, *documents.values()])
+    invented = [url for url in _URL.findall(message) if url.rstrip(".,;:)") not in linked]
+    if invented:
+        return GroundingVerdict(False, f"link que no salió de una herramienta: {invented}", LINK)
     return GroundingVerdict(True)
