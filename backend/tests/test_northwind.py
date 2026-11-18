@@ -47,6 +47,7 @@ SIZE_L = {"item_sku": "NW-MCS-NVY-M", "new_size": "L"}
 EXAMPLES: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str], int]] = [
     ("get", "/orders", "/orders?customer_phone=%2B15555550101", None, {}, 200),
     ("get", "/customers", "/customers?email=emily%40example.com", None, {}, 200),
+    ("get", "/products", "/products?query=jacket&size=M", None, {}, 200),
     ("get", "/orders/{order_id}", "/orders/NW-4521", None, {}, 200),
     ("get", "/orders/{order_id}", "/orders/NW-9999", None, {}, 404),
     ("patch", "/orders/{order_id}/address", "/orders/NW-4545/address", ADDRESS, {}, 200),

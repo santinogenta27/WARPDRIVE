@@ -21,6 +21,22 @@
         }
       }
     },
+    "/products": {
+      "get": {
+        "operationId": "buscarProductos",
+        "summary": "Searches the catalog: each product with its real price and its variants (size and color) with the units in stock right now. Use it for any question about products, prices, sizes, colors or stock",
+        "parameters": [
+          {"name": "query", "in": "query", "required": false, "description": "Words of what the customer is looking for (\"rain jacket\", \"merino sweater\"); empty for the whole catalog", "schema": {"type": "string"}},
+          {"name": "size", "in": "query", "required": false, "description": "Only the variants of this size (\"M\", \"32\")", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Products found (an empty list if none)",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProductList"}}}
+          }
+        }
+      }
+    },
     "/orders": {
       "get": {
         "operationId": "listarPedidos",
@@ -192,6 +208,39 @@
         "type": "object",
         "properties": {"code": {"type": "string"}, "message": {"type": "string"}},
         "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "Variant": {
+        "type": "object",
+        "properties": {
+          "sku": {"type": "string"},
+          "size": {"type": "string"},
+          "color": {"type": "string"},
+          "stock": {"type": ["integer", "null"], "minimum": 0, "description": "Units in stock now; 0 is out of stock and null means the store doesn't track stock (always available)"},
+          "price": {"type": "number", "minimum": 0, "description": "Only when this variant costs something different from the product"}
+        },
+        "required": ["sku", "size", "color", "stock"],
+        "additionalProperties": false
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "string"},
+          "name": {"type": "string"},
+          "category": {"type": "string"},
+          "description": {"type": "string"},
+          "price": {"type": "number", "minimum": 0},
+          "currency": {"type": "string"},
+          "in_stock": {"type": "boolean"},
+          "variants": {"type": "array", "items": {"$ref": "#/components/schemas/Variant"}}
+        },
+        "required": ["code", "name", "price", "currency", "in_stock", "variants"],
+        "additionalProperties": false
+      },
+      "ProductList": {
+        "type": "object",
+        "properties": {"products": {"type": "array", "items": {"$ref": "#/components/schemas/Product"}}},
+        "required": ["products"],
         "additionalProperties": false
       },
       "Item": {

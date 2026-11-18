@@ -396,6 +396,17 @@ _POLICY = re.compile(
 )
 
 
+# Preventa (decisión 059): un producto o la intención de comprar, sin un pedido ni un reclamo.
+_SHOP = re.compile(
+    r"\b(do you (have|sell|carry)|looking for|want to buy|i'?d like to buy|in stock|jackets?"
+    r"|vests?|sweaters?|pants|tees?|t-shirts?|boots|totes?|beanies?)\b"
+)
+_SUPPORT = re.compile(
+    r"exchange|swap|refund|cancel|return|warranty|defect|broken|ripped|another size"
+    r"|different size|\border\b"
+)
+
+
 # Seguir el tema de la conversación (decisión 040): elegir una opción, "actually", "instead".
 _CONTINUES = re.compile(
     r"(?i)\b(i'?ll take|i will take|i'?d like the|i'?d rather|actually|instead|that one|go with"
@@ -429,6 +440,14 @@ def _classify(body: dict[str, Any]) -> str:
     text = html.unescape(_tag(body["messages"][0]["content"], "mensaje_cliente")).lower()
     enum = set(body["tools"][0]["input_schema"]["properties"]["tipo"]["enum"])
     english_prompt = str(body.get("system") or "").startswith("You classify")
+    if (
+        english_prompt
+        and "shopping" in enum
+        and _SHOP.search(text)
+        and not _SUPPORT.search(text)
+        and not english.order_ids(text)
+    ):
+        return "shopping"  # preventa (decisión 059)
     if english_prompt and _POLICY.search(text) and not english.order_ids(text):
         if not re.search(r"\b(a person|a human|representative|ignore)\b", text):
             return "consulta_general"

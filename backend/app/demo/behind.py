@@ -116,12 +116,16 @@ GROUNDING_DETAILS = {
         "sin_fuente": "a factual answer with no source or tool",
         "numero": "a number not in the documents or tool results",
         "fecha": "a date not in the documents or tool results",
+        "precio": "a price that didn't come from a tool",
+        "stock": "stock it didn't check with a tool",
     },
     "es": {
         "fuente_inexistente": "citó un documento que no recibió",
         "sin_fuente": "una respuesta factual sin fuente ni herramienta",
         "numero": "un número que no está en los documentos ni en las herramientas",
         "fecha": "una fecha que no está en los documentos ni en las herramientas",
+        "precio": "un precio que no salió de una herramienta",
+        "stock": "stock que no consultó con una herramienta",
     },
 }
 FORMAT_DETAILS = {

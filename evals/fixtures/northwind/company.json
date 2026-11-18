@@ -21,7 +21,8 @@
     {"name": "exchange", "active": true},
     {"name": "change_shipping_address", "active": true},
     {"name": "cancel_order", "active": true},
-    {"name": "warranty_claim", "active": true}
+    {"name": "warranty_claim", "active": true},
+    {"name": "shopping", "active": true}
   ],
   "contacts": [
     {"label": "emily", "phone": "+15555550101", "verified": true},

@@ -63,6 +63,21 @@ def _words(text: str) -> set[str]:
     return {w for w in re.findall(r"[a-z]{4,}", text.lower()) if w not in _STOP}
 
 
+PRODUCTS = "buscar_productos"  # búsqueda de productos (decisión 059)
+_SHOP_STOP = _STOP | {"have", "sell", "carry", "much", "size", "need", "want", "looking", "like"}
+
+
+def product_search(message: str) -> dict[str, Any]:
+    """Lo que busca el cliente y su talle: "a rain jacket in size M" -> rain jacket, M."""
+    size = _SIZE.search(message)
+    text = _SIZE.sub(" ", message) if size else message
+    words = [w.rstrip("s") for w in re.findall(r"[a-z]{3,}", text.lower()) if w not in _SHOP_STOP]
+    found: dict[str, Any] = {"query": " ".join(words)}
+    if size:
+        found["size"] = size.group(1).upper()
+    return found
+
+
 def best_sentence(question: str, docs: dict[str, str]) -> tuple[str, str] | None:
     wanted = {w[:5] for w in _words(question)}
     best: tuple[int, str, str] | None = None
@@ -190,9 +205,13 @@ class EnglishAgent:
             name, call_input, result = results[-1]
             if "pendiente" in result and CANCEL in tool_names:
                 return [self.tool_use(CANCEL, {"order_id": call_input.get("order_id")})]
-            return self.after_tool(name, call_input, result, low, message, tool_names, reply)
+            return self.after_tool(
+                name, call_input, result, low, message, tool_names, reply, corrected
+            )
         if order_id and "consultar_pedido" in tool_names:
             return [self.tool_use("consultar_pedido", {"order_id": order_id})]
+        if PRODUCTS in tool_names:  # preventa (decisión 059): primero la búsqueda
+            return [self.tool_use(PRODUCTS, product_search(message))]
         best = best_sentence(message, docs)
         if best is not None:
             source, sentence = best
@@ -208,6 +227,7 @@ class EnglishAgent:
         message: str,
         tool_names: set[str],
         reply: Reply,
+        corrected: bool = False,
     ) -> list[dict[str, Any]]:
         order_id = call_input.get("order_id")
         if "alternativas" in result:  # el guardián rechazó algo fuera de la política
@@ -244,6 +264,8 @@ class EnglishAgent:
                 f"Done! I started a refund of {money(data.get('amount'))} for order {order_id}. "
                 "It goes back to your original payment method."
             )
+        if name == PRODUCTS:
+            return reply(self.recommend(call_input, data, message, corrected))
         if name in self.DONE:
             return reply(self.DONE[name](data))
         if name != "consultar_pedido":
@@ -365,6 +387,39 @@ class EnglishAgent:
             )
         call = {"order_id": order_id, "item_sku": items[0]["sku"], "new_size": size.group(1)}
         return [self.tool_use("iniciar_cambio", {**call, "new_size": call["new_size"].upper()})]
+
+    def recommend(
+        self, call_input: dict[str, Any], data: dict[str, Any], message: str, corrected: bool
+    ) -> str:
+        """La mejor coincidencia de la búsqueda, con el precio y las variantes con stock que
+        trajo la herramienta. En el modo "inventa_precio", la primera vez inventa el precio (como
+        un modelo que lo saca de memoria) hasta que el control en código lo corrige."""
+        products = data.get("products") or []
+        if not products:
+            return "Sorry, we don't carry that. Is there anything else I can help you find?"
+        wanted = _words(message)
+        product = max(products, key=lambda p: len(wanted & _words(str(p["name"]))))
+        price = float(product["price"])
+        if self.mode == "inventa_precio" and not corrected:
+            price -= 50
+        size = call_input.get("size")
+        variants = product.get("variants") or []
+        available = [v for v in variants if v.get("stock") is None or v["stock"] > 0]
+        missing = [v for v in variants if v.get("stock") == 0]
+        where = f" in size {size}" if size else ""
+        if not available:
+            return (
+                f"The {product['name']} is out of stock{where} right now. Would you like me to "
+                "look for something similar?"
+            )
+        colors = sorted({str(v["color"]) for v in available})
+        text = (
+            f"The {product['name']} is {money(price)}. It's in stock{where} in {', '.join(colors)}."
+        )
+        gone = sorted({str(v["color"]) for v in missing} - set(colors))
+        if gone:
+            text += f" {', '.join(gone)} is out of stock{where}."
+        return f"{text} Would you like to buy it?"
 
     @staticmethod
     def allowed_instead(call_input: dict[str, Any], result: dict[str, Any]) -> str:

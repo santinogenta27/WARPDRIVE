@@ -15,6 +15,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
+from app.connectors import shopify
+
 API = "https://api.tiendanube.com/v1"
 CANONICAL_BASE = "https://tienda.local"
 USER_AGENT = "Enterprise Data AI (soporte@enterprisedataai.com)"
@@ -29,6 +31,46 @@ def _owner(customer: dict[str, Any] | None) -> str | None:
     if not customer:
         return None
     return str(customer.get("phone") or customer.get("id") or "") or None
+
+
+def _text(value: Any) -> str:
+    """Los textos de Tiendanube vienen por idioma (`{"es": "Campera"}`): el primero que haya."""
+    if isinstance(value, dict):
+        return str(next((v for v in value.values() if v), ""))
+    return str(value or "")
+
+
+def product_view(product: dict[str, Any], currency: str | None) -> dict[str, Any]:
+    """Un producto de Tiendanube con la forma del producto canónico. Las variantes traen sus
+    valores en el orden de `attributes` (talle, color); stock null es stock sin límite."""
+    names = [_text(a).strip().lower() for a in product.get("attributes") or []]
+    variants: list[dict[str, Any]] = []
+    for variant in product.get("variants") or []:
+        values = [_text(v) for v in variant.get("values") or []]
+        by_name = dict(zip(names, values, strict=False))
+        size = next((by_name[n] for n in names if n in shopify.SIZE_OPTIONS), None)
+        color = next((by_name[n] for n in names if n in shopify.COLOR_OPTIONS), None)
+        stock = variant.get("stock")
+        variants.append(
+            {
+                "sku": str(variant.get("sku") or variant.get("id")),
+                "size": str(size or ""),
+                "color": str(color or ""),
+                "stock": max(int(stock), 0) if stock is not None else None,
+                "price": float(variant.get("promotional_price") or variant.get("price") or 0),
+            }
+        )
+    prices = [v["price"] for v in variants]
+    return {
+        "code": str(product.get("id")),
+        "name": _text(product.get("name")),
+        "category": "",
+        "description": re.sub(r"<[^>]+>", " ", _text(product.get("description"))).strip(),
+        "price": min(prices) if prices else 0.0,
+        "currency": currency or "",
+        "in_stock": any(v["stock"] is None or v["stock"] > 0 for v in variants),
+        "variants": variants,
+    }
 
 
 def clean_store(value: str) -> str:
@@ -87,6 +129,8 @@ class TiendanubeTransport(httpx.BaseTransport):
         body = json.loads(request.content) if request.content else {}
         if request.method == "GET" and url.path == "/customers":
             return self._customers(query.get("email", ""))
+        if request.method == "GET" and url.path == "/products":
+            return self._products(query.get("query", ""), query.get("size"))
         match = re.match(r"^/orders/([^/]+)(?:/(\w[\w-]*))?$", url.path)
         if match is None:
             return _json(404, {"code": "not_found", "message": "Operación no disponible."})
@@ -118,6 +162,26 @@ class TiendanubeTransport(httpx.BaseTransport):
             if str(c.get("email", "")).lower() == email.lower()
         ]
         return _json(200, {"customers": customers})
+
+    def _products(self, query: str, size: str | None) -> httpx.Response:
+        """Busca con `q` de Tiendanube (nombre, SKU y etiquetas) y vuelve a filtrar por
+        palabras, como en Shopify."""
+        params: dict[str, Any] = {"published": "true", "per_page": 50}
+        if query.strip():
+            params["q"] = query.strip()
+        found = self._api.get("/products", params=params)
+        if found.status_code == 404:  # Tiendanube responde 404 cuando no hay resultados
+            return _json(200, {"products": []})
+        if found.status_code != 200:
+            return _json(found.status_code, {"message": "Tiendanube no respondió."})
+        store = self._api.get("/store")
+        currency = store.json().get("main_currency") if store.status_code == 200 else None
+        products = [
+            shopify.only_size(product_view(p, currency), size)
+            for p in found.json() or []
+            if shopify.matches(query, f"{_text(p.get('name'))} {p.get('tags') or ''}")
+        ]
+        return _json(200, {"products": products})
 
     def _order(self, number: str) -> dict[str, Any] | None:
         found = self._api.get("/orders", params={"q": number.lstrip("#")})

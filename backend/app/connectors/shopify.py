@@ -52,6 +52,65 @@ def _json(status: int, data: Any) -> httpx.Response:
     return httpx.Response(status, json=data)
 
 
+_WORD = re.compile(r"[^\W_]+")
+SIZE_OPTIONS = {"size", "talle", "talla", "tamaño"}
+COLOR_OPTIONS = {"color", "colour"}
+
+
+def words(text: str) -> set[str]:
+    """Las palabras de una búsqueda o de un producto, sin plural simple ("jackets" -> "jacket")."""
+    return {w.rstrip("s") for w in _WORD.findall(text.lower()) if len(w) > 2}
+
+
+def matches(query: str, text: str) -> bool:
+    wanted = words(query)
+    return not wanted or bool(wanted & words(text))
+
+
+def product_view(product: dict[str, Any], currency: str | None) -> dict[str, Any]:
+    """Un producto de Shopify con la forma del producto canónico: precio y stock por variante
+    tal como los tiene la tienda. Sin seguimiento de inventario, el stock es null (disponible)."""
+    names = [str(o.get("name", "")).strip().lower() for o in product.get("options") or []]
+    variants: list[dict[str, Any]] = []
+    for variant in product.get("variants") or []:
+        values = [variant.get(f"option{i}") for i in (1, 2, 3)]
+        by_name = dict(zip(names, values, strict=False))
+        size = next((by_name[n] for n in names if n in SIZE_OPTIONS), None)
+        color = next((by_name[n] for n in names if n in COLOR_OPTIONS), None)
+        tracked = variant.get("inventory_management") == "shopify"
+        variants.append(
+            {
+                "sku": str(variant.get("sku") or variant.get("id")),
+                "size": str(size or variant.get("title") or ""),
+                "color": str(color or ""),
+                "stock": max(int(variant.get("inventory_quantity") or 0), 0) if tracked else None,
+                "price": float(variant.get("price") or 0),
+            }
+        )
+    prices = [v["price"] for v in variants]
+    return {
+        "code": str(product.get("id")),
+        "name": product.get("title"),
+        "category": product.get("product_type") or "",
+        "description": re.sub(r"<[^>]+>", " ", str(product.get("body_html") or "")).strip(),
+        "price": min(prices) if prices else 0.0,
+        "currency": currency or "",
+        "in_stock": any(v["stock"] is None or v["stock"] > 0 for v in variants),
+        "variants": variants,
+    }
+
+
+def only_size(view: dict[str, Any], size: str | None) -> dict[str, Any]:
+    if not size:
+        return view
+    variants = [v for v in view["variants"] if v["size"].lower() == size.strip().lower()]
+    return {
+        **view,
+        "variants": variants,
+        "in_stock": any(v["stock"] is None or v["stock"] > 0 for v in variants),
+    }
+
+
 def _owner(customer: dict[str, Any] | None) -> str | None:
     if not customer:
         return None
@@ -113,6 +172,8 @@ class ShopifyTransport(httpx.BaseTransport):
         body = json.loads(request.content) if request.content else {}
         if request.method == "GET" and path == "/customers":
             return self._customers(query.get("email", ""))
+        if request.method == "GET" and path == "/products":
+            return self._products(query.get("query", ""), query.get("size"))
         match = re.match(r"^/orders/([^/]+)(?:/(\w[\w-]*))?$", path)
         if match is None:
             return _json(404, {"code": "not_found", "message": "Operación no disponible."})
@@ -138,6 +199,23 @@ class ShopifyTransport(httpx.BaseTransport):
             if str(c.get("email", "")).lower() == email.lower()
         ]
         return _json(200, {"customers": customers})
+
+    def _products(self, query: str, size: str | None) -> httpx.Response:
+        """Los productos activos (hasta 250) filtrados por las palabras de la búsqueda: la API
+        REST de Shopify filtra por título exacto, no por palabras."""
+        found = self._api.get("/products.json", params={"status": "active", "limit": 250})
+        if found.status_code != 200:
+            return _json(found.status_code, {"message": "Shopify no respondió."})
+        shop = self._api.get("/shop.json")
+        currency = (
+            (shop.json().get("shop") or {}).get("currency") if shop.status_code == 200 else None
+        )
+        products = [
+            only_size(product_view(p, currency), size)
+            for p in found.json().get("products") or []
+            if matches(query, f"{p.get('title')} {p.get('product_type')} {p.get('tags')}")
+        ]
+        return _json(200, {"products": products})
 
     def _order(self, number: str) -> dict[str, Any] | None:
         name = f"#{number.lstrip('#')}"

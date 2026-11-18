@@ -28,7 +28,7 @@ from app.agent.classifier import (
     Classification,
     classify,
 )
-from app.agent.grounding import GroundingVerdict, check_grounding
+from app.agent.grounding import GroundingVerdict, check_grounding, check_sales, is_product_tool
 from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
 from app.cases import billing, closing, csat, team_notify
@@ -314,6 +314,7 @@ class _Turn:
     handoff_retries: int = 0  # derivó con los datos de una herramienta (decisión 045)
     prefix: str = ""  # se antepone a la respuesta (p. ej. al terminar la verificación)
     needs_identity: bool = False  # el tipo de caso usa herramientas con datos de la cuenta
+    sales: bool = False  # el turno ofrece la búsqueda de productos (decisión 059)
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
     classification: Classification | None = None
     tone: str = "rioplatense"
@@ -721,6 +722,7 @@ class Agent:
             manifests, finals, english=turn.lang == "en", pending=pending
         )
         allowed = {m["name"] for m in manifests} | ({CANCEL_PENDING} if pending else set())
+        turn.sales = any(is_product_tool(m) for m in manifests)
         try:
             return self._loop(turn, system, messages, tools, allowed, chat=chat_fallback)
         except _ChatFallback:
@@ -1074,7 +1076,13 @@ class Agent:
         documents: dict[str, str] = {}
         for doc in turn.documents:
             documents[doc.source] = f"{documents.get(doc.source, '')}\n{doc.text}"
-        evidence = [turn.text] + [json.dumps(d.result, ensure_ascii=False) for d in turn.decisions]
+        results = [json.dumps(d.result, ensure_ascii=False) for d in turn.decisions]
+        if turn.sales:
+            # Precio y stock, solo de una herramienta (decisión 059).
+            sold = check_sales(str(data.get("mensaje") or ""), results, documents, turn.lang)
+            if not sold.ok:
+                return sold
+        evidence = [turn.text, *results]
         return check_grounding(
             str(data.get("mensaje") or ""),
             [str(s) for s in data.get("fuentes") or []],
