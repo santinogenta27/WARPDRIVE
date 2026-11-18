@@ -26,7 +26,8 @@ GUIDES = (
     (
         "WhatsApp",
         "<p>Si tu empresa tiene un número de WhatsApp Business verificado por Meta, el mismo "
-        "asistente atiende ahí. Lo conecta el operador: escribinos.</p>",
+        "asistente atiende ahí. Conectalo vos mismo en <b>Canales → WhatsApp</b>, más abajo, "
+        "con la guía paso a paso.</p>",
     ),
 )
 
@@ -56,9 +57,73 @@ GUIDES_EN = (
     (
         "WhatsApp",
         "<p>If your company has a WhatsApp Business number verified by Meta, the same assistant "
-        "can answer there. The operator connects it: write to us.</p>",
+        "can answer there. Connect it yourself under <b>Channels → WhatsApp</b>, below, with "
+        "the step-by-step guide.</p>",
     ),
 )
+
+
+# Conectar el número de WhatsApp de la empresa con su propia app de Meta (decisión 068).
+WHATSAPP = (
+    "<ol>"
+    '<li>En <span class="mono">developers.facebook.com</span>: <b>Mis apps → Crear app</b>, '
+    "tipo <b>Empresa</b>, y vinculala al portfolio comercial (Business Manager) de tu "
+    "empresa.</li>"
+    "<li>En la app: <b>Agregar producto → WhatsApp</b>. En <b>WhatsApp → Configuración de la "
+    "API</b> agregá tu número real (lo verifica Meta por SMS o llamada) y registralo. Ahí ves "
+    "el <b>Phone Number ID</b> y el <b>WhatsApp Business Account ID</b>.</li>"
+    '<li>En <span class="mono">business.facebook.com</span>: <b>Configuración del negocio → '
+    "Usuarios → Usuarios del sistema → Agregar</b>, con rol <b>Administrador</b>. Asignale "
+    "la app y la cuenta de WhatsApp, las dos con control total.</li>"
+    "<li>Con ese usuario del sistema: <b>Generar token</b>, elegí la app, vencimiento "
+    "<b>Nunca</b> y marcá los permisos "
+    '<span class="mono">whatsapp_business_messaging</span> y '
+    '<span class="mono">whatsapp_business_management</span>. Copiá el token: Meta no lo vuelve '
+    "a mostrar.</li>"
+    "<li>En la app: <b>Configuración de la app → Básica → App Secret → Mostrar</b> y "
+    "copialo.</li>"
+    "<li>Acá, en <b>Canales → WhatsApp</b>: pegá el Phone Number ID, el WhatsApp Business "
+    "Account ID, el token y el App Secret, y guardá.</li>"
+    "<li>En la app: <b>WhatsApp → Configuración → Webhook → Editar</b>. Pegá la URL del webhook "
+    "y el verify token que te mostramos acá, tocá <b>Verificar y guardar</b> y suscribite al "
+    "campo <b>messages</b>.</li>"
+    "<li>Acá: <b>Probar conexión</b>, <b>Enviar mensaje de prueba</b> y <b>Activar</b>. Para "
+    "que escriba cualquier cliente, la app de Meta tiene que estar publicada (modo "
+    "<b>Live</b>).</li>"
+    "</ol>"
+)
+
+WHATSAPP_EN = (
+    "<ol>"
+    '<li>At <span class="mono">developers.facebook.com</span>: <b>My apps → Create app</b>, '
+    "type <b>Business</b>, and link it to your company's business portfolio (Business "
+    "Manager).</li>"
+    "<li>In the app: <b>Add product → WhatsApp</b>. Under <b>WhatsApp → API Setup</b>, add your "
+    "real number (Meta verifies it by SMS or call) and register it. There you'll see the "
+    "<b>Phone Number ID</b> and the <b>WhatsApp Business Account ID</b>.</li>"
+    '<li>At <span class="mono">business.facebook.com</span>: <b>Business settings → Users → '
+    "System users → Add</b>, with the <b>Admin</b> role. Assign it the app and the WhatsApp "
+    "account, both with full control.</li>"
+    "<li>With that system user: <b>Generate token</b>, pick the app, expiration <b>Never</b> "
+    'and check the <span class="mono">whatsapp_business_messaging</span> and '
+    '<span class="mono">whatsapp_business_management</span> permissions. Copy the token: Meta '
+    "won't show it again.</li>"
+    "<li>In the app: <b>App settings → Basic → App Secret → Show</b> and copy it.</li>"
+    "<li>Here, under <b>Channels → WhatsApp</b>: paste the Phone Number ID, the WhatsApp "
+    "Business Account ID, the token and the App Secret, and save.</li>"
+    "<li>In the app: <b>WhatsApp → Configuration → Webhook → Edit</b>. Paste the webhook URL "
+    "and the verify token we show you here, click <b>Verify and save</b> and subscribe to the "
+    "<b>messages</b> field.</li>"
+    "<li>Here: <b>Test connection</b>, <b>Send test message</b> and <b>Activate</b>. For any "
+    "customer to write, the Meta app has to be published (<b>Live</b> mode).</li>"
+    "</ol>"
+)
+
+
+def whatsapp_guide(*, english: bool | None = None) -> str:
+    from app.panel import english as language
+
+    return WHATSAPP_EN if (language.english() if english is None else english) else WHATSAPP
 
 
 def guides_html() -> str:
