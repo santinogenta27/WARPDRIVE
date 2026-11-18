@@ -82,6 +82,9 @@ def _refund_waiting(stack: SimulatedStack, ask: str, email: str) -> AgentResult:
     assert stack.send("web", ask).verification_requested
     stack.send("web", email)
     pending = stack.send("web", stack.last_code())
+    if pending.approval_id is None and "coupon" in pending.message:
+        # Retención en Northwind (decisión 062): primero las alternativas; el cliente insiste.
+        pending = stack.send("web", "No thanks, I'd just like the refund.")
     assert pending.action == "pedir_aprobacion" and pending.approval_id is not None
     return pending
 
