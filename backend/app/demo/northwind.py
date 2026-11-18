@@ -96,13 +96,26 @@ def demo_customers(email: str | None) -> list[dict[str, Any]]:
     return [{**c, "email": wanted} for c in customers if c["phone"] in owners]
 
 
-def sandbox_client(demo_email: str | None = None, today: date | None = None) -> TestClient:
+def sandbox_client(
+    demo_email: str | None = None, today: date | None = None, checkout_base: str | None = None
+) -> TestClient:
     """La API simulada de Northwind en proceso (los datos viven en memoria). `demo_email`: un
     segundo email para la clienta del guion (ver `demo_customers`). `today`: el día respecto del
     que se calculan las fechas de los pedidos (por defecto, hoy: al arrancar y con cada "Reset
-    demo")."""
+    demo"). `checkout_base`: adónde llevan los links de compra (la demo, a su página de
+    carrito; decisión 065)."""
     api = api_module()
-    return TestClient(api.create_app(extra_customers=demo_customers(demo_email), today=today))
+    extra = {"checkout_base": checkout_base} if checkout_base else {}
+    return TestClient(
+        api.create_app(extra_customers=demo_customers(demo_email), today=today, **extra)
+    )
+
+
+def demo_checkout_base() -> str:
+    """La página de carrito de la demo (`/demo/{slug}/cart/...`), en la dirección pública del
+    servicio (`PUBLIC_BASE_URL`) o en la local."""
+    base = (os.environ.get("PUBLIC_BASE_URL") or "http://localhost:8000").rstrip("/")
+    return f"{base}/demo/{company()['chat_slug']}"
 
 
 def api_module() -> ModuleType:
@@ -120,7 +133,7 @@ def shared_northwind() -> TestClient:
     """La API simulada que comparten el chat y el panel: lo que se aprueba en el panel se ve
     después en el pedido que consulta el agente. Se arma al primer uso y otra vez después de
     "Reset demo", con el email de `NORTHWIND_DEMO_CUSTOMER_EMAIL` si está definido."""
-    return sandbox_client(os.environ.get(DEMO_EMAIL_ENV))
+    return sandbox_client(os.environ.get(DEMO_EMAIL_ENV), checkout_base=demo_checkout_base())
 
 
 def _settings() -> dict[str, Any]:
