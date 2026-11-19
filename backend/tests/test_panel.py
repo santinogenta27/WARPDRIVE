@@ -261,7 +261,10 @@ def test_el_cliente_del_chat_web_ve_los_mensajes_del_equipo(client: TestClient) 
     client.post(
         "/chat/messages", json={"session": session, "text": "quiero hablar con una persona"}
     )
-    assert client.get("/chat/updates", params={"session": session}).json() == {"messages": [], "typing": False}
+    assert client.get("/chat/updates", params={"session": session}).json() == {
+        "messages": [],
+        "typing": False,
+    }
     login(client)
     inbox = client.get("/panel/casos").text
     case_id = re.findall(r'href="/panel/casos/([0-9a-f-]{36})"', inbox)[0]

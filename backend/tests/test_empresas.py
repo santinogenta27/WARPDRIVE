@@ -389,7 +389,10 @@ def test_el_chat_de_cada_empresa_es_propio(world: World) -> None:
     post(norte, f"/panel/casos/{case_id}/responder", texto="Hola, soy Ana de Tienda Norte.")
     seen = client.get("/chat/updates", params={"session": norte_session}).json()["messages"]
     assert [m["text"] for m in seen] == ["Hola, soy Ana de Tienda Norte."]
-    assert client.get("/chat/updates", params={"session": acme_session}).json() == {"messages": []}
+    assert client.get("/chat/updates", params={"session": acme_session}).json() == {
+        "messages": [],
+        "typing": False,
+    }
 
 
 # -- onboarding desde el panel ---------------------------------------------------------------
