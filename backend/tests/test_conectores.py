@@ -1,72 +1,25 @@
-"""Hito 9, tarea 10 — test de aceptación: conectores de Shopify y Tiendanube (decisión 057).
+"""Hito 9, tarea 10 — test de aceptación: conectores de Shopify y Tiendanube (decisión 057;
+Shopify por GraphQL desde la decisión 067).
 
 Una tienda conecta su Shopify (dominio y token) o su Tiendanube (id y token) sin programar: el
 agente usa la misma API canónica de tienda que la demo, con las mismas herramientas y controles
 del guardián, y el conector la traduce a la API de cada plataforma.
 """
 
-import json
-from typing import Any
-
 import httpx
 import psycopg
 import pytest
+from shopify_admin import FakeShopify
 
 from app.connectors import shopify, tiendanube
 from app.contacts import hash_phone
 from app.tools.runtime import ToolRuntime
 
-ORDER = {
-    "id": 450789469,
-    "name": "#1001",
-    "email": "ana@example.com",
-    "financial_status": "paid",
-    "fulfillment_status": "fulfilled",
-    "total_price": "45000.00",
-    "currency": "ARS",
-    "created_at": "2026-11-10T10:00:00-03:00",
-    "customer": {"id": 207119551, "email": "ana@example.com", "phone": None, "first_name": "Ana"},
-    "shipping_address": {"address1": "Corrientes 1234", "city": "CABA", "province": "CABA"},
-    "line_items": [{"sku": "CP-1", "title": "Campera", "quantity": 1, "price": "45000.00"}],
-    "fulfillments": [
-        {
-            "created_at": "2026-11-11T09:00:00-03:00",
-            "tracking_company": "Andreani",
-            "tracking_number": "AR123",
-            "shipment_status": "in_transit",
-        }
-    ],
-}
 
-
-def _shopify() -> tuple[httpx.MockTransport, list[tuple[str, str, Any]]]:
-    calls: list[tuple[str, str, Any]] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        body = json.loads(request.content) if request.content else None
-        calls.append((request.method, request.url.path, body))
-        assert request.headers["X-Shopify-Access-Token"] == "shpat_123"
-        assert request.url.host == "mitienda.myshopify.com"
-        path = request.url.path.removeprefix("/admin/api/2025-01")
-        if path == "/customers/search.json":
-            return httpx.Response(200, json={"customers": [ORDER["customer"]]})
-        if path == "/orders.json":
-            name = request.url.params["name"]
-            return httpx.Response(200, json={"orders": [ORDER] if name == "#1001" else []})
-        if path == "/orders/450789469/transactions.json":
-            tx = {"id": 389404469, "kind": "sale", "status": "success", "gateway": "mp"}
-            return httpx.Response(200, json={"transactions": [tx]})
-        if path == "/orders/450789469/refunds.json":
-            return httpx.Response(201, json={"refund": {"id": 509562969}})
-        if path == "/price_rules.json":
-            return httpx.Response(201, json={"price_rule": {"id": 507328175}})
-        if path == "/price_rules/507328175/discount_codes.json":
-            return httpx.Response(
-                201, json={"discount_code": {"code": body["discount_code"]["code"]}}
-            )
-        return httpx.Response(404, json={})
-
-    return httpx.MockTransport(handler), calls
+def _shopify() -> tuple[httpx.MockTransport, FakeShopify]:
+    """La tienda de Shopify falsa de la Admin GraphQL API (decisión 067)."""
+    store = FakeShopify()
+    return store.transport, store
 
 
 def test_shopify_consulta_el_pedido_con_la_forma_canonica() -> None:
@@ -90,19 +43,19 @@ def test_shopify_el_dueno_coincide_entre_la_busqueda_por_email_y_el_pedido() -> 
 
 
 def test_shopify_reembolsa_y_crea_cupones() -> None:
-    upstream, calls = _shopify()
+    upstream, store = _shopify()
     runtime = ToolRuntime(shopify.client("mitienda", "shpat_123", upstream))
     refund = runtime.call(
         "POST", "/orders/{order_id}/refunds", {"order_id": "1001", "amount": 45000}, key="k1"
     )
     assert refund.status_code == 201 and refund.data["amount"] == 45000
-    sent = next(b for m, p, b in calls if p.endswith("/refunds.json"))
-    assert sent["refund"]["transactions"][0] == {
-        "parent_id": 389404469,
-        "amount": "45000.00",
-        "kind": "refund",
-        "gateway": "mp",
-    }
+    sent = store.call("Reembolso")["variables"]["input"]["transactions"][0]
+    assert (sent["parentId"], sent["amount"], sent["kind"], sent["gateway"]) == (
+        "gid://shopify/OrderTransaction/389404469",
+        "45000.00",
+        "REFUND",
+        "mercado_pago",
+    )
     coupon = runtime.call("POST", "/orders/{order_id}/coupons", {"order_id": "1001", "percent": 10})
     assert coupon.status_code == 201 and coupon.data["code"].startswith("GRACIAS-")
 

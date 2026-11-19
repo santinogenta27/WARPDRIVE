@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 import psycopg
 import pytest
+from shopify_admin import FakeShopify, product, variant
 from simulated.stack import build_simulated_stack
 
 from app.agent import grounding
@@ -56,46 +57,17 @@ def test_la_busqueda_entiende_plurales_y_no_inventa_productos() -> None:
 
 
 # -- 2. conectores ---------------------------------------------------------------------------
-SHOPIFY_PRODUCT = {
-    "id": 632910392,
-    "title": "Campera Impermeable",
-    "product_type": "Camperas",
-    "body_html": "<p>Campera liviana para lluvia.</p>",
-    "tags": "lluvia, outdoor",
-    "options": [{"name": "Talle", "position": 1}, {"name": "Color", "position": 2}],
-    "variants": [
-        {
-            "id": 808950810,
-            "sku": "CI-M-NEG",
-            "price": "85000.00",
-            "option1": "M",
-            "option2": "Negro",
-            "inventory_management": "shopify",
-            "inventory_quantity": 4,
-        },
-        {
-            "id": 808950811,
-            "sku": "CI-L-NEG",
-            "price": "85000.00",
-            "option1": "L",
-            "option2": "Negro",
-            "inventory_management": "shopify",
-            "inventory_quantity": -2,
-        },
-    ],
-}
+SHOPIFY_PRODUCT = product(
+    variants=[
+        variant(808950810, "CI-M-NEG", "M", 4, color="Negro"),
+        variant(808950811, "CI-L-NEG", "L", -2, color="Negro"),
+    ]
+)
 
 
 def test_shopify_traduce_productos_con_variantes_y_stock() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        path = request.url.path.removeprefix("/admin/api/2025-01")
-        if path == "/products.json":
-            return httpx.Response(200, json={"products": [SHOPIFY_PRODUCT]})
-        if path == "/shop.json":
-            return httpx.Response(200, json={"shop": {"currency": "ARS"}})
-        return httpx.Response(404, json={})
-
-    runtime = ToolRuntime(shopify.client("mitienda", "shpat_123", httpx.MockTransport(handler)))
+    store = FakeShopify(products=[SHOPIFY_PRODUCT])
+    runtime = ToolRuntime(shopify.client("mitienda", "shpat_123", store.transport))
     found = runtime.call("GET", "/products", {"query": "campera"}).data["products"]
     assert len(found) == 1
     product = found[0]

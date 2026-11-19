@@ -16,6 +16,7 @@ import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from shopify_admin import FakeShopify, product, variant
 from simulated.stack import build_simulated_stack
 
 from app.agent import conduct, grounding
@@ -51,40 +52,16 @@ def test_el_link_puede_apuntar_a_otra_tienda() -> None:
 
 
 # -- 2. conectores ---------------------------------------------------------------------------
-PRODUCT = {
-    "id": 632910392,
-    "title": "Campera Impermeable",
-    "options": [{"name": "Talle"}],
-    "variants": [
-        {
-            "id": 808950810,
-            "sku": "CI-M",
-            "price": "85000.00",
-            "option1": "M",
-            "inventory_management": "shopify",
-            "inventory_quantity": 4,
-        },
-        {
-            "id": 808950811,
-            "sku": "CI-L",
-            "price": "85000.00",
-            "option1": "L",
-            "inventory_management": "shopify",
-            "inventory_quantity": 0,
-        },
-    ],
-}
+PRODUCT = product(variants=[variant(808950810, "CI-M", "M", 4), variant(808950811, "CI-L", "L", 0)])
 
 
 def _shopify() -> httpx.MockTransport:
+    store = FakeShopify(products=[PRODUCT])
+
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.method == "GET", "el link de compra no crea nada en Shopify"
-        path = request.url.path.removeprefix("/admin/api/2025-01")
-        if path == "/products.json":
-            return httpx.Response(200, json={"products": [PRODUCT]})
-        if path == "/shop.json":
-            return httpx.Response(200, json={"shop": {"currency": "ARS"}})
-        return httpx.Response(404, json={})
+        response = store.handle(request)
+        assert store.operations()[-1] == "Productos", "el link de compra no crea nada en Shopify"
+        return response
 
     return httpx.MockTransport(handler)
 
