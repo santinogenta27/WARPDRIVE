@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
 from app.channels.web import widget
+from app.channels.whatsapp import selfservice as whatsapp
 from app.companies import connection as system
 from app.companies import delete as removal
 from app.companies import export, onboarding, review, rules
@@ -693,6 +694,96 @@ def _plain(value: Any) -> str:
     return str(int(number)) if number == int(number) else str(number)
 
 
+def _whatsapp_html(ctx: Ctx, request: Request, found: whatsapp.WhatsAppSetup | None) -> str:
+    """Canales → WhatsApp (decisión 068): los datos de la app de Meta, el webhook para copiar,
+    probar, mensaje de prueba, activar y la guía. En el idioma del panel."""
+    en = english.english()
+
+    def t(es: str, en_text: str) -> str:
+        return en_text if en else es
+
+    saved = t("Guardado. Dejalo vacío para conservarlo.", "Saved. Leave it empty to keep it.")
+    status = ""
+    webhook = ""
+    actions = ""
+    test = ""
+    if found is not None:
+        active = found.status == "active"
+        status = (
+            f'<span class="badge {"ok" if active else "warn"}">'
+            f"{t('Activo', 'Active') if active else t('Inactivo', 'Inactive')}</span>"
+        )
+        url = f"{_public_url(request)}/webhooks/whatsapp/{found.webhook_key}"
+        webhook = f"""<h3>{t("Webhook para pegar en Meta", "Webhook to paste in Meta")}</h3>
+<label>{t("URL de devolución de llamada", "Callback URL")}</label>
+<div class="mono small" id="wa-webhook">{esc(url)}</div>
+<label>{t("Token de verificación", "Verify token")}</label>
+<div class="mono small" id="wa-verify">{esc(found.verify_token or "")}</div>
+<p class="muted small">{
+            t(
+                "Pegalos en tu app de Meta (WhatsApp → Configuración → Webhook) y suscribite al "
+                "campo messages.",
+                "Paste them in your Meta app (WhatsApp → Configuration → Webhook) and subscribe to "
+                "the messages field.",
+            )
+        }</p>"""
+        if found.last_test:
+            ok = bool(found.last_test.get("ok"))
+            test = (
+                f'<div class="card {"okmsg" if ok else "alert"}" style="margin-top:10px">'
+                f"<b>{t('La prueba pasó', 'The test passed') if ok else t('La prueba falló', 'The test failed')}."  # noqa: E501
+                f"</b> {esc(found.last_test.get('detalle'))}</div>"
+            )
+        toggle = (
+            f'<form method="post" action="/panel/configuracion/whatsapp/desactivar">{_csrf(ctx)}'
+            f'<button type="submit">{t("Desactivar", "Deactivate")}</button></form>'
+            if active
+            else f'<form method="post" action="/panel/configuracion/whatsapp/activar">'
+            f'{_csrf(ctx)}<button class="primary" type="submit">{t("Activar", "Activate")}'
+            "</button></form>"
+        )
+        actions = f"""<div class="row">
+<form method="post" action="/panel/configuracion/whatsapp/probar">{_csrf(ctx)}
+<button type="submit">{t("Probar conexión", "Test connection")}</button></form>{toggle}</div>
+{test}<form method="post" action="/panel/configuracion/whatsapp/mensaje-de-prueba" class="row"
+ style="align-items:flex-end">{_csrf(ctx)}<div><label for="wa-numero">{
+            t("Número para el mensaje de prueba", "Number for the test message")
+        }</label><input id="wa-numero" name="numero" required placeholder="+54 9 11 5555-0000"
+ style="max-width:240px"></div><button type="submit">{
+            t("Enviar mensaje de prueba", "Send test message")
+        }</button></form>"""
+    phone = esc(found.phone_number_id) if found else ""
+    waba = esc(found.waba_id or "") if found else ""
+    return f"""<div class="card"><h3>WhatsApp {status}</h3><p class="muted small">{
+        t(
+            "Conectá el número de WhatsApp Business de tu empresa con tu propia app de Meta. Los "
+            "datos se guardan cifrados y el token y el App Secret no se vuelven a mostrar.",
+            "Connect your company's WhatsApp Business number with your own Meta app. The data is "
+            "stored encrypted, and the token and the App Secret are never shown again.",
+        )
+    }</p>
+<form method="post" action="/panel/configuracion/whatsapp">{_csrf(ctx)}
+<label for="wa-phone">Phone Number ID</label><input id="wa-phone" name="phone_number_id"
+ required value="{phone}" style="max-width:320px">
+<label for="wa-waba">WhatsApp Business Account ID</label><input id="wa-waba" name="waba_id"
+ required value="{waba}" style="max-width:320px">
+<label for="wa-token">{
+        t("Token permanente (de un usuario del sistema)", "Permanent token (from a system user)")
+    }</label><input id="wa-token" name="token" type="password" autocomplete="off"
+ placeholder="{esc(saved) if found and found.has_token else ""}" style="max-width:420px">
+<label for="wa-secret">App Secret</label><input id="wa-secret" name="app_secret"
+ type="password" autocomplete="off"
+ placeholder="{esc(saved) if found and found.has_app_secret else ""}" style="max-width:420px">
+<button type="submit">{t("Guardar", "Save")}</button></form>
+{webhook}{actions}
+<details style="margin:10px 0"><summary>{
+        t(
+            "Guía: crear la app en Meta y conectar el número",
+            "Guide: create the Meta app and connect the number",
+        )
+    }</summary><div class="small">{guides.whatsapp_guide()}</div></details></div>"""
+
+
 def _platforms_html(ctx: Ctx) -> str:
     """Shopify (tres métodos de conexión y la guía del Dev Dashboard, decisión 067) y
     Tiendanube (token). El texto sale en el idioma del panel."""
@@ -1240,6 +1331,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
         brand = widget.load(conn, ctx.tenant_id)
         language = i18n.tenant_language(conn, ctx.tenant_id)
         behind_on = behind.enabled(conn, ctx.tenant_id)
+        whatsapp_setup = whatsapp.load(conn, ctx.tenant_id)
         model = _model_html(ctx, conn)
         attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
         offers = _upsell_html(
@@ -1267,6 +1359,9 @@ queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
 <h2>Herramientas</h2>{_tools_html(ctx, tools)}
 <h2>Sistema de la empresa</h2>{_system_html(ctx, found, mode)}
+<h2>{"Channels" if english.english() else "Canales"}</h2>{
+        _whatsapp_html(ctx, request, whatsapp_setup)
+    }
 <h2>Chat de prueba</h2><div class="card">{chat}</div>
 <h2>Widget para tu sitio</h2>{
         _widget_html(ctx, request, slug, brand)
@@ -1548,3 +1643,76 @@ def deactivate_system(request: Request, form: Form, deps: Deps) -> Response:
     with deps.connection() as conn:
         system.deactivate(conn, ctx.tenant_id)
     return _back("configuracion", ok="El asistente volvió al modo simulado.")
+
+
+# -- Canales → WhatsApp (self-service, decisión 068) ------------------------------------------
+def _whatsapp_action(
+    request: Request, form: dict[str, str], deps: PanelDeps, action: Any
+) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    try:
+        with deps.connection() as conn:
+            message = action(conn, ctx.tenant_id)
+    except whatsapp.SetupError as error:
+        return _back("configuracion", error=str(error))
+    except httpx.HTTPError as error:
+        return _back("configuracion", error=f"Meta no respondió ({type(error).__name__}).")
+    if isinstance(message, tuple):
+        return _back("configuracion", error=message[0])
+    return _back("configuracion", ok=message)
+
+
+@router.post("/configuracion/whatsapp")
+def save_whatsapp(request: Request, form: Form, deps: Deps) -> Response:
+    def run(conn: Any, tenant_id: uuid.UUID) -> str:
+        whatsapp.save(
+            conn,
+            tenant_id,
+            phone_number_id=form.get("phone_number_id", ""),
+            waba_id=form.get("waba_id", ""),
+            token=form.get("token", ""),
+            app_secret=form.get("app_secret", ""),
+        )
+        return "WhatsApp guardado. Pegá el webhook en Meta y probá la conexión."
+
+    return _whatsapp_action(request, form, deps, run)
+
+
+@router.post("/configuracion/whatsapp/probar")
+def test_whatsapp(request: Request, form: Form, deps: Deps) -> Response:
+    def run(conn: Any, tenant_id: uuid.UUID) -> str | tuple[str]:
+        result = whatsapp.test(conn, tenant_id)
+        if result["ok"]:
+            return f"La prueba pasó. {result['detalle']} Ya podés activar."
+        return (f"La prueba falló: {result['detalle']}",)
+
+    return _whatsapp_action(request, form, deps, run)
+
+
+@router.post("/configuracion/whatsapp/mensaje-de-prueba")
+def send_whatsapp_test(request: Request, form: Form, deps: Deps) -> Response:
+    def run(conn: Any, tenant_id: uuid.UUID) -> str:
+        whatsapp.send_test(conn, tenant_id, form.get("numero", ""))
+        return "Mensaje de prueba enviado. Revisá ese WhatsApp."
+
+    return _whatsapp_action(request, form, deps, run)
+
+
+@router.post("/configuracion/whatsapp/activar")
+def activate_whatsapp(request: Request, form: Form, deps: Deps) -> Response:
+    def run(conn: Any, tenant_id: uuid.UUID) -> str:
+        whatsapp.activate(conn, tenant_id)
+        return "WhatsApp activo: el asistente ya responde en tu número."
+
+    return _whatsapp_action(request, form, deps, run)
+
+
+@router.post("/configuracion/whatsapp/desactivar")
+def deactivate_whatsapp(request: Request, form: Form, deps: Deps) -> Response:
+    def run(conn: Any, tenant_id: uuid.UUID) -> str:
+        whatsapp.deactivate(conn, tenant_id)
+        return "WhatsApp desactivado: el asistente ya no responde en tu número."
+
+    return _whatsapp_action(request, form, deps, run)

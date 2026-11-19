@@ -180,3 +180,64 @@ async def receive(request: Request, settings: Settings, store: Store) -> dict[st
     if messages:
         await run_in_threadpool(store.save, messages)
     return {"received": len(messages)}
+
+
+# -- webhook propio de cada empresa (WhatsApp self-service, decisión 068) ----------------------
+def lookup_connection() -> Iterator[psycopg.Connection]:
+    conn = connect()
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+Lookup = Annotated[psycopg.Connection, Depends(lookup_connection)]
+
+
+@router.get("/webhooks/whatsapp/{key}", response_class=PlainTextResponse)
+def verify_company(
+    key: str,
+    conn: Lookup,
+    mode: Annotated[str, Query(alias="hub.mode")] = "",
+    token: Annotated[str, Query(alias="hub.verify_token")] = "",
+    challenge: Annotated[str, Query(alias="hub.challenge")] = "",
+) -> str:
+    """La verificación de Meta con el verify token de esa empresa."""
+    from app.channels.whatsapp.selfservice import channel_for_webhook
+
+    channel = channel_for_webhook(conn, key)
+    if (
+        channel is not None
+        and mode == "subscribe"
+        and hmac.compare_digest(token.encode(), channel.verify_token.encode())
+    ):
+        return challenge
+    raise HTTPException(status_code=403, detail="Token de verificación inválido")
+
+
+@router.post("/webhooks/whatsapp/{key}")
+async def receive_company(key: str, request: Request, conn: Lookup, store: Store) -> dict[str, int]:
+    """Los mensajes de la empresa, firmados con el App Secret de su app de Meta. Solo entran
+    los de su número; con el canal inactivo no entra ninguno."""
+    from app.channels.whatsapp.selfservice import channel_for_webhook
+
+    body = await request.body()
+    channel = await run_in_threadpool(channel_for_webhook, conn, key)
+    header = request.headers.get("X-Hub-Signature-256")
+    if channel is None or not valid_signature(body, header, channel.app_secret):
+        logger.warning("Webhook de WhatsApp de una empresa con firma inválida: se descarta")
+        raise HTTPException(status_code=401, detail="Firma inválida")
+    try:
+        payload = json.loads(body)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail="JSON inválido") from error
+    for failure in failed_deliveries(payload):
+        logger.warning("Meta no entregó un mensaje enviado: %s", failure)
+    messages = [
+        m
+        for m in parse_webhook(payload)
+        if channel.status == "active" and m.phone_number_id == channel.phone_number_id
+    ]
+    if messages:
+        await run_in_threadpool(store.save, messages)
+    return {"received": len(messages)}
