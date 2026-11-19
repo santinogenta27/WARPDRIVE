@@ -797,6 +797,42 @@ PHRASES: dict[str, str] = {
         "The search didn't find any document about this."
     ),
     "Subir documentos": "Upload documents",
+    # modo supervisado (decisión 072)
+    "Modo supervisado": "Supervised mode",
+    "Activado": "On",
+    "Desactivado": "Off",
+    "Modo supervisado activado.": "Supervised mode turned on.",
+    "Modo supervisado desactivado.": "Supervised mode turned off.",
+    (
+        "Cada respuesta del asistente queda como borrador en Casos. Una persona del equipo la "
+        "envía, la edita o la rechaza antes de que llegue al cliente, que mientras tanto ve "
+        "“escribiendo…”. Las acciones con herramientas siguen pasando por el guardián y sus "
+        "aprobaciones."
+    ): (
+        "Every reply from the assistant is saved as a draft in Cases. A team member sends, edits "
+        "or rejects it before it reaches the customer, who sees “typing…” in the meantime. "
+        "Actions with tools still go through the guardian and its approvals."
+    ),
+    "Borradores por revisar": "Drafts to review",
+    (
+        "Modo supervisado: el cliente ve “escribiendo…” hasta que una persona envía o rechaza la "
+        "respuesta."
+    ): "Supervised mode: the customer sees “typing…” until a person sends or rejects the reply.",
+    "Borrador": "Draft",
+    "Canal": "Channel",
+    "Respuesta del asistente (podés editarla antes de enviarla)": (
+        "Assistant's reply (you can edit it before sending it)"
+    ),
+    "Respuesta enviada al cliente": "Reply sent to the customer",
+    "Borrador rechazado · no se envió nada": "Draft rejected · nothing was sent",
+    "Dejó la respuesta como borrador (modo supervisado)": (
+        "Saved the reply as a draft (supervised mode)"
+    ),
+    "Una persona aprobó y envió el borrador": "A person approved and sent the draft",
+    "Una persona editó y envió el borrador": "A person edited and sent the draft",
+    "Una persona rechazó el borrador": "A person rejected the draft",
+    "No se envió al cliente": "It wasn't sent to the customer",
+    "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
     ".": ".",
 }

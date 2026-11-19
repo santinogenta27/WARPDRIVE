@@ -10,10 +10,12 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 
+import httpx
 import psycopg
 
 from app.agent.loop import Agent
 from app.audit import log as audit_log
+from app.cases import supervision
 from app.channels.base import (
     IGNORED_TYPES,
     UNSUPPORTED_MESSAGE,
@@ -76,6 +78,17 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
         reply, case_id = result.message, result.case_id
     else:
         reply = UNSUPPORTED_MESSAGE
+    if case_id is not None and supervision.enabled(conn, tenant_id):
+        # Modo supervisado (decisión 072): la respuesta espera a una persona del equipo.
+        supervision.hold(conn, tenant_id, case_id, reply, channel="whatsapp")
+        try:
+            deps.client.typing(
+                token=token, phone_number_id=message.phone_number_id, message_id=message.wamid
+            )
+        except (WhatsAppError, httpx.HTTPError) as error:  # solo un indicador: no se reintenta
+            logger.warning("WhatsApp no mostró el indicador de escribiendo: %s", error)
+        forget_sender(conn, job)
+        return
     try:
         wamid = deps.client.send_text(
             token=token, phone_number_id=message.phone_number_id, to=message.sender, body=reply

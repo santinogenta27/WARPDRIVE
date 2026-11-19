@@ -18,6 +18,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
+from app.cases import supervision
 from app.channels.web import widget
 from app.channels.whatsapp import selfservice as whatsapp
 from app.companies import connection as system
@@ -1093,6 +1094,31 @@ def save_language(request: Request, form: Form, deps: Deps) -> Response:
     return _back("configuracion", ok=f"Idioma guardado: {i18n.NAMES[choice]}.")
 
 
+def _supervised_html(ctx: Ctx, on: bool) -> str:
+    """Modo supervisado (decisión 072): apagado por defecto."""
+    state = "Activado" if on else "Desactivado"
+    return f"""<div class="card"><div class="row"><div class="grow">
+<span class="badge {"resolved" if on else ""}">{state}</span>
+<p class="muted small">Cada respuesta del asistente queda como borrador en Casos. Una persona del
+equipo la envía, la edita o la rechaza antes de que llegue al cliente, que mientras tanto ve
+“escribiendo…”. Las acciones con herramientas siguen pasando por el guardián y sus
+aprobaciones.</p></div>
+<form method="post" action="/panel/configuracion/supervisado">{_csrf(ctx)}
+<button name="activo" value="{"no" if on else "si"}" class="{"" if on else "primary"}">
+{"Desactivar" if on else "Activar"}</button></form></div></div>"""
+
+
+@router.post("/configuracion/supervisado")
+def save_supervised(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    on = form.get("activo") == "si"
+    with deps.connection() as conn:
+        supervision.set_enabled(conn, ctx.tenant_id, on)
+    return _back("configuracion", ok=f"Modo supervisado {'activado' if on else 'desactivado'}.")
+
+
 def _behind_html(ctx: Ctx, slug: str | None, on: bool) -> str:
     """Vista "detrás de escena" de la demo (decisión 041): apagada por defecto."""
     if not slug:
@@ -1331,6 +1357,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
         brand = widget.load(conn, ctx.tenant_id)
         language = i18n.tenant_language(conn, ctx.tenant_id)
         behind_on = behind.enabled(conn, ctx.tenant_id)
+        supervised = supervision.enabled(conn, ctx.tenant_id)
         whatsapp_setup = whatsapp.load(conn, ctx.tenant_id)
         model = _model_html(ctx, conn)
         attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
@@ -1353,6 +1380,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
 qué usa el asistente. Lo que activás o aprobás acá pasa al asistente en vivo en el momento; nada
 queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Idioma</h2>{_language_html(ctx, language)}
+<h2>Modo supervisado</h2>{_supervised_html(ctx, supervised)}
 <h2>Modelo y gasto</h2>{model}
 <h2>Reglas de atención</h2>{attention}
 <h2>Ventas cruzadas</h2>{offers}

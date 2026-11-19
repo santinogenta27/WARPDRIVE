@@ -53,6 +53,24 @@ class WhatsAppClient:
         }
         return self._send(token, phone_number_id, to, message)
 
+    def typing(self, *, token: str, phone_number_id: str, message_id: str) -> None:
+        """Marca el mensaje del cliente como leído y muestra "escribiendo…" (hasta 25 s o hasta
+        la respuesta). Lo usa el modo supervisado mientras la respuesta espera (decisión 072)."""
+        response = self._http.post(
+            f"{GRAPH_URL}/{self._version}/{phone_number_id}/messages",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "messaging_product": "whatsapp",
+                "status": "read",
+                "message_id": message_id,
+                "typing_indicator": {"type": "text"},
+            },
+        )
+        if response.status_code >= 400:
+            data: dict[str, Any] = response.json() if response.content else {}
+            error = data.get("error") or {}
+            raise WhatsAppError(response.status_code, error.get("code"), str(error.get("message")))
+
     def _send(self, token: str, phone_number_id: str, to: str, message: dict[str, Any]) -> str:
         try:
             return self._post(token, phone_number_id, to, message)

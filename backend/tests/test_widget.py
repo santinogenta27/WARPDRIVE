@@ -402,7 +402,7 @@ def test_el_chat_solo_responde_desde_los_dominios_permitidos(world: World) -> No
     with tenant_scope(world.conn, world.norte):
         assert world.conn.execute("select count(*) from cases").fetchone() == (0,)
     updates = api.get("/chat/updates", params={"session": session}, headers=shop)
-    assert updates.status_code == 200 and updates.json() == {"messages": []}
+    assert updates.status_code == 200 and updates.json() == {"messages": [], "typing": False}
     assert updates.headers["access-control-allow-origin"] == SHOP
 
     # Un dominio permitido para Norte no sirve para el chat de Acme.

@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
 from app.audit import log as audit_log
-from app.cases import feedback, refund_confirmation
+from app.cases import feedback, refund_confirmation, supervision
 from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
 from app.companies.connection import ClientFactory, http_client
@@ -80,6 +80,8 @@ class PanelDeps:
     client_factory: ClientFactory = http_client
     # El email de confirmación de un reembolso aprobado (decisión 046).
     mailer: Callable[[], Mailer] = mailer_from_env
+    # La entrega de un borrador aprobado del modo supervisado por su canal (decisión 072).
+    deliver: supervision.Deliver = supervision.deliver
 
 
 @contextmanager
@@ -486,6 +488,7 @@ def inbox(request: Request, deps: Deps) -> Response:
         # Regla de cierre: los que llevan 24 h sin respuesta del cliente quedan resueltos.
         close_inactive(conn, ctx.tenant_id)
         rows = _inbox_rows(conn, ctx.tenant_id)
+        drafts = _draft_cards(conn, ctx.tenant_id, ctx.csrf, back="/panel/casos")
         waiting: dict[Any, tuple[Any, ...]] = {}  # caso -> su primera aprobación pendiente
         for approval in _pending(conn, ctx.tenant_id):
             waiting.setdefault(approval[3], approval)
@@ -551,7 +554,7 @@ color:inherit"><div class="grow">{head}
 <p class="lead">Conversaciones con su estado: primero las derivadas
 a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
 confirma o pasan 24 h sin respuesta.</p><div class="kpis">{kpis}</div>
-{items}"""
+{drafts}{items}"""
     return HTMLResponse(page("Casos", body, active="casos", session=ctx.session))
 
 
@@ -717,6 +720,21 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
         return "Verificación de identidad", VERIFICATION.get(
             str(p.get("result") or kind), esc(json.dumps(p, ensure_ascii=False))
         )
+    if kind == "draft_held":  # decisión 072
+        return "Dejó la respuesta como borrador (modo supervisado)", f"“{esc(p.get('text'))}”"
+    if kind == "draft_sent":
+        title = (
+            "Una persona editó y envió el borrador"
+            if p.get("edited")
+            else ("Una persona aprobó y envió el borrador")
+        )
+        return title, f"“{esc(p.get('text'))}”"
+    if kind == "draft_rejected":
+        return "Una persona rechazó el borrador", "No se envió al cliente"
+    if kind == "draft_delivered":
+        return "Envió la respuesta aprobada", esc(
+            CHANNELS.get(str(p.get("channel") or "whatsapp"), p.get("channel") or "")
+        )
     if kind.endswith("_sent"):
         return "Envió la respuesta", esc(
             CHANNELS.get(str(p.get("channel")), p.get("channel") or "")
@@ -753,6 +771,9 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         verdict = audit_log.verify_chain(conn, tenant_id, case_id)
         pending = _pending(conn, tenant_id, case_id)
         reviewed = feedback.marks(conn, tenant_id, case_id)
+        drafts = _draft_cards(
+            conn, tenant_id, ctx.csrf, back=f"/panel/casos/{case_id}", case_id=case_id
+        )
     status, escalation, type_name, created, resolved_by, reopened = case
     csrf = ctx.csrf
     roles = {**ROLES, "human": f"Equipo de {company}"}
@@ -804,7 +825,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
 <div class="row"><h1 class="grow">Caso {esc(type_label(type_name))}</h1>
 {status_badge(status, resolved_by, reopened)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
-{escalated}{approvals}
+{escalated}{approvals}{drafts}
 <div class="kpis"><div class="kpi"><div class="n">USD {cost:.4f}</div><div class="muted">Costo
 del modelo{" (modelo gratuito)" if calls and not cost else ""}</div></div>
 <div class="kpi"><div class="n">{calls}</div><div class="muted">llamadas al
@@ -859,6 +880,70 @@ def reply(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Respo
                     detail={"by": str(user_id), "envio": sending},
                 )
     return RedirectResponse(f"/panel/casos/{case_id}", status_code=303)
+
+
+# -- borradores del modo supervisado (decisión 072) -----------------------------------------
+def _draft_cards(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    csrf: str,
+    *,
+    back: str,
+    case_id: uuid.UUID | None = None,
+) -> str:
+    """Las respuestas del asistente que esperan a una persona: texto editable, Enviar y
+    Rechazar. En la bandeja (todas) y en el detalle de un caso (las suyas)."""
+    drafts = supervision.pending(conn, tenant_id, case_id)
+    if not drafts:
+        return ""
+    cards = "".join(
+        f"""<div class="card attention"><div class="row" style="gap:8px">
+<span class="badge waiting_approval">Borrador</span>
+<span class="muted small"><span>{esc(CHANNELS.get(d.channel, "Canal"))}</span> ·
+<span>{local_time(d.created_at)}</span></span>
+{"" if case_id else f'<a class="small" href="/panel/casos/{d.case_id}">ver caso</a>'}</div>
+<form method="post" action="/panel/borradores/{d.id}" style="margin-top:8px">
+<input type="hidden" name="csrf" value="{csrf}"><input type="hidden" name="volver" value="{back}">
+<label for="borrador-{d.id}">Respuesta del asistente (podés editarla antes de enviarla)</label>
+<textarea id="borrador-{d.id}" name="texto"
+ maxlength="{MAX_REPLY}" required>{esc(d.text)}</textarea>
+<div class="row" style="justify-content:flex-end">
+<button class="danger" name="decision" value="rechazar">Rechazar</button>
+<button class="primary" name="decision" value="enviar">Enviar</button></div></form></div>"""
+        for d in drafts
+    )
+    return f"""<h2>Borradores por revisar</h2><p class="muted small">Modo supervisado: el cliente
+ve “escribiendo…” hasta que una persona envía o rechaza la respuesta.</p>{cards}"""
+
+
+@router.post("/borradores/{draft_id}")
+def decide_draft(draft_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    back = form.get("volver", "")
+    target = back if back.startswith("/panel/") else "/panel/casos"
+    with deps.connection() as conn:
+        user_id = _user_id(conn, ctx.tenant_id, ctx.session.email)
+        try:
+            if form.get("decision") == "enviar":
+                supervision.send(
+                    conn,
+                    ctx.tenant_id,
+                    draft_id,
+                    form.get("texto", "")[:MAX_REPLY],
+                    decided_by=user_id,
+                    deliver=deps.deliver,
+                )
+                notice = "borrador-enviado"
+            else:
+                supervision.reject(conn, ctx.tenant_id, draft_id, decided_by=user_id)
+                notice = "borrador-rechazado"
+        except supervision.DraftError:
+            # Ya decidido (doble clic o reenvío): no se envía de nuevo.
+            return RedirectResponse(target, status_code=303)
+    target += ("&" if "?" in target else "?") + f"aviso={notice}"
+    return RedirectResponse(target, status_code=303)
 
 
 # -- reporte ---------------------------------------------------------------------------------

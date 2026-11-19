@@ -122,6 +122,8 @@ NOTICES = {
     "rechazado": "Solicitud rechazada",
     "revisada": "Revisión guardada",
     "eval-creado": "Caso de eval creado · lo prueba el reporte de preparación",
+    "borrador-enviado": "Respuesta enviada al cliente",
+    "borrador-rechazado": "Borrador rechazado · no se envió nada",
 }
 
 
