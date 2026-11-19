@@ -45,6 +45,7 @@ from app.agent.loop import Agent
 from app.channels.base import InboundMessage, InvalidSignature
 from app.channels.inbound import handle_inbound
 from app.channels.web import widget
+from app.companies import first_steps
 from app.channels.web.channel import (
     _TOKEN,
     DEMO_ADDRESS,
@@ -364,8 +365,10 @@ def widget_config(request: Request, deps: Deps, canal: str = "") -> JSONResponse
             raise HTTPException(status_code=404, detail="Chat inexistente")
         found = widget.load(conn, tenant_id)
         live = widget.live_domains(conn, tenant_id)
+        origin, host = request.headers.get("origin"), request.headers.get("host", "")
+        # Primeros pasos (decisión 074): pedido desde un dominio de la empresa = instalado.
+        first_steps.note_widget_seen(conn, tenant_id, origin, found.domains)
     headers = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
-    origin, host = request.headers.get("origin"), request.headers.get("host", "")
     if not widget.origin_allowed(origin, host, live):
         return JSONResponse({"allowed": False}, headers=headers)
     version = int(found.updated_at.timestamp()) if found.updated_at else 0

@@ -749,6 +749,32 @@ PHRASES: dict[str, str] = {
         "Each case's audit trail stays stored and intact: it's insert-only and never deleted."
     ),
     "Solo el operador de la demo puede reiniciarla.": "Only the demo operator can reset it.",
+    # primeros pasos (decisión 074)
+    "Primeros pasos": "First steps",
+    "pasos hechos": "steps done",
+    "Hecho": "Done",
+    "Cargá tus documentos": "Upload your documents",
+    "Políticas, preguntas frecuentes o tu historial: el asistente responde con ellos.": (
+        "Policies, FAQs or your history: the assistant answers with them."
+    ),
+    "Definí las reglas de atención": "Set your service rules",
+    "El horario del equipo y a quién avisar cuando el asistente deriva.": (
+        "Your team's hours and who to notify when the assistant hands off."
+    ),
+    "Configurá tu marca": "Set up your brand",
+    "El nombre, el color y el logo del chat.": "The chat's name, color and logo.",
+    "Probá el asistente en el playground": "Try the assistant in the playground",
+    "Escribile como un cliente y mirá cada paso que da.": (
+        "Write to it like a customer and watch every step it takes."
+    ),
+    "Instalá el widget en tu sitio": "Install the widget on your site",
+    "Pegá la línea del script en tu sitio, en uno de tus dominios.": (
+        "Paste the script line on your site, on one of your domains."
+    ),
+    "Salí en vivo": "Go live",
+    "Cuando el reporte de preparación da el visto bueno, el asistente atiende en tu sitio.": (
+        "When the readiness report gives the go-ahead, the assistant serves your site."
+    ),
     "Tiene": "It has",
     ".": ".",
 }
