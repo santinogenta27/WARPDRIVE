@@ -6,6 +6,7 @@ consulta corre dentro de `tenant_scope`, así que un id de otra empresa responde
 uno que no existe. Los POST exigen el token anti-CSRF.
 """
 
+import hmac
 import re
 import uuid
 from decimal import Decimal, InvalidOperation
@@ -23,7 +24,7 @@ from app.companies import connection as system
 from app.companies import delete as removal
 from app.companies import export, onboarding, review, rules
 from app.companies.create import CompanyError, chat_slug, create_company
-from app.connectors import platforms
+from app.connectors import platforms, shopify, shopify_auth
 from app.demo import behind
 from app.llm import spending, tenant_llm
 from app.onboarding import ingest as ingestion
@@ -783,6 +784,81 @@ def _whatsapp_html(ctx: Ctx, request: Request, found: whatsapp.WhatsAppSetup | N
     }</summary><div class="small">{guides.whatsapp_guide()}</div></details></div>"""
 
 
+def _platforms_html(ctx: Ctx) -> str:
+    """Shopify (tres métodos de conexión y la guía del Dev Dashboard, decisión 067) y
+    Tiendanube (token). El texto sale en el idioma del panel."""
+    en = english.english()
+
+    def t(es: str, en_text: str) -> str:
+        return en_text if en else es
+
+    oauth = ""
+    if shopify_auth.app_credentials():
+        oauth = f"""<form method="post" action="/panel/configuracion/sistema/shopify/instalar"
+ class="row" style="align-items:flex-end">{_csrf(ctx)}<div><label for="oauth-tienda">{
+            t("Tienda de un cliente", "A client's store")
+        }</label><input id="oauth-tienda"
+ name="tienda" required placeholder="mitienda.myshopify.com" style="max-width:360px"></div>
+<button type="submit">{t("Instalar con Shopify", "Install with Shopify")}</button></form>
+<p class="muted small">{
+            t(
+                "Abre Shopify para que la tienda apruebe la app de la plataforma con los permisos "
+                "mínimos. Volvés acá con la tienda conectada.",
+                "Opens Shopify so the store approves the platform's app with the minimum scopes. "
+                "You come back here with the store connected.",
+            )
+        }</p>"""
+    return f"""<h3>{t("¿Usás Shopify?", "Do you use Shopify?")}</h3><p class="muted small">{
+        t(
+            "Conectá tu tienda sin OpenAPI: se crean las herramientas de pedidos, envíos, "
+            "reembolsos, cupones y cancelaciones, sin aprobar. Después probá la conexión y "
+            "aprobalas más arriba.",
+            "Connect your store without an OpenAPI: the order, shipping, refund, coupon and "
+            "cancellation tools are created, unapproved. Then test the connection and approve them "
+            "above.",
+        )
+    }</p>
+<form method="post" action="/panel/configuracion/sistema/plataforma">{_csrf(ctx)}
+<input type="hidden" name="plataforma" value="shopify">
+<label for="shop-tienda">{t("Tienda", "Store")}</label><input id="shop-tienda" name="tienda"
+ required placeholder="mitienda.myshopify.com" style="max-width:360px">
+<p class="small" style="margin:10px 0 4px"><b>{t("Método de conexión", "Connection method")}</b>
+</p><label style="font-weight:400"><input type="radio" name="metodo" value="app" checked> {
+        t(
+            "App del Dev Dashboard: Client ID y Client Secret (recomendado)",
+            "Dev Dashboard app: Client ID and Client Secret (recommended)",
+        )
+    }</label><label style="font-weight:400"><input type="radio" name="metodo" value="token"> {
+        t(
+            "Token de una app legacy que tu tienda ya tiene (shpat_…)",
+            "Token of a legacy app your store already has (shpat_…)",
+        )
+    }</label>
+<label for="client_id">Client ID</label><input id="client_id" name="client_id"
+ autocomplete="off" style="max-width:420px">
+<label for="client_secret">Client Secret</label><input id="client_secret" name="client_secret"
+ type="password" autocomplete="off" style="max-width:420px">
+<label for="shop-token">{t("Token de acceso (solo app legacy)", "Access token (legacy app only)")}
+</label><input id="shop-token" name="token" type="password" autocomplete="off"
+ style="max-width:420px"><button type="submit">{t("Conectar Shopify", "Connect Shopify")}</button>
+</form>{oauth}
+<details style="margin:10px 0"><summary>{
+        t(
+            "Guía: crear la app en el Dev Dashboard y copiar sus credenciales",
+            "Guide: create the app in the Dev Dashboard and copy its credentials",
+        )
+    }</summary><div class="small">{guides.shopify_app_guide()}</div></details>
+<h3>{t("¿Usás Tiendanube?", "Do you use Tiendanube?")}</h3>
+<form method="post" action="/panel/configuracion/sistema/plataforma">{_csrf(ctx)}
+<input type="hidden" name="plataforma" value="tiendanube">
+<label for="tn-tienda">{t("Número de tu tienda", "Your store number")}</label>
+<input id="tn-tienda" name="tienda" required style="max-width:360px">
+<label for="tn-token">{t("Token de acceso (de tu app)", "Access token (from your app)")}</label>
+<input id="tn-token" name="token" type="password" autocomplete="off" required
+ style="max-width:420px"><button type="submit">{t("Conectar Tiendanube", "Connect Tiendanube")}
+</button></form>"""
+
+
 def _system_html(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> str:
     badge, label = MODES[mode]
     if mode == "demo" and found is not None and found.base_url != system.DEMO_BASE_URL:
@@ -850,20 +926,8 @@ def _system_html(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> 
         if found and found.base_url
         else ""
     )
-    platforms_html = f"""<h3>¿Usás Shopify o Tiendanube?</h3><p class="muted small">Conectá tu
-tienda sin OpenAPI: se crean las herramientas de pedidos, envíos, reembolsos y cupones, sin
-aprobar. Después probá la conexión y aprobalas más arriba.</p>
-<form method="post" action="/panel/configuracion/sistema/plataforma">{_csrf(ctx)}
-<label for="plataforma">Plataforma</label><select id="plataforma" name="plataforma"
- style="max-width:220px"><option value="shopify">Shopify</option>
-<option value="tiendanube">Tiendanube</option></select>
-<label for="tienda">Tienda (Shopify: mitienda.myshopify.com · Tiendanube: el número de tu
-tienda)</label><input id="tienda" name="tienda" required style="max-width:360px">
-<label for="token">Token de acceso (de una app propia de tu tienda)</label>
-<input id="token" name="token" type="password" autocomplete="off" required
- style="max-width:420px"><button type="submit">Conectar tienda</button></form>"""
     return f"""<div class="card"><span class="badge {badge}">{label}</span>
-{platforms_html}
+{_platforms_html(ctx)}
 <h3>1. OpenAPI de tu sistema</h3><p class="muted small">{esc(spec_note)} Con el OpenAPI, el
 análisis genera las herramientas del asistente. Subí el archivo (.json o .yaml) o pegalo.</p>
 <form method="post" action="/panel/configuracion/sistema/openapi" enctype="multipart/form-data">
@@ -1426,10 +1490,13 @@ def test_system(request: Request, form: Form, deps: Deps) -> Response:
 
 @router.post("/configuracion/sistema/plataforma")
 def connect_platform(request: Request, form: Form, deps: Deps) -> Response:
-    """Shopify o Tiendanube, sin OpenAPI (decisión 057)."""
+    """Shopify o Tiendanube, sin OpenAPI (decisiones 057 y 067). Shopify: con el Client ID y
+    el Client Secret de una app del Dev Dashboard (`metodo=app`) o con el token de una app
+    legacy (`metodo=token`)."""
     ctx = enter(request, deps, form)
     if isinstance(ctx, Response):
         return ctx
+    method = form.get("metodo") or ("app" if form.get("client_id") else "token")
     try:
         with deps.connection() as conn:
             platforms.connect(
@@ -1438,13 +1505,103 @@ def connect_platform(request: Request, form: Form, deps: Deps) -> Response:
                 form.get("plataforma", ""),
                 form.get("tienda", ""),
                 form.get("token", ""),
+                method=method if method in ("app", "token") else "token",
+                client_id=form.get("client_id", ""),
+                client_secret=form.get("client_secret", ""),
             )
-    except ValueError as error:
-        return _back("configuracion", error=str(error))
+    except (ValueError, httpx.HTTPError) as error:
+        detail = str(error) if isinstance(error, ValueError) else "Shopify no respondió."
+        return _back("configuracion", error=detail)
     return _back(
         "configuracion",
         ok="Tienda conectada. Probá la conexión y aprobá sus herramientas.",
     )
+
+
+OAUTH_COOKIE = "shopify_oauth"
+OAUTH_PATH = "/panel/configuracion/sistema/shopify"
+
+
+@router.post("/configuracion/sistema/shopify/instalar")
+def install_shopify(request: Request, form: Form, deps: Deps) -> Response:
+    """Instalación por OAuth (decisión 067): lleva a Shopify para que la tienda apruebe la app
+    de la plataforma. El state firmado va en la URL y en una cookie de este navegador."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    app_keys = shopify_auth.app_credentials()
+    if app_keys is None:
+        return _back("configuracion", error="La instalación con Shopify no está configurada.")
+    try:
+        shop = shopify.clean_shop(form.get("tienda", ""))
+    except ValueError as error:
+        return _back("configuracion", error=str(error))
+    state = shopify_auth.make_state(ctx.tenant_id, shop)
+    callback = f"{_public_url(request)}{OAUTH_PATH}/callback"
+    response = RedirectResponse(
+        shopify_auth.authorize_url(shop, app_keys[0], callback, state), status_code=303
+    )
+    response.set_cookie(
+        OAUTH_COOKIE,
+        state,
+        max_age=shopify_auth.STATE_SECONDS,
+        path=OAUTH_PATH,
+        httponly=True,
+        secure=request.url.scheme == "https" or _public_url(request).startswith("https"),
+        samesite="lax",
+    )
+    return response
+
+
+@router.get("/configuracion/sistema/shopify/callback")
+def shopify_callback(request: Request, deps: Deps) -> Response:
+    """Vuelta de Shopify: HMAC con el secreto de la app, state firmado, de esta empresa, de
+    esta tienda y el mismo de la cookie. Recién ahí se cambia el código por el token."""
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    params = dict(request.query_params)
+    app_keys = shopify_auth.app_credentials()
+
+    def fail(message: str, *, used: bool = False) -> Response:
+        # Un callback falso no borra la cookie: no puede cortar una instalación en curso.
+        response = _back("configuracion", error=message)
+        if used:
+            response.delete_cookie(OAUTH_COOKIE, path=OAUTH_PATH)
+        return response
+
+    if app_keys is None:
+        return fail("La instalación con Shopify no está configurada.")
+    try:
+        shop = shopify.clean_shop(params.get("shop", ""))
+    except ValueError:
+        return fail("Shopify devolvió una tienda inválida.")
+    if not shopify_auth.valid_hmac(params, app_keys[1]):
+        return fail("La respuesta de Shopify no tiene una firma válida. Probá instalar de nuevo.")
+    state = params.get("state", "")
+    claims = shopify_auth.read_state(state, shop)
+    cookie = request.cookies.get(OAUTH_COOKIE, "")
+    if (
+        claims is None
+        or claims.get("t") != str(ctx.tenant_id)
+        or not cookie
+        or not hmac.compare_digest(cookie, state)
+    ):
+        return fail("La instalación venció o no empezó acá. Probá instalar de nuevo.")
+    try:
+        creds = shopify_auth.exchange_code(
+            shop, params.get("code", ""), *app_keys, transport=platforms.UPSTREAM
+        )
+        with deps.connection() as conn:
+            platforms.connect(conn, ctx.tenant_id, "shopify", shop, credentials=creds)
+    except (ValueError, httpx.HTTPError) as error:
+        message = str(error) if isinstance(error, ValueError) else "Shopify no respondió."
+        return fail(message, used=True)
+    response = _back(
+        "configuracion", ok="Tienda conectada. Probá la conexión y aprobá sus herramientas."
+    )
+    response.delete_cookie(OAUTH_COOKIE, path=OAUTH_PATH)
+    return response
 
 
 @router.post("/configuracion/sistema/herramientas")

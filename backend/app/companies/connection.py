@@ -246,6 +246,16 @@ def _secret(conn: psycopg.Connection, tenant_id: uuid.UUID) -> str | None:
     return decrypt_for(tenant_id, row[0]) if row and row[0] else None
 
 
+def _live_secret(
+    conn: psycopg.Connection, tenant_id: uuid.UUID, connection: SystemConnection
+) -> str | None:
+    """Las credenciales con un token vigente: el de Shopify que vence se renueva antes
+    (decisión 067)."""
+    from app.connectors import platforms
+
+    return platforms.live_secret(conn, tenant_id, connection.base_url, _secret(conn, tenant_id))
+
+
 def auth_headers(connection: SystemConnection, secret: str | None) -> dict[str, str]:
     if connection.auth_kind == "none" or not secret:
         return {}
@@ -314,11 +324,15 @@ def test_connection(
             "select settings -> 'identity_lookup' from tenants where id = %s", (tenant_id,)
         ).fetchone()
     lookup = row[0] if row and isinstance(row[0], dict) else None
-    path, params = _probe(connection.openapi, lookup)
+    from app.connectors import platforms
+
+    # Shopify tiene su propia prueba: token y permisos de la app (decisión 067).
+    own = platforms.diagnose_path(connection.base_url)
+    path, params = (own, {}) if own else _probe(connection.openapi, lookup)
     started = time.perf_counter()
     result: dict[str, Any] = {"operacion": f"GET {path}"}
     try:
-        client = client_factory(connection, _secret(conn, tenant_id))
+        client = client_factory(connection, _live_secret(conn, tenant_id, connection))
         response = client.request("GET", path, params=params or None, timeout=10.0)
     except ConnectionError_ as error:
         result |= {"ok": False, "detalle": str(error)}
@@ -327,7 +341,10 @@ def test_connection(
     else:
         status = response.status_code
         result["status"] = status
-        if status in (401, 403):
+        message = _platform_message(connection, response)
+        if message and status >= 400:
+            result |= {"ok": False, "detalle": message}
+        elif status in (401, 403):
             result |= {"ok": False, "detalle": "El sistema rechazó las credenciales."}
         elif 300 <= status < 400:
             result |= {"ok": False, "detalle": "El sistema redirige: revisá la URL base."}
@@ -345,6 +362,21 @@ def test_connection(
     return result
 
 
+def _platform_message(connection: SystemConnection, response: Any) -> str | None:
+    """El mensaje de error del conector de una plataforma (token vencido, permiso que falta):
+    lo escribimos nosotros, así que se le puede mostrar a la empresa tal cual."""
+    from app.connectors import platforms
+
+    if not platforms.is_platform(connection.base_url):
+        return None
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    message = body.get("message") if isinstance(body, dict) else None
+    return str(message) if message else None
+
+
 def probe_tools(
     conn: psycopg.Connection,
     tenant_id: uuid.UUID,
@@ -360,7 +392,7 @@ def probe_tools(
     connection = load(conn, tenant_id)
     if connection is None or not connection.base_url:
         raise ConnectionError_("Primero cargá la URL base del sistema.")
-    client = client_factory(connection, _secret(conn, tenant_id))
+    client = client_factory(connection, _live_secret(conn, tenant_id, connection))
     found: list[dict[str, Any]] = []
     for tool in review.tools(conn, tenant_id):
         upstream = tool.manifest["upstream"]
@@ -483,7 +515,8 @@ def runtime_for(
         factory = demo if url == DEMO_BASE_URL else (demos or {}).get(url)
         return (ToolRuntime(factory()), mode) if factory is not None else (NoSystemRuntime(), mode)
     if mode == "real" and connection is not None:
-        return ToolRuntime(client_factory(connection, _secret(conn, tenant_id))), mode
+        secret = _live_secret(conn, tenant_id, connection)
+        return ToolRuntime(client_factory(connection, secret)), mode
     if mode == "simulado" and connection is not None and connection.openapi:
         return SandboxRuntime(connection.openapi), mode
     return NoSystemRuntime(), "sin_sistema"

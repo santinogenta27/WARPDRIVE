@@ -15,10 +15,10 @@ from contextlib import nullcontext
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from shopify_admin import FakeShopify, product, variant
 from simulated.stack import build_simulated_stack
 
 from app.connectors import shopify
@@ -78,30 +78,17 @@ def test_el_identificador_no_tiene_datos_del_cliente() -> None:
 
 
 def test_shopify_lleva_la_conversacion_al_pedido_y_la_encuentra() -> None:
-    product = {
-        "id": 1,
-        "title": "Campera",
-        "options": [{"name": "Talle"}],
-        "variants": [{"id": 808950810, "sku": "CI-M", "price": "85000.00", "option1": "M"}],
-    }
     order = {
         "name": "#1050",
-        "total_price": "85000.00",
-        "currency": "ARS",
-        "note_attributes": [{"name": "asistente_ref", "value": "ea-abc123def456"}],
+        "cancelledAt": None,
+        "currencyCode": "ARS",
+        "totalPriceSet": {"shopMoney": {"amount": "85000.0", "currencyCode": "ARS"}},
+        "customAttributes": [{"key": "asistente_ref", "value": "ea-abc123def456"}],
     }
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        path = request.url.path.removeprefix("/admin/api/2025-01")
-        if path == "/products.json":
-            return httpx.Response(200, json={"products": [product]})
-        if path == "/shop.json":
-            return httpx.Response(200, json={"shop": {"currency": "ARS"}})
-        if path == "/orders.json":
-            return httpx.Response(200, json={"orders": [order]})
-        return httpx.Response(404, json={})
-
-    runtime = ToolRuntime(shopify.client("mitienda", "shpat_123", httpx.MockTransport(handler)))
+    store = FakeShopify(
+        products=[product("Campera", [variant(808950810, "CI-M", "M", None)])], orders=[order]
+    )
+    runtime = ToolRuntime(shopify.client("mitienda", "shpat_123", store.transport))
     made = runtime.call(
         "POST", "/checkouts", {"items": [{"sku": "CI-M", "quantity": 1}], "ref": "ea-abc123def456"}
     )

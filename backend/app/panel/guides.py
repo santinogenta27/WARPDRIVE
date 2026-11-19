@@ -126,6 +126,62 @@ def whatsapp_guide(*, english: bool | None = None) -> str:
     return WHATSAPP_EN if (language.english() if english is None else english) else WHATSAPP
 
 
+def _scopes() -> str:
+    from app.connectors.shopify_auth import SCOPES
+
+    return ", ".join(f'<span class="mono">{s}</span>' for s in SCOPES)
+
+
+# Crear la app de Shopify en el Dev Dashboard y copiar sus credenciales (decisión 067).
+SHOPIFY_APP = (
+    "<ol>"
+    '<li>Entrá a <span class="mono">dev.shopify.com/dashboard</span> con la cuenta dueña de tu '
+    "tienda. Desde el admin también llegás: <b>Configuración → Apps → Desarrollar apps</b>.</li>"
+    "<li><b>Crear app</b> → <b>Empezar desde el Dev Dashboard</b>. Ponele un nombre, por ejemplo "
+    "<i>Asistente</i>.</li>"
+    "<li>En <b>Versiones → Crear versión</b>, en <b>Acceso → Scopes</b>, marcá solo estos "
+    "permisos: {scopes}. Desmarcá <i>Embed app in Shopify admin</i> y publicá la versión "
+    "(<b>Release</b>).</li>"
+    "<li>En el inicio de la app: <b>Instalar app</b> → elegí tu tienda → <b>Instalar</b>.</li>"
+    "<li>En <b>Configuración</b> de la app copiá el <b>Client ID</b> y el <b>Client Secret</b>."
+    "</li>"
+    "<li>Acá: elegí <i>App del Dev Dashboard</i>, pegá tu tienda (mitienda.myshopify.com), el "
+    "Client ID y el Client Secret, y tocá <b>Conectar Shopify</b>.</li>"
+    "<li>Tocá <b>Probar conexión</b>. Si falta un permiso, la prueba dice cuál: agregalo en una "
+    "versión nueva de la app, publicala y conectá de nuevo.</li>"
+    "</ol><p>El token que entrega Shopify dura 24 horas; lo renovamos solos antes de que venza. "
+    "El Client Secret se guarda cifrado y no se vuelve a mostrar. Si la prueba de herramientas no "
+    "trae el email o el teléfono del cliente, en la app pedí acceso a <b>Protected customer "
+    "data</b> (nombre, email y teléfono).</p>"
+)
+
+SHOPIFY_APP_EN = (
+    "<ol>"
+    '<li>Go to <span class="mono">dev.shopify.com/dashboard</span> with the account that owns '
+    "your store. From the admin: <b>Settings → Apps → Develop apps</b>.</li>"
+    "<li><b>Create app</b> → <b>Start from Dev Dashboard</b>. Name it, for example "
+    "<i>Assistant</i>.</li>"
+    "<li>In <b>Versions → Create version</b>, under <b>Access → Scopes</b>, check only these: "
+    "{scopes}. Uncheck <i>Embed app in Shopify admin</i> and <b>Release</b> the version.</li>"
+    "<li>On the app's home: <b>Install app</b> → pick your store → <b>Install</b>.</li>"
+    "<li>In the app's <b>Settings</b>, copy the <b>Client ID</b> and the <b>Client Secret</b>.</li>"
+    "<li>Here: choose <i>Dev Dashboard app</i>, paste your store (mystore.myshopify.com), the "
+    "Client ID and the Client Secret, and click <b>Connect Shopify</b>.</li>"
+    "<li>Click <b>Test connection</b>. If a scope is missing, the test names it: add it in a new "
+    "app version, release it and connect again.</li>"
+    "</ol><p>Shopify's token lasts 24 hours; we renew it before it expires. The Client Secret is "
+    "stored encrypted and never shown again. If the tool test doesn't bring the customer's email "
+    "or phone, request <b>Protected customer data</b> access in the app (name, email and phone)."
+    "</p>"
+)
+
+
+def shopify_app_guide() -> str:
+    from app.panel import english
+
+    return (SHOPIFY_APP_EN if english.english() else SHOPIFY_APP).format(scopes=_scopes())
+
+
 def guides_html() -> str:
     from app.panel import english
 
