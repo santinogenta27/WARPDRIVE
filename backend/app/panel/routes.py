@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
 from app.audit import log as audit_log
-from app.cases import refund_confirmation, supervision
+from app.cases import feedback, refund_confirmation, supervision
 from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
 from app.companies.connection import ClientFactory, http_client
@@ -761,7 +761,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
                 (case_id,),
             ).fetchone()
             messages = conn.execute(
-                "select role, text, created_at from case_messages where case_id = %s"
+                "select role, text, created_at, id from case_messages where case_id = %s"
                 " order by created_at",
                 (case_id,),
             ).fetchall()
@@ -770,6 +770,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         events = audit_log.reconstruct_case(conn, tenant_id, case_id)
         verdict = audit_log.verify_chain(conn, tenant_id, case_id)
         pending = _pending(conn, tenant_id, case_id)
+        reviewed = feedback.marks(conn, tenant_id, case_id)
         drafts = _draft_cards(
             conn, tenant_id, ctx.csrf, back=f"/panel/casos/{case_id}", case_id=case_id
         )
@@ -777,11 +778,15 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     csrf = ctx.csrf
     roles = {**ROLES, "human": f"Equipo de {company}"}
 
+    # Cada respuesta del asistente se puede marcar como correcta o incorrecta (decisión 073).
+    from app.panel.review_routes import review_form
+
     chat = (
         "".join(
             f'<div class="msg {esc(role)}"><div class="who">{esc(roles.get(role, role))} · '
             f"{local_time(at, '%H:%M')}</div>{esc(mask_codes(text))}</div>"
-            for role, text, at in messages
+            + (review_form(ctx, case_id, mid, reviewed.get(mid)) if role == "agent" else "")
+            for role, text, at, mid in messages
         )
         or '<p class="muted">Sin mensajes.</p>'
     )
