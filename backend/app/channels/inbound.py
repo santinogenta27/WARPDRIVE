@@ -16,6 +16,7 @@ import psycopg
 from app import i18n
 from app.agent.loop import Agent
 from app.audit import log as audit_log
+from app.cases import supervision
 from app.channels.base import (
     IGNORED_TYPES,
     UNSUPPORTED_MESSAGE,
@@ -48,7 +49,8 @@ def handle_inbound(
     *,
     channel: Channel,
     agent: Callable[[psycopg.Connection], Agent],
-) -> None:
+) -> bool:
+    """Devuelve True si la respuesta quedó como borrador del modo supervisado."""
     route = channel_for_number(conn, message.phone_number_id, kind=channel.kind)
     if route is None:  # número desconocido: se registra en el log y se descarta
         logger.warning(
@@ -56,11 +58,11 @@ def handle_inbound(
             channel.kind,
             message.phone_number_id,
         )
-        return
+        return False
     tenant_id = route.tenant_id
     contact_id = touch_contact(conn, tenant_id, message)
     if message.type in IGNORED_TYPES:
-        return
+        return False
     case_id: uuid.UUID | None = None
     if message.type == "text" and message.text.strip():
         result = agent(conn).handle_message(tenant_id, contact_id, message.text)
@@ -69,6 +71,10 @@ def handle_inbound(
         reply = i18n.text("en", "unsupported")
     else:
         reply = UNSUPPORTED_MESSAGE
+    if case_id is not None and supervision.enabled(conn, tenant_id):
+        # Modo supervisado (decisión 072): la respuesta espera a una persona del equipo.
+        supervision.hold(conn, tenant_id, case_id, reply, channel=channel.kind)
+        return True
     try:
         sent_id = channel.send(to=message.sender, body=reply)
     except SendError as error:
@@ -84,7 +90,7 @@ def handle_inbound(
                 "whatsapp_send_failed",
                 {"code": error.code, "in_reply_to": message.wamid, "channel": channel.kind},
             )
-        return
+        return False
     if case_id is not None:
         audit_log.record(
             conn,
@@ -93,3 +99,4 @@ def handle_inbound(
             "whatsapp_sent" if "whatsapp" in channel.kind else f"{channel.kind}_sent",
             {"wamid": sent_id, "in_reply_to": message.wamid, "channel": channel.kind},
         )
+    return False

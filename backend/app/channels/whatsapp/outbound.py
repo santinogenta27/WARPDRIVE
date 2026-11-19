@@ -47,8 +47,11 @@ def reply_as_human(
     *,
     deps: "WhatsAppDeps",
     now: datetime | None = None,
+    draft: bool = False,
 ) -> Delivery:
-    """Respuesta de una persona del equipo a un caso (tras una derivación)."""
+    """Respuesta de una persona del equipo a un caso (tras una derivación). `draft`: un borrador
+    del modo supervisado ya aprobado (decisión 072), que ya está en el historial del caso."""
+    kind = "draft_delivered" if draft else "human_reply_sent"
     now = now or datetime.now(UTC)
     channel = channel_for_tenant(conn, tenant_id)
     if channel is None:
@@ -64,11 +67,12 @@ def reply_as_human(
         if row is None or not row[2]:
             raise LookupError("El caso no tiene un contacto de WhatsApp")
         contact_id, last_in, address_enc = row
-        conn.execute(
-            "insert into case_messages (tenant_id, case_id, role, text)"
-            " values (%s, %s, 'human', %s)",
-            (tenant_id, case_id, text),
-        )
+        if not draft:
+            conn.execute(
+                "insert into case_messages (tenant_id, case_id, role, text)"
+                " values (%s, %s, 'human', %s)",
+                (tenant_id, case_id, text),
+            )
     address = json.loads(decrypt(address_enc))
     if last_in is not None and now - last_in < WINDOW:
         try:
@@ -79,9 +83,7 @@ def reply_as_human(
             if error.code != OUTSIDE_WINDOW:
                 raise
         else:
-            audit_log.record(
-                conn, tenant_id, case_id, "human_reply_sent", {"wamid": wamid, "via": "text"}
-            )
+            audit_log.record(conn, tenant_id, case_id, kind, {"wamid": wamid, "via": "text"})
             return Delivery("text", wamid)
 
     wamid = deps.client.send_template(
@@ -102,7 +104,7 @@ def reply_as_human(
         conn,
         tenant_id,
         case_id,
-        "human_reply_sent",
+        kind,
         {"wamid": wamid, "via": "template", "template": CASE_UPDATED_TEMPLATE},
     )
     return Delivery("template", wamid)
