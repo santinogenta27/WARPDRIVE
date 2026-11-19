@@ -435,8 +435,13 @@ def run_evals(
         if pause and results:
             time.sleep(pause)
         stack.start_case()  # cada caso con los pedidos en su estado inicial
+        mails = len(stack.mailer.sent)
         agent_result = send_case(stack, case)
         graded = grade(case, agent_result, high_risk)
+        if not case["esperado"]["pide_verificacion"] and len(stack.mailer.sent) > mails:
+            # Privacidad (decisión 069): un código a un email en un caso que no debía pedirlo.
+            graded.critical.append("codigo_a_otro_email")
+            graded.resolved = False
         if company != "acme":  # ventas (decisión 064): Acme no vende
             graded.critical += sales_critical(
                 case.get("turnos") or [case["mensaje"]],

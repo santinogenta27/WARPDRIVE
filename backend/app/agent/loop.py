@@ -140,6 +140,20 @@ EMAIL_LEAD = re.compile(
     # En inglés: "my email is", "here's my email:", "email address:".
     r"|(?i:\b(?:here(?:'s|\s+is)\s+)?(?:my\s+)?e-?mail(?:\s+address)?\s*(?:is|:)?)"
 )
+# Pide datos de otra persona por su email (decisión 069): "los pedidos de x@", "the orders of
+# x@", "el cliente x@", "x@'s address". A ese email no se le manda ningún código.
+_DATA_WORDS = (
+    r"pedidos?|compras?|direcci\w*|datos|tel[eé]fono|celular|cuenta|historial|env[ií]os?"
+    r"|orders?|address(?:es)?|phone|account|details|info\w*|purchases?|shipments?"
+)
+THIRD_PARTY_EMAIL = re.compile(
+    rf"(?i)(?<!\bmis\s)(?<!\bmi\s)(?<!\bmy\s)\b(?:{_DATA_WORDS})\b[^@\n]{{0,40}}?"
+    r"\b(?:de|del|of|for|from)\s+(?:(?:el|la|los|the)\s+)?(?:\S+\s+)?\S+@"
+    r"|\b(?:cliente|clienta|customer|usuari[oa]|user|persona|person)\s+\S+@"
+    r"|\S+@\S+\s+(?:ordered|bought|purchased|compr[oó]|pidi[oó])\b"
+    r"|\S+@\S+?'s\b"
+)
+OWN_EMAIL = re.compile(r"(?i)\b(?:mi|my)\s+(?:e-?mail|mail|correo)\b")
 # El modelo le pide al cliente un dato personal en lugar de usar la herramienta (que dispara la
 # verificación por código): se reemplaza por el flujo de verificación.
 ASKS_PERSONAL_DATA = re.compile(
@@ -478,6 +492,10 @@ class Agent:
             return self._escalate(
                 turn, "Tope de gasto mensual alcanzado.", {"tipo": "tope_de_gasto"}
             )
+        if not contact.verified and self._asks_about_someone_else(turn, company):
+            # Privacidad (decisión 069): el email de otra persona nunca recibe un código.
+            self._audit(turn, "classified", {"case_type": NOT_ALLOWED})
+            return self._finish(turn, "responder", turn.say("refusal"))
         pending: email_code.Verification | None = None
         if not contact.verified:
             pending = email_code.open_verification(self._conn, tenant_id, contact_id)
@@ -505,6 +523,35 @@ class Agent:
             closing.resolve(self._conn, tenant_id, case_id, "El cliente confirmó.")
             return result
         return self._respond(turn, company, tone)
+
+    def _asks_about_someone_else(self, turn: _Turn, company: str) -> bool:
+        """El mensaje trae un email y pide datos de otra persona (decisión 069). Primero un
+        control en código; si el email viene con una consulta, también el clasificador. Con un
+        email y sin negativa, el turno sigue por la verificación, que no vuelve a clasificar."""
+        if email_code.EMAIL.search(turn.text) is None:
+            return False
+        if THIRD_PARTY_EMAIL.search(turn.text) and not OWN_EMAIL.search(turn.text):
+            return True
+        rest = EMAIL_LEAD.sub("", email_code.EMAIL.sub("", turn.text)).strip(" ,.;:-?!¿¡")
+        if len(rest.split()) < 2:
+            return False  # solo el email: es el suyo para verificarse
+        classification = turn.classification
+        turn.classification = None
+        if classification is None:
+            case_types = self._active_case_types(turn.tenant_id)
+            history = self._history(turn.tenant_id, turn.case_id)
+            classification = classify(
+                self._llm,
+                tenant_id=turn.tenant_id,
+                case_id=turn.case_id,
+                company=company,
+                message=turn.text,
+                case_types={name: goal for name, (goal, _) in case_types.items()},
+                previous=next((t for role, t in reversed(history) if role == "asistente"), None),
+                language=turn.lang,
+            )
+        self._audit_model_call(turn, "clasificador", classification.response)
+        return classification.label == NOT_ALLOWED
 
     def _csat_answer(
         self, tenant_id: uuid.UUID, contact: ContactContext, text: str, tone: str, lang: str
