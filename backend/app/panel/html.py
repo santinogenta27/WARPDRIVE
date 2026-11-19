@@ -119,6 +119,8 @@ NOTICES = {
     "aprobado": "Solicitud aprobada",
     "fallo": "Aprobada, pero el sistema de la empresa no pudo completarla",
     "rechazado": "Solicitud rechazada",
+    "borrador-enviado": "Respuesta enviada al cliente",
+    "borrador-rechazado": "Borrador rechazado · no se envió nada",
 }
 
 

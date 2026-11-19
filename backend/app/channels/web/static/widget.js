@@ -24,7 +24,7 @@
       send: "Enviar", chatWith: "Chat con ", openWith: "Abrir el chat con ", closeWith: "Cerrar el chat con ",
       unread: " sin leer", team: function (n) { return "Equipo de " + n; }, notSent: "No se envió. ",
       retry: "Reintentar", suggestions: "Preguntas frecuentes", loading: "Cargando el chat…",
-      typing: "Pensando…", offlineBar: "Sin conexión. Revisá tu internet para seguir.",
+      typing: "Pensando…", writing: "Escribiendo…", offlineBar: "Sin conexión. Revisá tu internet para seguir.",
       left: function (r) { return r === 1 ? "Te queda 1 mensaje" : "Te quedan " + r + " mensajes"; },
       noConnect: "No pudimos conectar con el asistente.",
       askReset: "¿Empezar una conversación nueva? Esta se borra de este dispositivo.",
@@ -39,7 +39,7 @@
       send: "Send", chatWith: "Chat with ", openWith: "Open the chat with ", closeWith: "Close the chat with ",
       unread: " unread", team: function (n) { return n + " team"; }, notSent: "Not sent. ",
       retry: "Retry", suggestions: "Suggested questions", loading: "Loading the chat…",
-      typing: "Thinking…", offlineBar: "You're offline. Check your connection to continue.",
+      typing: "Thinking…", writing: "Typing…", offlineBar: "You're offline. Check your connection to continue.",
       left: function (r) { return r === 1 ? "1 message left" : r + " messages left"; },
       noConnect: "We couldn't reach the assistant.",
       askReset: "Start a new conversation? This one will be cleared from this device.",
@@ -436,6 +436,8 @@ transition-duration:.01ms!important}
     if (!state.items.length && cfg.suggestions.length) chips(cfg.suggestions, T.suggestions);
     else if (last && last.replies && !state.locked) chips(last.replies, T.answers);
     fresh.hidden = !state.items.length;
+    typing = null;  // el log se rehízo: el indicador, si hace falta, se vuelve a agregar
+    if (state.awaiting) showTyping(T.writing);
     refresh();
     scrollDown();
   }
@@ -459,12 +461,13 @@ transition-duration:.01ms!important}
     log.querySelector(".sr").textContent = T.loading;
     form.hidden = true;
   }
-  // El widget no recibe los pasos del agente en vivo: el texto es siempre "Thinking…".
-  function showTyping() {
-    if (typing) return;
+  // El widget no recibe los pasos del agente en vivo: el texto es "Thinking…". En el modo
+  // supervisado, mientras una persona revisa la respuesta, "Typing…" (decisión 072).
+  function showTyping(label) {
+    if (typing) { typing.querySelector(".label").textContent = label || T.typing; return; }
     typing = el("div", "row agent typing");
     typing.appendChild(el("i", "mark")).setAttribute("aria-hidden", "true");
-    typing.appendChild(el("span", "label", T.typing));
+    typing.appendChild(el("span", "label", label || T.typing));
     log.appendChild(typing);
     scrollDown();
   }
@@ -576,10 +579,11 @@ transition-duration:.01ms!important}
     busy = true;
     refresh();
     showTyping();
-    var answered = false, failure = null;
+    var answered = false, failure = null, held = false;
     post(text, false).then(function (response) {
       return readEvents(response, function (name, data) {
         if (name === "typing") showTyping();
+        else if (name === "held") { answered = true; held = true; }
         else if (name === "message") { answered = true; hideTyping(true); add("agent", data.text, data.replies); }
         else if (name === "done") {
           var today = typeof data.remaining_today === "number" ? data.remaining_today : data.remaining;
@@ -594,7 +598,7 @@ transition-duration:.01ms!important}
         } else if (name === "error") failure = data.message;
       });
     }).catch(function () { failure = failure || T.noConnect; }).then(function () {
-      hideTyping();
+      if (held) { state.awaiting = true; save(); showTyping(T.writing); } else hideTyping();
       busy = false;
       if (failure && !answered) {  // el mensaje no se descontó: se puede reintentar
         item.failed = true;
@@ -624,8 +628,14 @@ transition-duration:.01ms!important}
         seen.push(m.id);
         state.seenHuman = seen.slice(-50);
         hideTyping(true);
-        add("human", m.text);
+        add(m.role === "agent" ? "agent" : "human", m.text);
       });
+      // Modo supervisado: "Typing…" mientras la respuesta espera a una persona del equipo.
+      if (!busy) {
+        if (data.typing) showTyping(T.writing);
+        else if (state.awaiting) hideTyping();
+        if (state.awaiting !== !!data.typing) { state.awaiting = !!data.typing; save(); }
+      }
     }).catch(function () { /* sin conexión: se reintenta en la próxima vuelta */ }).then(function () { polling = false; });
   }
   setInterval(poll, 6000);
