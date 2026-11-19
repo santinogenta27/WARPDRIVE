@@ -18,7 +18,7 @@ import psycopg
 import yaml
 
 from app import i18n
-from app.agent import conduct, presentable, prompt
+from app.agent import conduct, manipulation, presentable, prompt
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
     CHAT,
@@ -639,6 +639,25 @@ class Agent:
             return self._escalate(
                 turn, "El cliente pidió hablar con una persona.", {"tipo": "pidio_persona"}
             )
+        claimed_role = label == NOT_ALLOWED and manipulation.on_own_order(text)
+        if claimed_role:
+            # Falso gerente (decisión 070): un cargo o "saltate la política" sobre un pedido
+            # puntual se atiende como cualquier consulta de ese pedido. Se clasifica el tema sin
+            # el cargo; solo vale un tipo de caso activo, y los controles son los de siempre.
+            topic = classify(
+                self._llm,
+                tenant_id=tenant_id,
+                case_id=case_id,
+                company=company,
+                message=manipulation.topic(text),
+                case_types={name: goal for name, (goal, _) in case_types.items()},
+                previous=previous,
+                language=turn.lang,
+            )
+            self._audit_model_call(turn, "clasificador", topic.response)
+            if topic.label in case_types:
+                classification, label = topic, topic.label
+                self._audit(turn, "classified", {"case_type": label, "cargo_declarado": True})
         if label == NOT_ALLOWED:  # inyección o datos en masa: negativa fija, sin modelo ni derivar
             return self._finish(turn, "responder", turn.say("refusal"))
         if label == CHAT:  # charla: responde solo, sin documentos, herramientas ni derivación
@@ -669,6 +688,9 @@ class Agent:
         retained = self._retention_note(turn, tool_names)
         if retained:
             instructions = f"{instructions.strip()}\n{retained}"
+        if claimed_role:
+            note = manipulation.NOTE["en" if turn.lang == "en" else "es"]
+            instructions = f"{instructions.strip()}\n{note}"
         manifests = self._guardian.manifests(tenant_id, tool_names)
         turn.needs_identity = any(m.get("requires_verified_contact") for m in manifests)
         # La verificación se pide recién cuando el agente intenta usar datos de la cuenta (el

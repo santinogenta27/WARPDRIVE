@@ -349,6 +349,11 @@ _RULES = [
     (r"ignor\w* (tus|las) instrucciones|todos los (pedidos|clientes)", "pedido_no_permitido"),
     # Datos de otro cliente por su email (decisión 048).
     (r"(pedidos|direcci\w+) de (los pedidos de )?\S+@|orders of \S+@", "pedido_no_permitido"),
+    # Falso gerente (decisión 070): como el modelo real en el QA, lo toma como no permitido.
+    (
+        r"soy (el|la) (gerente|encargad[oa])|saltate la pol|store manager|override the policy",
+        "pedido_no_permitido",
+    ),
     (r"receta|poema|\bpoem\b|recipe", "conversacion_general"),  # fuera de tema
     (
         r"ignore (your|all|the|previous) \w*\s*instructions|all (the )?(orders|customers)",
