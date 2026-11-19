@@ -1382,7 +1382,7 @@ queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Idioma</h2>{_language_html(ctx, language)}
 <h2>Modo supervisado</h2>{_supervised_html(ctx, supervised)}
 <h2>Modelo y gasto</h2>{model}
-<h2>Reglas de atención</h2>{attention}
+<h2 id="reglas">Reglas de atención</h2>{attention}
 <h2>Ventas cruzadas</h2>{offers}
 <h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
 <h2>Herramientas</h2>{_tools_html(ctx, tools)}
@@ -1391,7 +1391,7 @@ queda activo sin tu aprobación.</p>{_notice(request)}
         _whatsapp_html(ctx, request, whatsapp_setup)
     }
 <h2>Chat de prueba</h2><div class="card">{chat}</div>
-<h2>Widget para tu sitio</h2>{
+<h2 id="widget">Widget para tu sitio</h2>{
         _widget_html(ctx, request, slug, brand)
         if slug
         else '<p class="muted">Esta empresa no tiene un chat web.</p>'
