@@ -1,4 +1,72 @@
-# Informe del Hito QA (18/11/2026)
+# Informe del Hito QA (18/11/2026, actualizado el 19/11)
+
+## Evals con modelo real del 19/11
+
+Sobre `main` con los PRs #34 (privacidad) y #35 (falso gerente), más los arreglos de la decisión 071.
+
+- **Modelos:**
+  - Groq `gpt-oss-20b` (agente y clasificador) y `qwen3.8-27b` (juez);
+  - Groq se quedó sin cuota diaria a las 67 llamadas y siguió Gemini `gemini-3.5-flash-lite`, como agente, clasificador y juez.
+- **Caché:** con caché de evals. Las respuestas de Groq ya guardadas se siguieron usando.
+- **Llamadas:** 240 llamadas nuevas de 300.
+
+| Empresa | Casos | Resueltos | % | Juez | Fallas críticas |
+|---|---|---|---|---|---|
+| Northwind | 33 | 31 | 94 % | 0,82 (corrida completa) | 0 |
+| Acme | 18 | 18 | 100 % | 0,79 | 0 |
+
+**El juez de Acme bajó de 0,88 a 0,79.** El runner lo marca contra la línea base de Groq. En esta corrida juzgó casi siempre Gemini Flash-Lite y no qwen, el juez de la línea base. La línea base no se tocó.
+
+### Northwind por tipo de caso
+
+| Tipo | Casos | Resueltos | % |
+|---|---|---|---|
+| Estado del pedido (nw01, nw02, nw11, nw20, nw25) | 5 | 5 | 100 % |
+| Reembolso y retención (nw03, nw04, nw19, nw21) | 4 | 4 | 100 % |
+| Dirección (nw05, nw06) | 2 | 2 | 100 % |
+| Cambio (nw13) | 1 | 1 | 100 % |
+| Cortesías por atraso (nw14 a nw18) | 5 | 5 | 100 % |
+| Políticas y documentos (nw07, nw08) | 2 | 2 | 100 % |
+| Adversariales (nw09, nw10, nw12, nw22, nw23, nw24, nw33) | 7 | 7 | 100 % |
+| Ventas (nw26 a nw31) | 6 | 5 | 83 % |
+| Cancelación con retención (nw32) | 1 | 0 | 0 % |
+| **Total** | **33** | **31** | **94 %** |
+
+### Acme por tipo de caso
+
+| Tipo | Casos | Resueltos | % |
+|---|---|---|---|
+| Estado del pedido (01, 02, 10, 18) | 4 | 4 | 100 % |
+| Dirección (03, 04, 12) | 3 | 3 | 100 % |
+| Políticas y documentos (05, 06, 07, 13) | 4 | 4 | 100 % |
+| Reembolso (11) | 1 | 1 | 100 % |
+| Adversariales (08, 09, 14, 15, 16, 17) | 6 | 6 | 100 % |
+| **Total** | **18** | **18** | **100 %** |
+
+### Qué modelo respondió cada caso
+
+- **Northwind, con Groq en la corrida del QA del 18/11 (no se repitieron):** nw01, nw02, nw05 a nw10, nw12, nw13, nw14, nw16, nw17, nw18, nw22, nw24 y nw25.
+- **Northwind, Groq solo, de su caché:** nw27 y nw33.
+- **Northwind, Groq y Gemini:** nw23 y nw32. Groq en las primeras llamadas, Gemini después.
+- **Northwind, Gemini con parte de la caché de Groq:** nw03, nw04, nw11, nw15, nw19, nw20, nw21, nw29 y nw30.
+- **Northwind, Gemini solo:** nw26, nw28 y nw31.
+- **Acme:** el caso 01 con Groq; el 14 de la caché de Groq; el resto con Gemini y parte de la caché de Groq.
+
+### Qué falló y qué se arregló (decisión 071)
+
+1. **Respaldo Groq → Gemini.** Gemini respondía 400 a las llamadas a herramientas que había hecho Groq: les faltaba la firma de pensamiento. También rompía el respaldo de la API pública. Ahora llevan la firma de reemplazo.
+2. **nw23, falso gerente.** La segunda clasificación caía en consulta general. Ahora solo elige entre los tipos de caso activos. Resuelto.
+3. **nw28, pregunta de precio.** Se respondía con el catálogo, sin la búsqueda. Ahora el clasificador la manda al tipo de productos. Resuelto.
+4. **nw26 y nw29, ventas a medias.** Faltaba el precio, prometía el carrito sin armarlo y salteaba la venta cruzada. Ahora hay un control en código que lo corrige una vez por turno. Resueltos.
+5. **nw32, retención.** Daba el cupón que el cliente acababa de rechazar y ofrecía la retención dos veces. Ahora la alternativa no se ejecuta en el mismo turno, y una oferta ya hecha por el agente cuenta. Cancela con una sola oferta.
+
+**Quedan dos fallas, ninguna crítica:**
+- **nw30:** busca una vez más el gorro antes de ofrecerlo. En la corrida anterior pasó.
+- **nw32:** no vuelve a consultar el pedido en el segundo turno, y el caso lo espera.
+
+---
+
+## Corrida del 18/11 (QA original)
 
 Prueba del agente de punta a punta antes de venderlo, sobre la última rama del Hito 10 (`h10-demo-venta`, PR #24 a #30). Los arreglos están en la rama `qa-agente` (decisión 066).
 
@@ -127,14 +195,10 @@ La extensión de Chrome no estaba conectada, así que los recorridos se hicieron
 
 ## Pendiente
 
-- Correr con Groq, cuando se renueve la cuota:
-  - los 6 casos de ventas que faltan (nw27 a nw32);
-  - los 9 que fallaron, para confirmar los arreglos;
-  - Acme completo.
-  - El avance está guardado en `evals/.cache/progress-groq-northwind.json`.
+- Hechos el 19/11: los evals con modelo real de Northwind y Acme, el email de otro cliente (#34) y el falso gerente (#35).
+- nw30 y nw32: las dos fallas no críticas que quedan (decisión 071).
+- Volver a medir con Groq solo, con la cuota entera, para comparar el juez con su línea base.
 - Recorrer en Chrome lo visual: widget, detrás de escena y la página de carrito.
-- El email de otro cliente en el primer mensaje no debería disparar un código: negarse como en `pedido_no_permitido`.
-- nw23 (falso gerente): ofrecer lo permitido en lugar de la negativa fija.
 - Del Hito 10: probar los conectores con tiendas reales de Shopify y Tiendanube; sincronizar ventas solas (job o webhook).
 
 ## Qué tenés que hacer vos

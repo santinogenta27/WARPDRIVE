@@ -232,6 +232,39 @@ def test_devuelve_resultados_y_firma_de_pensamiento_en_el_turno_siguiente() -> N
     assert second.tool_calls == []
 
 
+def test_una_llamada_que_no_hizo_gemini_lleva_la_firma_de_reemplazo() -> None:
+    """Groq hizo la llamada antes del respaldo (o vino de la caché): sin firma, Gemini 3
+    responde 400 "Function call is missing a thought_signature"."""
+    calls: list[tuple[str, dict[str, Any]]] = []
+    provider = GeminiProvider(_gemini([TEXT_REPLY], calls))
+    provider.create(
+        model="claude-sonnet-5-5",
+        messages=[
+            {"role": "user", "content": "¿Dónde está mi pedido 1001?"},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "fc_groq_1",
+                        "name": "consultar_pedido",
+                        "input": {"pedido": "1001"},
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "fc_groq_1", "content": "{}"}],
+            },
+        ],
+        max_tokens=1024,
+        tools=[CONSULTAR],
+    )
+    part = calls[0][1]["contents"][1]["parts"][0]
+    assert part["functionCall"]["name"] == "consultar_pedido"
+    assert part["thoughtSignature"] == "skip_thought_signature_validator"
+
+
 def test_embedder_gemini_marca_documentos_y_consultas_y_registra_uso() -> None:
     calls: list[tuple[str, dict[str, Any]]] = []
 

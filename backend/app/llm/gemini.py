@@ -40,6 +40,9 @@ REFUSAL_REASONS = {"SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "RECITAT
 RETRYABLE_STATUS = {408, 429, 500, 502, 503, 504}
 # Id propio para llamadas que Gemini devuelve sin id: no se le reenvía.
 LOCAL_ID_PREFIX = "gemini_local_"
+# Firma de reemplazo para llamadas a herramientas que no generó Gemini (ai.google.dev, "Thought
+# signatures"): sin ella, Gemini 3 responde 400 en el turno siguiente.
+FOREIGN_CALL_SIGNATURE = "skip_thought_signature_validator"
 
 
 class GeminiQuotaExhausted(QuotaExhausted):
@@ -290,6 +293,11 @@ def _contents(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 continue
             if block.get("thought_signature"):
                 part["thoughtSignature"] = block["thought_signature"]
+            elif "functionCall" in part:
+                # Una llamada que no generó Gemini (la hizo Groq antes del respaldo, o viene de
+                # la caché) no trae firma, y Gemini 3 rechaza la conversación con un 400. La
+                # documentación de Gemini acepta esta firma de reemplazo para ese caso.
+                part["thoughtSignature"] = FOREIGN_CALL_SIGNATURE
             parts.append(part)
         if parts:
             role = "model" if message["role"] == "assistant" else "user"
