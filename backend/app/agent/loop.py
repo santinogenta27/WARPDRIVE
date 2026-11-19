@@ -55,6 +55,16 @@ from app.policy.guardian import (
 from app.rag.search import SearchResult, hybrid_search
 from app.sales import upsell
 
+RETENTION_OFFER_ONLY = {
+    "es": (
+        "Esta alternativa se acaba de ofrecer: ofrecela con palabras y hacela solo si el cliente "
+        "la acepta en su próximo mensaje."
+    ),
+    "en": (
+        "This alternative was just offered: offer it in words and do it only if the customer "
+        "accepts it in their next message."
+    ),
+}
 RETENTION_WAIT = {
     "es": "Las alternativas se acaban de ofrecer: respondé y esperá lo que diga el cliente.",
     "en": "The alternatives were just offered: answer and wait for what the customer says.",
@@ -339,6 +349,9 @@ class _Turn:
     sales: bool = False  # el turno ofrece la búsqueda de productos (decisión 059)
     retained: set[str] = field(default_factory=set)  # retención ofrecida en el turno (062)
     asked_given_order: bool = False  # ya se corrigió que pidiera el pedido dado (066)
+    offers: list[str] = field(default_factory=list)  # venta cruzada disponible (decisión 061)
+    alternatives: set[str] = field(default_factory=set)  # de la retención de este turno (071)
+    sales_nudged: bool = False  # ya se corrigió una respuesta de ventas a medias (071)
     # Clasificación ya hecha al decidir si se reabre un caso resuelto (no se clasifica dos veces).
     classification: Classification | None = None
     tone: str = "rioplatense"
@@ -700,6 +713,9 @@ class Agent:
                 case_types={name: goal for name, (goal, _) in case_types.items()},
                 previous=previous,
                 language=turn.lang,
+                # Con las demás etiquetas, el modelo real tomaba "un cupón del 50 %" como
+                # consulta general (sin herramientas) y quedaba la negativa fija.
+                only_case_types=True,
             )
             self._audit_model_call(turn, "clasificador", topic.response)
             if topic.label in case_types:
@@ -817,6 +833,7 @@ class Agent:
         allowed = {m["name"] for m in manifests} | ({CANCEL_PENDING} if pending else set())
         allowed |= {upsell.OFFER_PRODUCT} if offers else set()
         turn.sales = any(is_product_tool(m) for m in manifests)
+        turn.offers = [r.product for r in offers]
         try:
             return self._loop(turn, system, messages, tools, allowed, chat=chat_fallback)
         except _ChatFallback:
@@ -983,6 +1000,23 @@ class Agent:
                         correction = conduct.GIVEN_ORDER_CORRECTIONS[turn.lang].format(order=given)
                         messages.append(_correction(final_id, correction))
                         continue
+                    pending_sale = (
+                        _check(self._sales_correction, turn, said)
+                        if turn.sales and not turn.sales_nudged
+                        else None
+                    )
+                    if pending_sale:
+                        # Ventas a medias (decisión 071): sin precio, un carrito prometido o la
+                        # venta cruzada salteada. Se corrige una sola vez por turno.
+                        self._audit(
+                            turn,
+                            "grounding_rejected",
+                            {"reason": "Venta a medias.", "rejected_message": final_input},
+                        )
+                        turn.sales_nudged = True
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append(_correction(final_id, pending_sale))
+                        continue
                     if turn.tone_retries == 0 and _check(
                         _lacks_empathy, turn.text, said, turn.lang
                     ):
@@ -1059,6 +1093,15 @@ class Agent:
                             {"error": RETENTION_WAIT[turn.lang]},
                             reason=RETENTION_WAIT["es"],
                         )
+                    elif call.name in turn.alternatives:
+                        # Retención (decisión 071): las alternativas recién ofrecidas se ofrecen
+                        # con palabras; se hacen solo si el cliente las acepta. El modelo real
+                        # daba el cupón aunque el cliente acababa de decir "no, gracias".
+                        decision = GuardDecision(
+                            "denied",
+                            {"error": RETENTION_OFFER_ONLY[turn.lang]},
+                            reason=RETENTION_OFFER_ONLY["es"],
+                        )
                     elif call.name == upsell.OFFER_PRODUCT and call.name in allowed:
                         decision = self._guardian.offer_product(
                             tenant_id=turn.tenant_id,
@@ -1075,8 +1118,30 @@ class Agent:
                             tool_input=call.input,
                             allowed=allowed,
                         )
+                    if decision.reason == RETENTION_REASON and self._offered_before(turn):
+                        # El agente ya ofreció la alternativa en su mensaje anterior y el cliente
+                        # insiste (decisión 071): la oferta queda hecha y la acción sigue, sin
+                        # ofrecerla dos veces. El guardián controla todo lo demás.
+                        self._audit(turn, "retention_already_offered", {"tool": call.name})
+                        # La oferta de retención queda registrada, y después la acción.
+                        turn.decisions.append(decision)
+                        turn.tool_calls.append(
+                            ToolExecution(call.name, call.input, decision.status, decision.reason)
+                        )
+                        decision = self._guardian.execute(
+                            tenant_id=turn.tenant_id,
+                            case_id=turn.case_id,
+                            contact=turn.contact,
+                            tool_name=call.name,
+                            tool_input=call.input,
+                            allowed=allowed,
+                        )
                     if decision.reason == RETENTION_REASON:
                         turn.retained.add(call.name)
+                        turn.alternatives |= {
+                            str(a.get("herramienta"))
+                            for a in decision.result.get("alternativas") or []
+                        }
                     turn.decisions.append(decision)
                     turn.tool_calls.append(
                         ToolExecution(call.name, call.input, decision.status, decision.reason)
@@ -1247,6 +1312,27 @@ class Agent:
         self._audit(turn, "approval_message_fixed", {"reason": reason})
         return self._finish(
             turn, "pedir_aprobacion", turn.say("approval_pending"), approval_id=pending.approval_id
+        )
+
+    def _offered_before(self, turn: _Turn) -> bool:
+        """El mensaje anterior del agente ya ofreció una alternativa (cupón, crédito, cambio) y
+        el cliente insiste en lo que pidió."""
+        if not conduct.insists(turn.text):
+            return False
+        history = self._history(turn.tenant_id, turn.case_id)
+        previous = next((t for role, t in reversed(history) if role == "asistente"), "")
+        return conduct.offers_alternative(previous)
+
+    def _sales_correction(self, turn: _Turn, said: str) -> str | None:
+        executed = [d for d in turn.decisions if d.status == "executed"]
+        return conduct.sales_correction(
+            said,
+            [d.result for d in executed],
+            # El carrito armado devuelve un link de compra.
+            cart_built=any("http" in json.dumps(d.result, default=str) for d in executed),
+            offers=turn.offers,
+            offered=any(c.name == upsell.OFFER_PRODUCT for c in turn.tool_calls),
+            language=turn.lang,
         )
 
     def _check_grounding(self, turn: _Turn, data: dict[str, Any]) -> GroundingVerdict:

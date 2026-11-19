@@ -36,14 +36,20 @@ def classify(
     previous: str | None = None,
     language: str = "es",
     current: str | None = None,
+    only_case_types: bool = False,
 ) -> Classification:
     """Devuelve el nombre de un tipo de caso activo, `consulta_general`,
     `conversacion_general`, `derivar_humano`, `pedido_no_permitido` u `otro`. `previous`: el
     último mensaje del asistente, para entender respuestas cortas ("el 1001", "sí"). `language`:
     el idioma del prompt (decisión 036); las etiquetas son las mismas. `current`: el tipo de
     caso de la conversación hasta ahora, para seguir el tema en una respuesta corta, una opción
-    elegida o un cambio de idea (decisión 040)."""
-    labels = [*case_types, GENERAL, CHAT, ASK_FOR_HUMAN, NOT_ALLOWED, OTHER]
+    elegida o un cambio de idea (decisión 040). `only_case_types`: el tema entre los tipos de
+    caso activos u `otro` (falso gerente, decisión 070)."""
+    labels = (
+        [*case_types, OTHER]
+        if only_case_types
+        else [*case_types, GENERAL, CHAT, ASK_FOR_HUMAN, NOT_ALLOWED, OTHER]
+    )
     catalog = "\n".join(f"- {name}: {goal}" for name, goal in case_types.items())
     system = (
         _english_system(company, catalog) if language == "en" else _spanish_system(company, catalog)
@@ -82,7 +88,9 @@ def _english_system(company: str, catalog: str) -> str:
         f"- {GENERAL}: a general question about the store or its policies (shipping, delivery "
         "times, costs, sizes, exchanges, returns, warranty, discounts, payments, hours) that "
         "doesn't ask for data or actions on one of the customer's specific orders and doesn't "
-        "fit better in a type above\n"
+        "fit better in a type above. A question about a specific product (its price, sizes, "
+        "colors or stock) isn't general: it goes to the case type that helps find products, if "
+        "there is one\n"
         f"- {CHAT}: greeting, goodbye, thanks, small talk, a question about the assistant (if "
         "it's a bot, who they're talking to, what it can do), a topic or request unrelated to "
         "the store (homework, a recipe, the weather) or a general complaint with no specific "
@@ -109,7 +117,9 @@ def _spanish_system(company: str, catalog: str) -> str:
         f"tildes, con abreviaturas o errores de tipeo). Tipos de caso:\n{catalog}\n"
         f"- {GENERAL}: pregunta general sobre la tienda o sus políticas (envíos, plazos, "
         "costos, talles, cambios, devoluciones, pagos, horarios) que no pide datos ni acciones "
-        "sobre un pedido puntual del cliente y no encaja mejor en un tipo de arriba\n"
+        "sobre un pedido puntual del cliente y no encaja mejor en un tipo de arriba. Una "
+        "pregunta sobre un producto puntual (su precio, talles, colores o stock) no es general: "
+        "va al tipo de caso que ayuda a encontrar productos, si lo hay\n"
         f"- {CHAT}: saludo, despedida, agradecimiento, charla, pregunta sobre el asistente (si "
         "es un bot, con quién habla, qué puede hacer), tema o pedido ajeno a la tienda (una "
         'tarea, una receta, el clima) o queja general sin un pedido puntual ("nunca '
