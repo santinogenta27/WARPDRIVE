@@ -261,7 +261,7 @@ def test_el_cliente_del_chat_web_ve_los_mensajes_del_equipo(client: TestClient) 
     client.post(
         "/chat/messages", json={"session": session, "text": "quiero hablar con una persona"}
     )
-    assert client.get("/chat/updates", params={"session": session}).json() == {"messages": []}
+    assert client.get("/chat/updates", params={"session": session}).json() == {"messages": [], "typing": False}
     login(client)
     inbox = client.get("/panel/casos").text
     case_id = re.findall(r'href="/panel/casos/([0-9a-f-]{36})"', inbox)[0]
@@ -273,7 +273,7 @@ def test_el_cliente_del_chat_web_ve_los_mensajes_del_equipo(client: TestClient) 
     updates = client.get("/chat/updates", params={"session": session}).json()["messages"]
     assert [m["text"] for m in updates] == ["Hola, soy Ana del equipo."]
     later = client.get("/chat/updates", params={"session": session, "after": updates[0]["at"]})
-    assert later.json() == {"messages": []}
+    assert later.json() == {"messages": [], "typing": False}
 
 
 def test_el_reporte_de_preparacion_muestra_tipos_volumen_y_porcentaje(

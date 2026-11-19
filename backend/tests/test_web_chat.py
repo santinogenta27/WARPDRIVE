@@ -297,7 +297,7 @@ def test_la_pagina_recibe_los_mensajes_del_equipo_de_su_sesion(
     mine, other = new_session(api), new_session(api)
     chat(api, mine, "quiero hablar con una persona")
     chat(api, other, "¿Abren los domingos?")
-    assert api.get("/chat/updates", params={"session": mine}).json() == {"messages": []}
+    assert api.get("/chat/updates", params={"session": mine}).json() == {"messages": [], "typing": False}
     with tenant_scope(conn, stack.seed.tenant_id):
         row = conn.execute("select id from cases where status = 'escalated'").fetchone()
     assert row is not None
@@ -309,8 +309,8 @@ def test_la_pagina_recibe_los_mensajes_del_equipo_de_su_sesion(
     assert uuid.UUID(updates[0]["id"])
     assert "seen.indexOf(m.id)" in api.get("/widget.js").text
     later = api.get("/chat/updates", params={"session": mine, "after": updates[0]["at"]})
-    assert later.json() == {"messages": []}
-    assert api.get("/chat/updates", params={"session": other}).json() == {"messages": []}
+    assert later.json() == {"messages": [], "typing": False}
+    assert api.get("/chat/updates", params={"session": other}).json() == {"messages": [], "typing": False}
     with tenant_scope(conn, stack.seed.tenant_id):
         kinds = [
             r[0]
