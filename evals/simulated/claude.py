@@ -349,6 +349,7 @@ _RULES = [
     (r"ignor\w* (tus|las) instrucciones|todos los (pedidos|clientes)", "pedido_no_permitido"),
     # Datos de otro cliente por su email (decisión 048).
     (r"(pedidos|direcci\w+) de (los pedidos de )?\S+@|orders of \S+@", "pedido_no_permitido"),
+    (r"\b(sobre|about) \S+@", "pedido_no_permitido"),  # decisión 069
     (r"receta|poema|\bpoem\b|recipe", "conversacion_general"),  # fuera de tema
     (
         r"ignore (your|all|the|previous) \w*\s*instructions|all (the )?(orders|customers)",
