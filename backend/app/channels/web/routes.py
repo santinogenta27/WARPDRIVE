@@ -469,8 +469,7 @@ def _process(
                 "remaining": MESSAGE_LIMIT - usage.session,
                 "remaining_today": deps.ip_daily_limit - usage.ip,
             }
-        for message in messages:
-            handle_inbound(conn, message, channel=channel, agent=agent)
+        held = sum(handle_inbound(conn, m, channel=channel, agent=agent) for m in messages)
         with tenant_scope(conn, tenant_id):
             conn.execute(
                 "update web_sessions set messages = messages + 1 where token_hash = %s",
@@ -483,6 +482,7 @@ def _process(
         return {
             "remaining": MESSAGE_LIMIT - usage.session - 1,
             "remaining_today": max(deps.ip_daily_limit - usage.ip - 1, 0),
+            "held": held,
         }
 
 
@@ -525,6 +525,10 @@ async def _stream(
         return
     for text in channel.outbox:
         yield _event("message", {"text": text, **quick_replies(text)})
+    if remaining.pop("held", 0):
+        # Modo supervisado (decisión 072): la respuesta espera a una persona del equipo. La
+        # página sigue mostrando "escribiendo…" y la trae de /chat/updates.
+        yield _event("held", {})
     yield _event("done", remaining)
 
 
@@ -561,20 +565,31 @@ def updates(
             raise HTTPException(status_code=401, detail="Sesión inválida") from error
         except OriginNotAllowed as error:
             raise HTTPException(status_code=403, detail=FORBIDDEN) from error
+        contact = hash_address(f"{WEB_PREFIX}{token_hash(session)}")
         with tenant_scope(conn, tenant_id):
+            # Mensajes del equipo y respuestas del modo supervisado ya aprobadas (decisión 072).
             rows = conn.execute(
-                "select m.id, m.text, m.created_at from case_messages m"
+                "select m.id, m.text, m.created_at, m.role from case_messages m"
                 " join cases c on c.id = m.case_id join contacts k on k.id = c.contact_id"
-                " where k.phone_hash = %s and m.role = 'human' and m.created_at > %s"
-                " and c.archived_at is null"
+                " where k.phone_hash = %s and m.created_at > %s and c.archived_at is null"
+                " and (m.role = 'human' or exists (select 1 from reply_drafts d"
+                "  where d.message_id = m.id))"
                 " order by m.created_at limit 20",
-                (hash_address(f"{WEB_PREFIX}{token_hash(session)}"), since),
+                (contact, since),
             ).fetchall()
+            # Una respuesta esperando a una persona: la página muestra "escribiendo…".
+            typing = conn.execute(
+                "select exists (select 1 from reply_drafts d join cases c on c.id = d.case_id"
+                " join contacts k on k.id = c.contact_id where k.phone_hash = %s"
+                " and d.status = 'pending' and c.archived_at is null)",
+                (contact,),
+            ).fetchone()
     return {
         "messages": [
-            {"id": str(message_id), "text": text, "at": at.isoformat()}
-            for message_id, text, at in rows
-        ]
+            {"id": str(message_id), "text": text, "at": at.isoformat(), "role": role}
+            for message_id, text, at, role in rows
+        ],
+        "typing": bool(typing and typing[0]),
     }
 
 

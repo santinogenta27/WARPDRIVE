@@ -96,6 +96,7 @@ transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,0);visibilit
 
 NAV = [
     ("casos", "Casos"),
+    ("mejorar", "Para mejorar"),
     ("aprobaciones", "Aprobaciones"),
     ("onboarding", "Onboarding"),
     ("reporte", "Reporte"),
@@ -119,6 +120,10 @@ NOTICES = {
     "aprobado": "Solicitud aprobada",
     "fallo": "Aprobada, pero el sistema de la empresa no pudo completarla",
     "rechazado": "Solicitud rechazada",
+    "revisada": "Revisión guardada",
+    "eval-creado": "Caso de eval creado · lo prueba el reporte de preparación",
+    "borrador-enviado": "Respuesta enviada al cliente",
+    "borrador-rechazado": "Borrador rechazado · no se envió nada",
 }
 
 

@@ -775,6 +775,90 @@ PHRASES: dict[str, str] = {
     "Cuando el reporte de preparación da el visto bueno, el asistente atiende en tu sitio.": (
         "When the readiness report gives the go-ahead, the assistant serves your site."
     ),
+    # revisión de conversaciones (decisión 073)
+    "Para mejorar": "To improve",
+    "Marcada como correcta": "Marked as correct",
+    "Marcada como incorrecta": "Marked as incorrect",
+    "Revisión de la respuesta": "Review of the reply",
+    "Correcta": "Correct",
+    "Incorrecta": "Incorrect",
+    "Motivo": "Reason",
+    "Motivo (si es incorrecta)": "Reason (if incorrect)",
+    "Información faltante": "Missing information",
+    "Información incorrecta": "Wrong information",
+    "Acción equivocada": "Wrong action",
+    "Debía derivar a una persona": "Should have handed off to a person",
+    "Tono": "Tone",
+    "Otro": "Other",
+    "Guardar revisión": "Save review",
+    "Revisión guardada": "Review saved",
+    "Caso de eval creado · lo prueba el reporte de preparación": (
+        "Eval case created · the readiness report tests it"
+    ),
+    "Esa respuesta no existe.": "That reply doesn't exist.",
+    (
+        "Las respuestas que el equipo marcó como incorrectas. Escribí la respuesta esperada y "
+        "convertila en un caso de eval: el reporte de preparación la prueba junto con los demás."
+    ): (
+        "Replies the team marked as incorrect. Write the expected reply and turn it into an eval "
+        "case: the readiness report tests it along with the rest."
+    ),
+    "No hay respuestas marcadas como incorrectas.": "No replies are marked as incorrect.",
+    "Respuesta esperada": "Expected reply",
+    "Palabras clave que tiene que incluir (opcional, separadas por coma)": (
+        "Keywords it must include (optional, comma-separated)"
+    ),
+    "Convertir en caso de eval": "Turn into an eval case",
+    (
+        "Cargá un documento que responda esta pregunta (por ejemplo, la política o la página de "
+        "ayuda del tema)."
+    ): (
+        "Upload a document that answers this question (for example, the policy or help page on "
+        "the topic)."
+    ),
+    "Tema:": "Topic:",
+    "Cliente": "Customer",
+    "Asistente": "Assistant",
+    "La búsqueda no encontró ningún documento sobre esto.": (
+        "The search didn't find any document about this."
+    ),
+    "Subir documentos": "Upload documents",
+    # modo supervisado (decisión 072)
+    "Modo supervisado": "Supervised mode",
+    "Activado": "On",
+    "Desactivado": "Off",
+    "Modo supervisado activado.": "Supervised mode turned on.",
+    "Modo supervisado desactivado.": "Supervised mode turned off.",
+    (
+        "Cada respuesta del asistente queda como borrador en Casos. Una persona del equipo la "
+        "envía, la edita o la rechaza antes de que llegue al cliente, que mientras tanto ve "
+        "“escribiendo…”. Las acciones con herramientas siguen pasando por el guardián y sus "
+        "aprobaciones."
+    ): (
+        "Every reply from the assistant is saved as a draft in Cases. A team member sends, edits "
+        "or rejects it before it reaches the customer, who sees “typing…” in the meantime. "
+        "Actions with tools still go through the guardian and its approvals."
+    ),
+    "Borradores por revisar": "Drafts to review",
+    (
+        "Modo supervisado: el cliente ve “escribiendo…” hasta que una persona envía o rechaza la "
+        "respuesta."
+    ): "Supervised mode: the customer sees “typing…” until a person sends or rejects the reply.",
+    "Borrador": "Draft",
+    "Canal": "Channel",
+    "Respuesta del asistente (podés editarla antes de enviarla)": (
+        "Assistant's reply (you can edit it before sending it)"
+    ),
+    "Respuesta enviada al cliente": "Reply sent to the customer",
+    "Borrador rechazado · no se envió nada": "Draft rejected · nothing was sent",
+    "Dejó la respuesta como borrador (modo supervisado)": (
+        "Saved the reply as a draft (supervised mode)"
+    ),
+    "Una persona aprobó y envió el borrador": "A person approved and sent the draft",
+    "Una persona editó y envió el borrador": "A person edited and sent the draft",
+    "Una persona rechazó el borrador": "A person rejected the draft",
+    "No se envió al cliente": "It wasn't sent to the customer",
+    "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
     ".": ".",
 }
