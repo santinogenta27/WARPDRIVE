@@ -35,7 +35,7 @@ REFUND_TIME = "5 to 7 business days"  # como dice returns_and_refunds.md
 DATES_AS_OF = date(2026, 11, 12)
 STORE_TIME = timezone(timedelta(hours=-8))  # Portland, Oregon (hora estándar del Pacífico)
 _DATE_FIELDS = ("created_at", "shipped_at", "delivered_at", "estimated_delivery")
-_ORDER_ID = re.compile(r"^\s*#?\s*(?:nw)?[\s-]*(\d{3,6})\s*$", re.I)
+_ORDER_ID = re.compile(r"^\s*#?\s*(?:[a-z]{2,6})?[\s-]*(\d{3,6})\s*$", re.I)
 
 
 class AddressChange(BaseModel):
@@ -93,13 +93,15 @@ _SEARCH_STOP = {"a", "an", "the", "do", "you", "have", "any", "in", "for", "of",
 
 
 def sku(product: dict[str, Any], color: str, size: str) -> str:
-    """ "NW-TRJ-BLU-M": como los SKU de los pedidos."""
+    """ "NW-TRJ-BLU-M": como los SKU de los pedidos (otro prefijo con `sku_prefix`)."""
     size_code = "OS" if size.lower() == "one size" else size.upper()
-    return f"NW-{product['code']}-{COLOR_CODES.get(color, color[:3].upper())}-{size_code}"
+    color_code = COLOR_CODES.get(color, color[:3].upper())
+    return f"{product.get('sku_prefix', 'NW')}-{product['code']}-{color_code}-{size_code}"
 
 
 def product_view(product: dict[str, Any]) -> dict[str, Any]:
-    """Un producto con sus variantes, precio y stock reales (el Product del OpenAPI)."""
+    """Un producto con sus variantes, precio y stock reales (el Product del OpenAPI). Con
+    `image` y `url` (los productos de una prueba gratis, decisión 075), también esos."""
     variants = [
         {
             "sku": sku(product, color, size),
@@ -110,16 +112,18 @@ def product_view(product: dict[str, Any]) -> dict[str, Any]:
         for color in product["colors"]
         for size in product["sizes"]
     ]
-    return {
+    view = {
         "code": product["code"],
         "name": product["name"],
         "category": product["category"],
         "description": product["description"],
         "price": product["price"],
-        "currency": "USD",
+        "currency": product.get("currency", "USD"),
         "in_stock": any(v["stock"] > 0 for v in variants),
         "variants": variants,
     }
+    view.update({k: product[k] for k in ("image", "url") if product.get(k)})
+    return view
 
 
 def search_products(
@@ -144,10 +148,10 @@ def search_products(
     return found
 
 
-def canonical(order_id: str) -> str:
-    """ "nw4521", "#4521" o "4521" -> "NW-4521"."""
+def canonical(order_id: str, prefix: str = "NW") -> str:
+    """ "nw4521", "#4521" o "4521" -> "NW-4521" (con otro `prefix`, "DEMO-1001")."""
     found = _ORDER_ID.match(order_id)
-    return f"NW-{found.group(1)}" if found else order_id.strip().upper()
+    return f"{prefix}-{found.group(1)}" if found else order_id.strip().upper()
 
 
 def _error(status: int, code: str, message: str) -> JSONResponse:
@@ -190,11 +194,17 @@ def create_app(
     extra_customers: list[dict[str, Any]] | None = None,
     today: date | None = None,
     checkout_base: str = CHECKOUT_BASE,
+    catalog: list[dict[str, Any]] | None = None,
+    customers: list[dict[str, Any]] | None = None,
+    order_prefix: str = "NW",
+    currency: str = "USD",
 ) -> FastAPI:
     """`extra_customers`: customers added to `data/customers.json` (the demo uses one to give a
     fixture customer a second, real email). `today`: the day the orders are relative to (by
     default, today in the store); explicit `orders` are used as they come. `checkout_base`:
-    where the checkout links point (the demo points them to its own store page)."""
+    where the checkout links point (the demo points them to its own store page). `catalog`,
+    `customers`, `order_prefix` and `currency`: another store on the same API (a free trial
+    with the visitor's products and sample orders, decision 075)."""
 
     def current() -> date:
         return today or store_today()
@@ -212,12 +222,15 @@ def create_app(
     courtesies: dict[tuple[str, str], dict[str, Any]] = {}  # (kind, idempotency key)
     given_for: dict[str, str] = {}  # one courtesy per order: order id -> what it got
     purchases: dict[str, dict[str, Any]] = {}  # checkouts by conversation ref
-    catalog: list[dict[str, Any]] = json.loads(PRODUCTS_PATH.read_text(encoding="utf-8"))
+    if catalog is None:
+        catalog = json.loads(PRODUCTS_PATH.read_text(encoding="utf-8"))
     products = {p["name"].lower(): p for p in catalog}
 
     app = FastAPI(title="Northwind Outfitters — Orders API (simulated)")
     app.openapi = lambda: json.loads(OPENAPI_PATH.read_text(encoding="utf-8"))  # type: ignore[method-assign]
-    customers = json.loads(CUSTOMERS_PATH.read_text(encoding="utf-8")) + list(extra_customers or [])
+    if customers is None:
+        customers = json.loads(CUSTOMERS_PATH.read_text(encoding="utf-8"))
+    customers = list(customers) + list(extra_customers or [])
 
     def reset() -> None:
         """Back to the initial orders, with no refunds, exchanges or courtesies (for evals)."""
@@ -229,7 +242,7 @@ def create_app(
     app.state.reset = reset
 
     def find(order_id: str) -> dict[str, Any] | None:
-        return state.get(canonical(order_id))
+        return state.get(canonical(order_id, order_prefix))
 
     def missing(order_id: str) -> JSONResponse:
         return _error(404, "order_not_found", f"Order {order_id} doesn't exist")
@@ -278,7 +291,7 @@ def create_app(
             "url": f"{checkout_base.rstrip('/')}/cart/{cart}",
             "items": lines,
             "total": round(total, 2),
-            "currency": "USD",
+            "currency": currency,
         }
         query: dict[str, str] = {}
         if body.discount_percent:
@@ -293,7 +306,7 @@ def create_app(
                 "ref": body.ref,
                 "status": "open",
                 "total": checkout["total"],
-                "currency": "USD",
+                "currency": currency,
             }
         if query:
             checkout["url"] += "?" + urlencode(query)
@@ -313,7 +326,9 @@ def create_app(
         if found is None:
             return _error(404, "checkout_not_found", f"There's no checkout {ref}")
         if found["status"] != "completed":
-            found.update({"status": "completed", "order_id": f"NW-{5000 + len(purchases)}"})
+            found.update(
+                {"status": "completed", "order_id": f"{order_prefix}-{5000 + len(purchases)}"}
+            )
         return found
 
     @app.get("/orders")
@@ -370,7 +385,7 @@ def create_app(
             "id": f"R-{order['id']}-{len(refunds) + 1}",
             "order_id": order["id"],
             "amount": body.amount,
-            "currency": "USD",
+            "currency": currency,
             "status": "requested",
             "payment_method": order["payment_method"],
             "expected_within": REFUND_TIME,
@@ -421,7 +436,7 @@ def create_app(
             "to_item": {**new, "unit_price": product["price"]},
             # Positiva: el cliente paga la diferencia; negativa: se le devuelve.
             "price_difference": round(product["price"] - item["unit_price"], 2),
-            "currency": "USD",
+            "currency": currency,
             "return_label": "emailed",
             "new_item_ships": "when the carrier scans the return",
             "created_at": _now(),
@@ -465,7 +480,7 @@ def create_app(
         repeated = courtesy(order, "coupon", idempotency_key)
         if repeated is not None:
             return repeated
-        digits = order["id"].removeprefix("NW-")
+        digits = order["id"].removeprefix(f"{order_prefix}-")
         offer = {
             "code": f"SORRY{body.percent}-{digits}",
             "kind": "coupon",
@@ -489,7 +504,7 @@ def create_app(
         if repeated is not None:
             return repeated
         offer = {
-            "code": f"EXPRESS-{order['id'].removeprefix('NW-')}",
+            "code": f"EXPRESS-{order['id'].removeprefix(f'{order_prefix}-')}",
             "kind": "free_express_shipping",
             "order_id": order["id"],
             "applies_to": "next_order",

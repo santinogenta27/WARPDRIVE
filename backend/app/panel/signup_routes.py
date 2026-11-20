@@ -21,14 +21,23 @@ def _base(request: Request) -> str:
 def _signup_page(error: str = "", values: dict[str, str] | None = None) -> str:
     v = values or {}
     alert = f'<p style="color:var(--bad)">{esc(error)}</p>' if error else ""
+    # Desde una prueba gratis (decisión 075): el nombre y el email ya vienen cargados.
+    trial = v.get("prueba", "")
+    hidden = f'<input type="hidden" name="prueba" value="{esc(trial)}">' if trial else ""
+    locked = " readonly" if trial else ""
+    lead = (
+        "Tu piloto conserva las políticas y los productos que cargamos en la prueba."
+        if trial
+        else "Un asistente que atiende a tus clientes con tus políticas y tu sistema."
+    )
     body = f"""<div class="card" style="max-width:440px;margin:40px auto">
 <h1>Creá la cuenta de tu empresa</h1>
-<p class="lead">Un asistente que atiende a tus clientes con tus políticas y tu sistema.</p>{alert}
-<form method="post" action="/registro">
+<p class="lead">{lead}</p>{alert}
+<form method="post" action="/registro">{hidden}
 <label for="empresa">Nombre de la empresa</label>
 <input id="empresa" name="empresa" required maxlength="80" value="{esc(v.get("empresa", ""))}">
 <label for="email">Tu email</label>
-<input id="email" name="email" type="email" required value="{esc(v.get("email", ""))}">
+<input id="email" name="email" type="email" required value="{esc(v.get("email", ""))}"{locked}>
 <label for="clave">Clave (al menos {auth.MIN_PASSWORD} caracteres)</label>
 <input id="clave" name="clave" type="password" required autocomplete="new-password">
 <p><button class="primary" type="submit" style="width:100%">Crear cuenta</button></p></form>
@@ -38,13 +47,22 @@ def _signup_page(error: str = "", values: dict[str, str] | None = None) -> str:
 
 
 @router.get("/registro", response_class=HTMLResponse)
-def signup_form() -> HTMLResponse:
-    return HTMLResponse(_signup_page())
+def signup_form(deps: Deps, prueba: str = "") -> HTMLResponse:
+    if not prueba:
+        return HTMLResponse(_signup_page())
+    from app.trial import service
+
+    with deps.connection() as conn:
+        trial = service.find(conn, prueba)
+    if trial is None or trial.status not in service.ACTIVE:
+        return HTMLResponse(_signup_page())
+    values = {"empresa": trial.name, "email": trial.email, "prueba": prueba}
+    return HTMLResponse(_signup_page(values=values))
 
 
 @router.post("/registro", response_class=HTMLResponse)
 def signup_submit(request: Request, form: Form, deps: Deps) -> HTMLResponse:
-    values = {k: form.get(k, "") for k in ("empresa", "email")}
+    values = {k: form.get(k, "") for k in ("empresa", "email", "prueba")}
     try:
         with deps.connection() as conn:
             signup.start_signup(
@@ -54,6 +72,7 @@ def signup_submit(request: Request, form: Form, deps: Deps) -> HTMLResponse:
                 email=form.get("email", ""),
                 password=form.get("clave", ""),
                 base_url=_base(request),
+                trial_token=form.get("prueba", ""),
             )
     except signup.SignupError as error:
         return HTMLResponse(_signup_page(str(error), values), status_code=400)

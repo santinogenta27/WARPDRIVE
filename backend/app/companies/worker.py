@@ -15,7 +15,7 @@ import threading
 from datetime import timedelta
 
 from app.companies.onboarding import JOB_KIND, run_onboarding_job
-from app.jobs.worker import Worker
+from app.jobs.worker import Handler, Worker
 
 logger = logging.getLogger(__name__)
 _wake = threading.Event()
@@ -24,12 +24,23 @@ _thread: threading.Thread | None = None
 IDLE_SECONDS = 600.0
 
 
+def _handlers() -> dict[str, Handler]:
+    """El onboarding y la prueba gratis: su armado y su borrado a los 7 días (decisión 075)."""
+    from app.trial import service as trial
+
+    return {
+        JOB_KIND: run_onboarding_job,
+        trial.JOB_KIND: trial.run_build_job,
+        trial.EXPIRE_JOB: trial.run_expire_job,
+    }
+
+
 def _loop() -> None:
     while True:
         try:
             # Una corrida puede tardar varios minutos: un job en curso no se da por colgado
             # hasta pasada una hora.
-            worker = Worker(None, {JOB_KIND: run_onboarding_job}, lock_timeout=timedelta(hours=1))
+            worker = Worker(None, _handlers(), lock_timeout=timedelta(hours=1))
             try:
                 while worker.run_once():
                     pass

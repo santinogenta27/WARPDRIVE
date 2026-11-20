@@ -20,6 +20,7 @@ import os
 import re
 import uuid
 import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
@@ -357,11 +358,17 @@ def _page_url(url: str) -> str:
 
 
 def crawl(
-    url: str, http: httpx.Client | None = None, *, max_pages: int | None = None
+    url: str,
+    http: httpx.Client | None = None,
+    *,
+    max_pages: int | None = None,
+    on_page: Callable[[str, str], None] | None = None,
 ) -> list[Document]:
     """Las páginas del sitio de la empresa, sin salir de su dominio (decisión 050). Nunca contra
     una dirección interna; las redirecciones se siguen solo dentro del dominio. Las imágenes y
-    otros archivos se saltean. Un error en una página interna no corta el rastreo."""
+    otros archivos se saltean. Un error en una página interna no corta el rastreo. `on_page`:
+    recibe la dirección y el HTML de cada página leída (la prueba gratis saca de ahí los
+    productos, decisión 075)."""
     from app.companies.connection import check_public_host
 
     limit = max_pages or int(os.environ.get("CRAWL_MAX_PAGES") or CRAWL_MAX_PAGES)
@@ -391,6 +398,8 @@ def crawl(
         ):
             parser = _TextExtractor()
             parser.feed(response.text)
+            if on_page is not None:
+                on_page(current, response.text)
             text = "\n".join(html.unescape(p) for p in parser.parts)
             if text.strip():
                 title = html.unescape(parser.title.strip()) or current
@@ -491,21 +500,10 @@ def ingest(
             except Exception as error:  # noqa: BLE001 — se informa y la carga sigue
                 unreadable.append(f"{upload.name}: no se pudo leer el sitio ({error}).")
                 continue
-            with tenant_scope(conn, tenant_id):
-                conn.execute("delete from sources where content_hash = %s", (digest,))
-                conn.execute(
-                    "insert into sources (tenant_id, kind, file_path, status, content_hash)"
-                    " values (%s, 'url', %s, 'done', %s)",
-                    (tenant_id, upload.name, digest),
-                )
             sources += 1
-            for page in pages:
-                page = _without_cards_and_ids(page)
-                replaced += remove_source(conn, tenant_id, page.source)
-                index_document(
-                    conn, tenant_id, embedder, title=page.title, source=page.source, text=page.text
-                )
-                documents += 1
+            saved, again = save_site(conn, tenant_id, upload.name, pages, embedder)
+            documents += saved
+            replaced += again
             continue
         with tenant_scope(conn, tenant_id):
             exists = conn.execute(
@@ -575,6 +573,33 @@ def ingest(
         tuple(held),
         replaced,
     )
+
+
+def save_site(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    url: str,
+    pages: list[Document],
+    embedder: Embedder,
+) -> tuple[int, int]:
+    """Guarda el sitio rastreado como fuente y reindexa sus páginas (sin tarjetas ni DNI).
+    Rastrearlo de nuevo reemplaza lo anterior. Devuelve (páginas indexadas, reemplazadas)."""
+    digest = hashlib.sha256(url.encode()).hexdigest()
+    with tenant_scope(conn, tenant_id):
+        conn.execute("delete from sources where content_hash = %s", (digest,))
+        conn.execute(
+            "insert into sources (tenant_id, kind, file_path, status, content_hash)"
+            " values (%s, 'url', %s, 'done', %s)",
+            (tenant_id, url, digest),
+        )
+    replaced = 0
+    for page in pages:
+        page = _without_cards_and_ids(page)
+        replaced += remove_source(conn, tenant_id, page.source)
+        index_document(
+            conn, tenant_id, embedder, title=page.title, source=page.source, text=page.text
+        )
+    return len(pages), replaced
 
 
 def _without_cards_and_ids(document: Document) -> Document:
