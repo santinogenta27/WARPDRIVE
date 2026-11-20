@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -214,7 +215,8 @@ def normalize_site(raw: str, language: str = "es") -> tuple[str, str]:
     ):
         raise _error(language, "site")
     domain = host.removeprefix("www.")
-    return f"{parts.scheme}://{parts.netloc.lower()}{parts.path or '/'}", domain
+    # Siempre HTTPS (decisión 076); el rastreo verifica además que la dirección sea pública.
+    return f"https://{parts.netloc.lower()}{parts.path or '/'}", domain
 
 
 def cost_cap() -> Decimal:
@@ -233,6 +235,12 @@ def start(
     """Guarda la prueba pedida y manda el código. Devuelve el token del enlace de la prueba."""
     language = "en" if language == "en" else "es"
     url, domain = normalize_site(site, language)
+    from app import net
+
+    try:  # una dirección interna no llega ni a guardarse (decisión 076)
+        net.check_url(url)
+    except net.UnsafeURL as error:
+        raise _error(language, "site") from error
     email = email.strip().lower()
     if not EMAIL.match(email) or len(email) > 200:
         raise _error(language, "email")
@@ -343,9 +351,52 @@ def confirm(conn: psycopg.Connection, token: str, code: str) -> Trial:
 
 
 # -- armado -----------------------------------------------------------------------------------
-def _store_name(title: str, domain: str) -> str:
-    first = re.split(r"\s+[|–—-]\s+", title.strip())[0].strip()
+def _store_name(declared: str, title: str, domain: str) -> str:
+    """El nombre que declara el sitio (`og:site_name`); si no, la parte del título que se parece
+    al dominio ("Ofertas – Tienda Sol" → "Tienda Sol"); si no, la primera."""
+    if 2 <= len(declared) <= 80:
+        return declared
+    parts = [p.strip() for p in re.split(r"\s+[|–—-]\s+", " ".join(title.split())) if p.strip()]
+    stem = re.sub(r"[^a-z0-9]", "", domain.split(".")[0].lower())
+    for part in parts:
+        if stem and stem in re.sub(r"[^a-z0-9]", "", part.lower()):
+            return part[:80]
+    first = parts[0] if parts else ""
     return first[:80] if 2 <= len(first) <= 80 else domain
+
+
+# Qué leer primero de las 30 páginas: las políticas (suelen estar en el pie), después algunos
+# productos (sus datos estructurados están en su página) y por último el resto.
+_POLICY = re.compile(
+    r"polic|envio|env%C3%ADo|shipping|deliver|entrega|devoluc|return|refund|reembols|cambio|"
+    r"exchange|faq|pregunta|ayuda|help|termin|terms|garant|warrant|contact",
+    re.IGNORECASE,
+)
+_PRODUCT = re.compile(r"/products?/|/productos?/|/p/|/item/", re.IGNORECASE)
+_SKIP = re.compile(r"account|login|cuenta|cart|carrito|checkout|search|buscar|wishlist", re.I)
+PRODUCT_PAGES = 8
+_GIFT_CARD = re.compile(
+    r"gift\s*card|gift\s*certificate|e-?gift|tarjeta\s+de\s+regalo|giftcard|voucher|vale\s+de\s+regalo",
+    re.IGNORECASE,
+)
+
+
+def _priority() -> Callable[[str], int]:
+    products = 0
+
+    def rank(url: str) -> int:
+        nonlocal products
+        path = urlsplit(url).path
+        if _SKIP.search(path):
+            return 4
+        if _POLICY.search(path):
+            return 0
+        if _PRODUCT.search(path):
+            products += 1
+            return 1 if products <= PRODUCT_PAGES else 3
+        return 2
+
+    return rank
 
 
 def _progress(conn: psycopg.Connection, trial_id: uuid.UUID, **values: Any) -> None:
@@ -378,12 +429,15 @@ def run_build(
         return
     tenant_id = trial.tenant_id
     found: list[catalog.Product] = []
+    declared: list[str] = []
 
     def on_page(url: str, markup: str) -> None:
         found.extend(catalog.extract(markup, url))
+        if not declared:  # la primera página: la portada
+            declared.append(catalog.site_name(markup))
 
     try:
-        pages = crawl(trial.site_url, http, on_page=on_page)
+        pages = crawl(trial.site_url, http, on_page=on_page, priority=_priority())
     except Exception as error:  # noqa: BLE001 — se informa en la página, sin reintentar
         conn.execute(
             "update trials set status = 'failed', progress = progress || %s where id = %s",
@@ -391,9 +445,11 @@ def run_build(
         )
         return
     save_site(conn, tenant_id, trial.site_url, pages, embedder)
-    name = _store_name(pages[0].title, trial.domain)
+    name = _store_name(declared[0] if declared else "", pages[0].title, trial.domain)
     _progress(conn, trial_id, step="products", pages=len(pages), name=name)
-    products = [p.__dict__ for p in catalog.unique(found, MAX_PRODUCTS)]
+    # Una tarjeta de regalo no sirve como pedido de ejemplo ni como recomendación.
+    kept = [p for p in found if not _GIFT_CARD.search(p.name)]
+    products = [p.__dict__ for p in catalog.unique(kept, MAX_PRODUCTS)]
     generic = not products
     if generic:
         currency = "USD" if trial.language == "en" else "ARS"
@@ -426,12 +482,7 @@ def _configure(
     from app.demo import northwind
 
     assert trial.tenant_id is not None
-    instructions = {
-        kind: (HERE / "refund.yaml").read_text("utf-8")
-        if kind == "refund"
-        else northwind.case_type_text(kind)
-        for kind in CASE_TYPES
-    }
+    instructions = case_type_texts(trial.language)
     northwind.configure_tools(
         conn,
         trial.tenant_id,
@@ -450,6 +501,12 @@ def _configure(
         domains="",
         suggestions="\n".join(suggestions),
     )
+
+
+def case_type_texts(language: str) -> dict[str, str]:
+    """Las instrucciones de los tipos de caso de la prueba, en el idioma de la empresa."""
+    folder = HERE / "case_types" / ("en" if language == "en" else "es")
+    return {kind: (folder / f"{kind}.yaml").read_text("utf-8") for kind in CASE_TYPES}
 
 
 def run_build_job(conn: psycopg.Connection, job: Job) -> None:

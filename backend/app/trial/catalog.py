@@ -172,6 +172,17 @@ def extract(markup: str, page_url: str) -> list[Product]:
     return unique(found)
 
 
+def site_name(markup: str) -> str:
+    """El nombre de la tienda que declara la página (`og:site_name`), o vacío."""
+    reader = _Reader()
+    try:
+        reader.feed(markup)
+    except Exception:  # noqa: BLE001
+        pass
+    name = reader.meta.get("og:site_name") or reader.meta.get("application-name") or ""
+    return " ".join(html.unescape(name).split())[:80]
+
+
 def unique(products: list[Product], limit: int | None = None) -> list[Product]:
     seen: set[str] = set()
     kept: list[Product] = []

@@ -255,7 +255,10 @@ def test_de_punta_a_punta_prueba_piloto_y_contacto(
     for expected in ("Pedidos de ejemplo", "DEMO-1001", "Empezar mi piloto", "Hablar con Santino"):
         assert expected in page
     assert f"/demo/{state['chat_slug']}" in page
-    assert client.get(f"/demo/{state['chat_slug']}").status_code == 200
+    behind = client.get(f"/demo/{state['chat_slug']}")
+    assert behind.status_code == 200
+    # Sin la tienda ficticia de la demo: se confundiría con la del visitante.
+    assert '<body class="trial">' in behind.text and "es una tienda ficticia" not in behind.text
 
     # El flujo, por el guardián del mismo agente: verificación con el email del visitante.
     guardian = build_guardian(conn, tenant)
@@ -462,3 +465,57 @@ def test_una_prueba_convertida_no_se_borra(
     )
     service.run_expire_job(conn, expire)
     assert conn.execute("select 1 from tenants where id = %s", (trial.tenant_id,)).fetchone()
+
+
+def test_las_instrucciones_estan_en_el_idioma_de_la_empresa(
+    conn: psycopg.Connection, box: _Outbox, embedder: VoyageEmbedder
+) -> None:
+    from app.companies import review
+
+    es, en = service.case_type_texts("es"), service.case_type_texts("en")
+    assert set(es) == set(en) == set(service.CASE_TYPES)
+    for kind in service.CASE_TYPES:  # mismas herramientas en los dos idiomas
+        tools_es = review.parse_instructions(es[kind]).get("herramientas")
+        assert tools_es == review.parse_instructions(en[kind]).get("herramientas")
+    assert "Buscá el pedido" in es["where_is_my_order"]
+    assert "Look up the order" in en["where_is_my_order"]
+    assert "Northwind" not in " ".join([*es.values(), *en.values()])
+
+    client = TestClient(app)
+    _, trial = _built(conn, client, box, embedder)  # una prueba pedida en castellano
+    assert trial.tenant_id is not None
+    with tenant_scope(conn, trial.tenant_id):
+        texts = dict(conn.execute("select name, instructions from case_types").fetchall())
+    assert texts == es
+
+
+def test_el_rastreo_de_la_prueba_lee_primero_politicas_y_productos() -> None:
+    """Visto con tiendas reales: en orden de aparición, las 30 páginas se iban en categorías y
+    no llegaban ni a las políticas del pie ni a las páginas de producto."""
+    rank = service._priority()
+    assert rank("https://t.example/policies/refund-policy") == 0
+    assert rank("https://t.example/pages/envios") == 0
+    assert rank("https://t.example/preguntas-frecuentes") == 0
+    assert rank("https://t.example/products/mate") == 1
+    assert rank("https://t.example/collections/cafe") == 2
+    assert rank("https://t.example/account/login") == 4
+    more = [rank(f"https://t.example/productos/p{n}") for n in range(service.PRODUCT_PAGES + 2)]
+    assert more.count(1) == service.PRODUCT_PAGES - 1 and more[-1] == 3  # pocas páginas de producto
+
+
+def test_el_nombre_de_la_tienda() -> None:
+    assert (
+        service._store_name("Café Martínez", "Tienda Online", "cafemartinez.com") == "Café Martínez"
+    )
+    title = "#1 Organic Coffee – Death Wish Coffee"
+    assert service._store_name("", title, "deathwishcoffee.com") == "Death Wish Coffee"
+    assert service._store_name("", "Tienda Sol", "tienda-sol.example") == "Tienda Sol"
+    assert service._store_name("", "", "tienda-sol.example") == "tienda-sol.example"
+    meta = '<meta property="og:site_name" content="Café Martínez">'
+    assert catalog.site_name(meta) == "Café Martínez"
+
+
+def test_las_tarjetas_de_regalo_no_son_productos_de_ejemplo() -> None:
+    for name in ("Death Wish Coffee Digital Gift Card", "Tarjeta de regalo $5000", "E-Gift"):
+        assert service._GIFT_CARD.search(name)
+    assert not service._GIFT_CARD.search("Mate de calabaza")

@@ -16,6 +16,7 @@ import json
 import os
 import time
 import uuid
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -31,6 +32,34 @@ from app.policy.approvals import ApprovalError, decide
 from app.trial import service
 
 router = APIRouter(include_in_schema=False)
+ES_MONTHS = (
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+)
+EN_MONTHS = (
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+)
 MIN_FORM_SECONDS = 3  # un bot completa el formulario en menos
 MAX_FORM_SECONDS = 2 * 3600
 
@@ -39,10 +68,11 @@ T: dict[str, dict[str, str]] = {
         "title": "Probalo con tu tienda",
         "trial_tag": "Prueba gratis",
         "lead": (
-            "Escribí la dirección de tu tienda y tu email. En un par de minutos tenés el mismo "
+            "Escribí la dirección de tu tienda y tu email. En unos minutos tenés el mismo "
             "asistente que vendemos, con tus políticas y tus productos. No toca tu tienda real."
         ),
         "site": "Dirección de tu tienda",
+        "placeholder": "tutienda.com",
         "email": "Tu email",
         "start": "Armar mi prueba",
         "fine": "Una prueba por tienda y por email. Se borra sola a los 7 días.",
@@ -58,7 +88,7 @@ T: dict[str, dict[str, str]] = {
         "failed_lead": "Revisá que la dirección sea pública. Si querés, te ayudamos nosotros.",
         "ready_lead": (
             "Este es el mismo asistente que vendemos, con las políticas de tu sitio y una tienda "
-            "de ejemplo con tus productos. A la derecha de la conversación ves qué hace por "
+            "de ejemplo con tus productos. Junto a la conversación ves qué hace por "
             "dentro. Nada de esto toca tu tienda real."
         ),
         "orders": "Pedidos de ejemplo",
@@ -100,11 +130,12 @@ T: dict[str, dict[str, str]] = {
         "title": "Try it with your store",
         "trial_tag": "Free trial",
         "lead": (
-            "Enter your store's address and your email. In a couple of minutes you get the same "
+            "Enter your store's address and your email. In a few minutes you get the same "
             "assistant we sell, with your policies and your products. It doesn't touch your real "
             "store."
         ),
         "site": "Your store's address",
+        "placeholder": "yourstore.com",
         "email": "Your email",
         "start": "Set up my trial",
         "fine": "One trial per store and per email. It deletes itself after 7 days.",
@@ -176,6 +207,7 @@ main{max-width:1240px;margin:0 auto;padding:24px 16px 48px}
 h1{font-size:28px;line-height:1.2;margin:0 0 8px}
 h2{font-size:17px;margin:0 0 10px}
 .lead{color:var(--muted);margin:0 0 20px}
+.top .lead{max-width:760px;margin:0}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;
 margin-bottom:16px}
 label{display:block;font-weight:600;font-size:14px;margin:14px 0 6px}
@@ -193,7 +225,8 @@ cursor:pointer;text-decoration:none}
 margin-bottom:16px}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
 .grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
-@media (max-width:900px){.grid{grid-template-columns:1fr}}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:700px){main iframe{height:1180px}}
 iframe{width:100%;height:780px;border:1px solid var(--line);border-radius:14px;
 background:var(--card)}
 .tag{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.04em;
@@ -268,7 +301,7 @@ def _form_page(
 <div class="trap" aria-hidden="true"><label for="web">Web</label>
 <input id="web" name="web" tabindex="-1" autocomplete="off"></div>
 <label for="sitio">{esc(t["site"])}</label>
-<input id="sitio" name="sitio" required maxlength="300" placeholder="tutienda.com"
+<input id="sitio" name="sitio" required maxlength="300" placeholder="{esc(t["placeholder"])}"
  value="{esc(v.get("sitio", ""))}" autocomplete="url">
 <label for="email">{esc(t["email"])}</label>
 <input id="email" name="email" type="email" required maxlength="200"
@@ -357,7 +390,18 @@ def _building_page(trial: service.Trial, token: str) -> HTMLResponse:
     return _layout(t["building"], body, trial.language)
 
 
-def _order_card(order: dict[str, Any], t: dict[str, str]) -> str:
+def _date(value: object, language: str) -> str:
+    """ "2026-11-22" como lo lee el visitante: "22 de noviembre" o "November 22"."""
+    try:
+        day = date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return str(value or "")
+    if language == "en":
+        return f"{EN_MONTHS[day.month - 1]} {day.day}"
+    return f"{day.day} de {ES_MONTHS[day.month - 1]}"
+
+
+def _order_card(order: dict[str, Any], t: dict[str, str], language: str) -> str:
     statuses = json.loads(t["statuses"])
     item = (order.get("items") or [{}])[0]
     delay = order.get("delay") or {}
@@ -365,7 +409,7 @@ def _order_card(order: dict[str, Any], t: dict[str, str]) -> str:
     if delay:
         extra += (
             f'<div class="small"><b>{esc(t["delay"])}:</b> {esc(delay.get("reason"))} · '
-            f"{esc(delay.get('new_estimated_delivery'))}</div>"
+            f"{esc(_date(delay.get('new_estimated_delivery'), language))}</div>"
         )
     if order.get("tracking_number"):
         extra += (
@@ -375,18 +419,18 @@ def _order_card(order: dict[str, Any], t: dict[str, str]) -> str:
     return (
         f'<div class="order"><div class="row"><b>{esc(order["id"])}</b>'
         f'<span class="small">{esc(statuses.get(order["status"], order["status"]))}</span></div>'
-        f'<div class="small">{esc(item.get("name"))} · {esc(order.get("currency"))} '
-        f"{esc(order.get('total'))}</div>{extra}</div>"
+        f'<div class="small">{esc(item.get("name"))} · '
+        f"{esc(i18n.money(order.get('total'), language))}</div>{extra}</div>"
     )
 
 
 def _ready_page(view: service.View, token: str, notice: str) -> HTMLResponse:
     trial = view.trial
     t = T[trial.language]
-    orders = "".join(_order_card(o, t) for o in view.orders)
+    orders = "".join(_order_card(o, t, trial.language) for o in view.orders)
     products = "".join(
         "<figure>"
-        + (f'<img src="{esc(p["image"])}" alt="" loading="lazy">' if p.get("image") else "")
+        + (f'<img src="{esc(p["image"])}" alt="">' if p.get("image") else "")
         + f"<figcaption>{esc(p['name'])}</figcaption></figure>"
         for p in trial.products
     )

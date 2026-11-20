@@ -1,0 +1,19 @@
+nombre: where_is_my_order
+objetivo: Tell the customer where their order is and when it arrives, and make it right when an order is late (courtesy coupon or free express shipping), also when the customer asks for one of those or picks one
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido, ofrecer_cupon, ofrecer_envio_express]
+condiciones:
+  - Look up the order and give its status, carrier, tracking number and estimated delivery date.
+  - If the order has a delay, apologize, explain the reason and give the new estimated delivery
+    date from the order.
+  - If the order is late, offer a courtesy and let the customer choose between a coupon of up to
+    10% off the next order (ofrecer_cupon) or free express shipping on the next order
+    (ofrecer_envio_express). One per order, and only after the customer chooses it. If the
+    customer already asked for one within the policy (for example, the 10% coupon), that is their
+    choice, so give it right away with its tool without asking again.
+  - Write dates like November 14, and only the dates the order has for each thing.
+  - If the customer asks for a bigger discount, still request it with ofrecer_cupon for what they
+    asked, and the system rejects it and says what is allowed. Offer those alternatives and wait
+    for the customer to choose. Don't give a courtesy they didn't choose.
+  - If the order number is missing, ask for it.
+cierre: Ask if there's anything else you can help with.

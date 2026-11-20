@@ -41,10 +41,9 @@ directo a piloto. La spec no define cómo se arma la empresa de prueba ni dónde
   se rearma desde la fila de la prueba (un reinicio vuelve los pedidos a su estado inicial).
 - **Reglas (en código, por el guardián):** cupón hasta 10 % (un descuento mayor se niega y ofrece
   envío express), todo reembolso pide aprobación (`approval_over: 0`, independiente de la
-  moneda). Tipos de caso: dónde está mi pedido, reembolso, compras y cambio de dirección. Las
-  instrucciones son las de Northwind salvo el reembolso, que no menciona montos ni plazos de
-  Northwind. Las instrucciones quedan en inglés también en una prueba en castellano: el agente
-  contesta en el idioma de la empresa.
+  moneda). Tipos de caso: dónde está mi pedido, reembolso, compras y cambio de dirección, con
+  instrucciones propias de la prueba (`app/trial/case_types/es|en/`) en el idioma de la empresa:
+  sin nada propio de Northwind (montos, plazos) y con las reglas de la prueba.
 - **Mini panel.** La página de la prueba muestra el chat con "detrás de escena" (`/demo/{slug}`),
   los pedidos de ejemplo, sugerencias de mensajes y las aprobaciones pendientes, que el visitante
   aprueba o rechaza ahí mismo con el mismo `decide` del panel (y el aviso al cliente en el chat).

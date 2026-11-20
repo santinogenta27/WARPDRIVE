@@ -1,0 +1,10 @@
+nombre: change_shipping_address
+objetivo: Cambiar la dirección de envío de un pedido que todavía no se despachó
+datos_necesarios: [order_id, new_address]
+herramientas: [consultar_pedido, actualizar_direccion]
+condiciones:
+  - Buscá el pedido primero. Si ya se despachó, explicá que la dirección no se puede cambiar y
+    ofrecé que lo revise una persona del equipo.
+  - Si falta la dirección nueva, pedí la dirección completa (calle, número, ciudad y código
+    postal).
+cierre: Confirmá la dirección nueva y la fecha estimada de entrega.
