@@ -260,9 +260,21 @@
     .store { height: auto; overflow: visible; }
     .chat { position: relative; right: auto; bottom: auto; margin: 24px 16px; width: auto; height: 600px; }
   }
+  /* -- prueba gratis (decisión 075): sin la tienda de la demo, el chat y los pasos lado a lado --- */
+  body.trial { grid-template-columns: minmax(0, 1fr) minmax(300px, 400px); height: 100%; }
+  body.trial .site, body.trial .behind { height: 100vh; height: 100dvh; min-height: 0; }
+  body.trial .site { display: flex; flex-direction: column; gap: 10px; padding: 14px; overflow: hidden; }
+  body.trial .store { height: auto; flex: none; overflow: visible; }
+  body.trial .chat { position: relative; right: auto; bottom: auto; margin: 0; width: auto; height: auto; flex: 1; min-height: 0; }
+  .trial-note { font-size: 12.5px; color: var(--muted); padding: 2px 4px; }
+  @media (max-width: 700px) {
+    body.trial { grid-template-columns: 1fr; height: auto; }
+    body.trial .site, body.trial .behind { height: auto; min-height: 0; }
+    body.trial .chat { flex: none; height: 560px; }
+  }
 </style>
 </head>
-<body>
+<body class="{{mode}}">
 <section class="site" aria-label="{{name}}">
   <div class="store">{{store}}</div><!-- /store -->
   <div class="chat" id="chat"></div>
