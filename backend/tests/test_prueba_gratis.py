@@ -370,7 +370,8 @@ def test_de_punta_a_punta_prueba_piloto_y_contacto(
     app.dependency_overrides[panel_deps] = lambda: replace(current, tenant_id=tenant)
     operator = TestClient(app)
     operator.post(
-        "/panel/login", data={"email": "santino@plataforma.example", "password": "clave-del-operador"}
+        "/panel/login",
+        data={"email": "santino@plataforma.example", "password": "clave-del-operador"},
     )
     listing = operator.get("/panel/pruebas")
     assert listing.status_code == 200, listing.text
