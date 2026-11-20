@@ -13,6 +13,7 @@ indexan en el RAG. Cada archivo se identifica por su hash: subirlo de nuevo no d
 
 import csv
 import hashlib
+import heapq
 import html
 import io
 import json
@@ -33,6 +34,7 @@ import httpx
 import psycopg
 import pypdf
 
+from app import net
 from app.db.connection import tenant_scope
 from app.llm.embedder import Embedder
 from app.onboarding import sensitive
@@ -43,6 +45,9 @@ Role = Literal["customer", "agent"]
 SourceKind = Literal["whatsapp_export", "helpdesk_export", "document", "url"]
 MAX_PDF_PAGES = 500  # extraer el texto es lento: un PDF más largo se sube en partes
 CRAWL_MAX_PAGES = 30  # páginas del sitio por rastreo (CRAWL_MAX_PAGES en el entorno)
+SITE_MAX_BYTES = 2 * 1024 * 1024  # por página del sitio (decisión 076)
+# Algunos sitios rechazan a un cliente sin nombre: el rastreo se identifica.
+USER_AGENT = "Mozilla/5.0 (compatible; EnterpriseDataAIBot/1.0)"
 SKIP_EXTENSIONS = (
     ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".css", ".js", ".pdf", ".zip",
     ".mp4", ".mp3", ".xml", ".json",
@@ -335,7 +340,10 @@ class _TextExtractor(HTMLParser):
 
 
 def fetch_url(url: str, http: httpx.Client | None = None) -> Document:
-    client = http or httpx.Client(timeout=20.0, follow_redirects=True)
+    # Cada redirección pasa por el mismo control de dirección pública (decisión 076).
+    client = http or net.safe_client(
+        max_bytes=SITE_MAX_BYTES, follow_redirects=True, headers={"User-Agent": USER_AGENT}
+    )
     response = client.get(url)
     response.raise_for_status()
     parser = _TextExtractor()
@@ -363,30 +371,34 @@ def crawl(
     *,
     max_pages: int | None = None,
     on_page: Callable[[str, str], None] | None = None,
+    priority: Callable[[str], int] | None = None,
 ) -> list[Document]:
     """Las páginas del sitio de la empresa, sin salir de su dominio (decisión 050). Nunca contra
     una dirección interna; las redirecciones se siguen solo dentro del dominio. Las imágenes y
     otros archivos se saltean. Un error en una página interna no corta el rastreo. `on_page`:
     recibe la dirección y el HTML de cada página leída (la prueba gratis saca de ahí los
-    productos, decisión 075)."""
+    productos, decisión 075). `priority`: qué páginas leer primero (menor primero; a igual
+    prioridad, en el orden en que aparecen)."""
     from app.companies.connection import check_public_host
 
     limit = max_pages or int(os.environ.get("CRAWL_MAX_PAGES") or CRAWL_MAX_PAGES)
     start = urlsplit(url.strip())
     if start.scheme not in ("http", "https") or not start.hostname:
         raise ValueError("la dirección tiene que empezar con https:// y tener un dominio")
+    if start.scheme != "https" and not net.allow_private():
+        raise ValueError("la dirección tiene que ser HTTPS")
     check_public_host(url)
     host = start.hostname.lower()
-    client = http or httpx.Client(timeout=20.0, follow_redirects=False)
+    client = http or net.safe_client(max_bytes=SITE_MAX_BYTES, headers={"User-Agent": USER_AGENT})
     first = _page_url(url.strip())
-    queue = [first]
-    seen = set(queue)
+    queue: list[tuple[int, int, str]] = [(0, 0, first)]
+    seen = {first}
     pages: list[Document] = []
     while queue and len(pages) < limit:
-        current = queue.pop(0)
+        _, _, current = heapq.heappop(queue)
         try:
             response = client.get(current)
-        except httpx.HTTPError:
+        except (httpx.HTTPError, net.UnsafeURL, net.ResponseTooLarge):
             if current == first:
                 raise
             continue
@@ -402,7 +414,7 @@ def crawl(
                 on_page(current, response.text)
             text = "\n".join(html.unescape(p) for p in parser.parts)
             if text.strip():
-                title = html.unescape(parser.title.strip()) or current
+                title = " ".join(html.unescape(parser.title).split()) or current
                 pages.append(Document(title=title, source=_slug(current), text=text))
             targets = parser.links
         for link in targets:
@@ -415,7 +427,8 @@ def crawl(
                 and found not in seen
             ):
                 seen.add(found)
-                queue.append(found)
+                rank = priority(found) if priority is not None else 0
+                heapq.heappush(queue, (rank, len(seen), found))
     if not pages:
         raise ValueError("no se encontró texto para leer en esa página")
     return pages

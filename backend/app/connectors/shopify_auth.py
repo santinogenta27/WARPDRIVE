@@ -31,6 +31,8 @@ from urllib.parse import urlencode
 
 import httpx
 
+from app import net
+
 # Lo mínimo que usa el conector: pedidos (consultar, reembolsar y cancelar), clientes (verificar
 # identidad por email), productos e inventario (precios y stock) y descuentos (cupones). Un
 # permiso `write_` incluye su `read_`.
@@ -84,7 +86,9 @@ def missing_scopes(granted: list[str] | tuple[str, ...]) -> list[str]:
 def _token_request(
     shop: str, form: dict[str, str], transport: httpx.BaseTransport | None
 ) -> dict[str, Any]:
-    with httpx.Client(transport=transport, timeout=15.0, follow_redirects=False) as client:
+    with httpx.Client(
+        transport=transport or net.SafeTransport(), timeout=15.0, follow_redirects=False
+    ) as client:
         response = client.post(
             f"https://{shop}/admin/oauth/access_token",
             data=form,
