@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
+from app import net
 from app.connectors import shopify
 
 API = "https://api.tiendanube.com/v1"
@@ -118,7 +119,7 @@ class TiendanubeTransport(httpx.BaseTransport):
         self._api = httpx.Client(
             base_url=f"{API}/{clean_store(store)}",
             headers={"Authentication": f"bearer {token}", "User-Agent": USER_AGENT},
-            transport=upstream,
+            transport=upstream or net.SafeTransport(),  # solo IPs públicas (decisión 076)
             timeout=15.0,
             follow_redirects=False,
         )

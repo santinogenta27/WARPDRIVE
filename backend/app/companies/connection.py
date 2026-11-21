@@ -10,11 +10,8 @@ Las credenciales se cifran con una clave derivada por empresa y nunca se muestra
 URL base tiene que ser HTTPS y pública: el servidor no hace pedidos a direcciones internas.
 """
 
-import ipaddress
 import json
-import os
 import re
-import socket
 import time
 import uuid
 from collections.abc import Callable, Mapping
@@ -27,6 +24,7 @@ import psycopg
 import yaml
 from psycopg.types.json import Jsonb
 
+from app import net
 from app.crypto import decrypt_for, encrypt_for
 from app.db.connection import tenant_scope
 from app.tools.runtime import HttpClient, ToolRuntime
@@ -79,12 +77,11 @@ def parse_openapi(text: str) -> dict[str, Any]:
 
 def _allow_private() -> bool:
     """Solo para desarrollo local (probar contra una API en localhost)."""
-    return os.environ.get("ALLOW_PRIVATE_SYSTEM_URLS", "").strip() == "1"
+    return net.allow_private()
 
 
 def _public(address: str) -> bool:
-    ip = ipaddress.ip_address(address)
-    return ip.is_global and not ip.is_multicast
+    return net.is_public_ip(address)
 
 
 def validate_base_url(url: str) -> str:
@@ -102,27 +99,25 @@ def validate_base_url(url: str) -> str:
         try:
             literal = _public(parts.hostname)
         except ValueError:
-            literal = parts.hostname.lower() not in ("localhost",) and "." in parts.hostname
+            name = parts.hostname.lower().rstrip(".")
+            literal = "." in name and not (name == "localhost" or name.endswith(net._BLOCKED_NAMES))
         if not literal:
             raise ConnectionError_("La URL base tiene que ser una dirección pública.")
     return url.strip().rstrip("/")
 
 
-def _resolve(host: str) -> list[str]:
-    return [str(info[4][0]) for info in socket.getaddrinfo(host, None)]
-
-
-def check_public_host(base_url: str, resolver: Resolver = _resolve) -> None:
+def check_public_host(base_url: str, resolver: Resolver | None = None) -> None:
     """Antes de conectar: el dominio tiene que resolver solo a direcciones públicas."""
     if _allow_private():
         return
     host = urlsplit(base_url).hostname or ""
     try:
-        addresses = resolver(host)
-    except OSError as error:
-        raise ConnectionError_(f"No se pudo resolver el dominio {host}.") from error
-    if not addresses or not all(_public(a) for a in addresses):
-        raise ConnectionError_("La URL base apunta a una dirección interna.")
+        net.public_address(host, resolver)
+    except net.UnsafeURL as error:
+        message = str(error)
+        if "interna" in message:
+            message = "La URL base apunta a una dirección interna."
+        raise ConnectionError_(message) from error
 
 
 def find_identity_lookup(spec: dict[str, Any]) -> dict[str, Any] | None:
@@ -267,8 +262,8 @@ def auth_headers(connection: SystemConnection, secret: str | None) -> dict[str, 
 
 
 def http_client(connection: SystemConnection, secret: str | None) -> HttpClient:
-    """Cliente HTTP hacia el sistema de la empresa. No sigue redirecciones (podrían llevar a
-    una dirección interna) y verifica que el dominio sea público."""
+    """Cliente HTTP hacia el sistema de la empresa. No sigue redirecciones y solo conecta a la IP
+    pública verificada, con tope de tamaño (`net.SafeTransport`, decisión 076)."""
     assert connection.base_url is not None
     from app.connectors import platforms
 
@@ -285,8 +280,9 @@ def http_client(connection: SystemConnection, secret: str | None) -> HttpClient:
         base_url=connection.base_url,
         headers=auth_headers(connection, secret),
         auth=basic,
-        timeout=15.0,
+        timeout=net.TIMEOUT,
         follow_redirects=False,
+        transport=net.SafeTransport(),
     )
 
 

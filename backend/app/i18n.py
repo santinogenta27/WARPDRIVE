@@ -161,6 +161,10 @@ MESSAGES: dict[str, dict[str, str]] = {
             "Llegaste al límite de mensajes por hoy desde tu conexión. Volvé a escribirnos mañana."
         ),
         "limit_daily": "El chat llegó a su límite de mensajes por hoy. Volvé a escribirnos mañana.",
+        "limit_trial": (
+            "La prueba llegó a su límite de mensajes. Para seguir, empezá tu piloto o hablá con "
+            "nosotros desde la página de la prueba."
+        ),
     },
     "en": {
         "verification": (
@@ -278,6 +282,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         ),
         "limit_daily": "The chat has reached its message limit for today. Please write to us "
         "again tomorrow.",
+        "limit_trial": (
+            "The trial has reached its message limit. To continue, start your pilot or talk to "
+            "us from the trial page."
+        ),
     },
 }
 

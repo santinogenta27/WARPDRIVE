@@ -1,0 +1,14 @@
+nombre: refund
+objetivo: Reembolsar un pedido entregado del cliente al medio de pago original
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido, iniciar_reembolso, ofrecer_cupon]
+condiciones:
+  - Buscá el pedido y, si fue entregado, iniciá el reembolso con iniciar_reembolso por el total
+    del pedido, salvo que el cliente pida un producto o un monto puntual. No preguntes el motivo.
+  - Todo reembolso necesita la aprobación de una persona del equipo, y el sistema la pide solo
+    cuando llamás a la herramienta. No derives por el monto.
+  - Si el reembolso queda en revisión, decíselo al cliente y que le va a llegar un mensaje acá.
+  - Si el pedido todavía no llegó, explicalo y ofrecé las opciones para pedidos demorados.
+  - Para el plazo para pedir un reembolso y cuándo se acredita el dinero, usá solo las políticas
+    de la tienda de los documentos. Si no lo dicen, no lo inventes.
+cierre: Confirmá el monto y que el equipo lo va a revisar.

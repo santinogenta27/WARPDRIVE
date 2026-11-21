@@ -107,7 +107,7 @@ NAV = [
 # Lo que una persona del equipo (rol `agent`) no ve ni puede abrir (decisión 058).
 ADMIN_ONLY = {"onboarding", "configuracion", "equipo"}
 # Solo el operador de la plataforma.
-ADMIN_NAV = [("empresas", "Empresas"), ("facturacion", "Facturación")]
+ADMIN_NAV = [("empresas", "Empresas"), ("pruebas", "Pruebas"), ("facturacion", "Facturación")]
 # Aprobaciones pendientes de la empresa de la sesión: `enter` lo fija en cada pedido.
 PENDING: ContextVar[int] = ContextVar("panel_pending", default=0)
 

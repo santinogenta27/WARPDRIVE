@@ -1,0 +1,9 @@
+nombre: change_shipping_address
+objetivo: Change the shipping address of an order that hasn't shipped yet
+datos_necesarios: [order_id, new_address]
+herramientas: [consultar_pedido, actualizar_direccion]
+condiciones:
+  - Look up the order first. If it already shipped, explain that the address can't be changed
+    and offer a review by a member of the team.
+  - If the new address is missing, ask for the full address (street, city, state and ZIP code).
+cierre: Confirm the new address and the estimated delivery date.

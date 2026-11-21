@@ -194,6 +194,7 @@ class _Usage:
     session: int  # mensajes de la sesión
     ip: int  # de la IP en las últimas 24 h
     total: int  # de todo el chat del tenant en las últimas 24 h
+    trial: int | None = None  # lo que le queda a una prueba gratis (decisión 075)
 
 
 def _usage(
@@ -215,10 +216,15 @@ def _usage(
             (ip_hash,),
         ).fetchone()
     assert counts is not None
-    return _Usage(session=row[0], ip=counts[0], total=counts[1])
+    from app.trial import service as trial
+
+    left = trial.chat_allowance(conn, tenant_id)
+    return _Usage(session=row[0], ip=counts[0], total=counts[1], trial=left)
 
 
 def _exceeded(deps: WebDeps, usage: _Usage) -> str | None:
+    if usage.trial is not None and usage.trial <= 0:  # mensajes o costo de la prueba gratis
+        return "trial"
     if usage.session >= MESSAGE_LIMIT:
         return "session"
     if usage.total >= deps.daily_limit:
@@ -479,6 +485,10 @@ def _process(
                 "insert into web_usage (tenant_id, ip_hash) values (%s, %s)",
                 (tenant_id, ip_hash),
             )
+        if usage.trial is not None:
+            from app.trial import service as trial
+
+            trial.count_message(conn, tenant_id)
         return {
             "remaining": MESSAGE_LIMIT - usage.session - 1,
             "remaining_today": max(deps.ip_daily_limit - usage.ip - 1, 0),

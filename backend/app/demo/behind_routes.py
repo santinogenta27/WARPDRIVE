@@ -52,9 +52,12 @@ def render(
     language: str,
     northwind: bool,
     live: str | None = None,
+    trial: bool = False,
 ) -> str:
     """La página: el sitio de la tienda (`app/demo/store.py`), el widget y el panel en vivo.
-    `live`: de dónde lee los pasos (el playground del panel usa el suyo, decisión 056)."""
+    `live`: de dónde lee los pasos (el playground del panel usa el suyo, decisión 056). `trial`:
+    una prueba gratis (decisión 075): sin la tienda ficticia, que se confundiría con la del
+    visitante; el chat y los pasos lado a lado."""
     values = {
         "lang": language,
         "title": TITLES[language].format(name=name),
@@ -62,18 +65,41 @@ def render(
         "slug": slug,
         "accent": accent.lstrip("#"),
         "live": live or f"/demo/{slug}/live",
+        "mode": "trial" if trial else "",
     }
     page = PAGE.read_text(encoding="utf-8")
     for key, value in values.items():
         page = page.replace("{{" + key + "}}", html.escape(value, quote=True))
+    if trial:
+        note = TRIAL_NOTES[language].format(name=html.escape(name))
+        return page.replace("{{store}}", f'<p class="trial-note">{note}</p>')
     return page.replace("{{store}}", store.render(name, language, northwind))
+
+
+TRIAL_NOTES = {
+    "es": "Así atendería el asistente en el sitio de {name}. Los pedidos son de ejemplo.",
+    "en": "This is how the assistant would answer on {name}'s site. The orders are samples.",
+}
+
+
+def _is_trial(deps: Any, tenant_id: uuid.UUID) -> bool:
+    with deps.connection() as conn, tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "select settings ? 'trial' from tenants where id = %s", (tenant_id,)
+        ).fetchone()
+    return bool(row and row[0])
 
 
 @router.get("/demo/{slug}", response_class=HTMLResponse, include_in_schema=False)
 def behind_page(slug: str, deps: Deps) -> HTMLResponse:
-    found, _, language, northwind = _company(deps, slug)
+    found, tenant_id, language, northwind = _company(deps, slug)
     page = render(
-        name=found.name, slug=slug, accent=found.accent, language=language, northwind=northwind
+        name=found.name,
+        slug=slug,
+        accent=found.accent,
+        language=language,
+        northwind=northwind,
+        trial=_is_trial(deps, tenant_id),
     )
     return HTMLResponse(page, headers={"Cache-Control": "no-cache"})
 

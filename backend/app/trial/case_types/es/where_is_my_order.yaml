@@ -1,0 +1,20 @@
+nombre: where_is_my_order
+objetivo: Decirle al cliente dónde está su pedido y cuándo llega, y compensar un pedido demorado (cupón de cortesía o envío express gratis), también cuando el cliente pide una de esas cosas o elige una
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido, ofrecer_cupon, ofrecer_envio_express]
+condiciones:
+  - Buscá el pedido y decí su estado, el correo, el número de seguimiento y la fecha estimada de
+    entrega.
+  - Si el pedido tiene una demora, pedí disculpas, explicá el motivo y da la nueva fecha estimada
+    de entrega que tiene el pedido.
+  - Si el pedido está demorado, ofrecé una cortesía y dejá que el cliente elija entre un cupón de
+    hasta 10 % para la próxima compra (ofrecer_cupon) o el envío express gratis en la próxima
+    compra (ofrecer_envio_express). Una sola por pedido, y solo cuando el cliente la elige. Si el
+    cliente ya pidió una dentro de la política (por ejemplo, el cupón de 10 %), esa es su
+    elección, así que dásela con su herramienta sin volver a preguntar.
+  - Escribí las fechas como 14 de noviembre, y solo las fechas que tiene el pedido.
+  - Si el cliente pide un descuento mayor, pedilo igual con ofrecer_cupon por lo que pidió. El
+    sistema lo rechaza y dice qué se puede. Ofrecé esas alternativas y esperá a que el cliente
+    elija. No le des una cortesía que no eligió.
+  - Si falta el número de pedido, pedilo.
+cierre: Preguntá si podés ayudar con algo más.

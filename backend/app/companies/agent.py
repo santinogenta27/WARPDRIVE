@@ -33,12 +33,14 @@ def build_guardian(conn: psycopg.Connection, tenant_id: uuid.UUID) -> "Guardian"
     from app.demo import northwind
     from app.demo.acme import shared_acme
     from app.policy.guardian import Guardian
+    from app.trial import service as trial
 
     runtime, _ = runtime_for(
         conn,
         tenant_id,
         demo=shared_acme,
-        demos={northwind.BASE_URL: northwind.shared_northwind},
+        # La API simulada de una prueba gratis solo se arma si la empresa apunta ahí (075).
+        demos={northwind.BASE_URL: northwind.shared_northwind, **trial.sandboxes(conn, tenant_id)},
     )
     return Guardian(conn, runtime)
 

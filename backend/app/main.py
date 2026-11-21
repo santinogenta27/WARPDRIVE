@@ -16,6 +16,8 @@ from app.panel.review_routes import router as review_router
 from app.panel.routes import router as panel_router
 from app.panel.signup_routes import router as signup_router
 from app.panel.team_routes import router as team_router
+from app.panel.trials_routes import router as trials_panel_router
+from app.trial.routes import router as trial_router
 
 
 @asynccontextmanager
@@ -42,6 +44,8 @@ app.include_router(review_router)  # revisión de conversaciones (decisión 073)
 app.include_router(billing_router)
 app.include_router(behind_router)  # vista detrás de escena (decisión 041)
 app.include_router(cart_router)  # carrito de la demo de Northwind (decisión 065)
+app.include_router(trial_router)  # prueba gratis self-service (decisión 075)
+app.include_router(trials_panel_router)  # sus pruebas, en el panel del operador
 
 
 @app.get("/health")

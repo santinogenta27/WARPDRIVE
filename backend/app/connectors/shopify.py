@@ -31,6 +31,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 
+from app import net
 from app.connectors import shopify_auth
 
 API_VERSION = "2026-10"
@@ -268,7 +269,7 @@ class ShopifyTransport(httpx.BaseTransport):
         self._api = httpx.Client(
             base_url=f"https://{self.shop}/admin/api/{API_VERSION}",
             headers={"X-Shopify-Access-Token": creds.access_token},
-            transport=upstream,
+            transport=upstream or net.SafeTransport(),  # solo IPs públicas (decisión 076)
             timeout=15.0,
             follow_redirects=False,
         )

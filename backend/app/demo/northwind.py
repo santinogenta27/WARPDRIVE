@@ -153,63 +153,20 @@ def configure(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
     límites y activa los tipos de caso. Idempotente: lleva una base que ya tenía Northwind al
     estado de los fixtures."""
     from app.channels.web import widget
-    from app.companies import connection as system
-    from app.companies import review
-    from app.onboarding.toolgen import _snake, build_manifests, operations, store_tools
 
     data = company()
-    spec = openapi()
-    system.connect_demo(conn, tenant_id, spec, base_url=BASE_URL)
     conn.execute(
         "update tenants set settings = settings || %s where id = %s",
         (Jsonb(_settings()), tenant_id),
     )
-    instructions = {
-        kind["name"]: (NORTHWIND_DIR / "case_types" / f"{kind['name']}.yaml").read_text("utf-8")
-        for kind in data["case_types"]
-    }
-    by_tool = {_snake(op.operation_id): op.operation_id for op in operations(spec)}
-    picked = {
-        name: [
-            by_tool[tool]
-            for tool in review.parse_instructions(text).get("herramientas") or []
-            if tool in by_tool
-        ]
-        for name, text in instructions.items()
-    }
-    store_tools(conn, tenant_id, build_manifests(spec, picked))
-    with tenant_scope(conn, tenant_id):
-        for name, text in instructions.items():
-            conn.execute(
-                "insert into case_types (tenant_id, name, instructions, active)"
-                " values (%s, %s, %s, false) on conflict (tenant_id, name) do nothing",
-                (tenant_id, name, text),
-            )
-    limits: dict[str, dict[str, Any]] = data.get("tool_limits") or {}
-    for tool in review.tools(conn, tenant_id):
-        mine = limits.get(tool.name, {})
-        review.set_tool(
-            conn,
-            tenant_id,
-            tool.id,
-            approved=True,
-            risk=mine.get("risk", review.UNSET),
-            max_amount=mine.get("max_amount"),
-            approval_over=mine.get("approval_over"),
-            amount_from=mine.get("amount_from"),
-            alternatives=mine.get("alternatives"),
-            retention=mine.get("retention", []),
-        )
-    active = {kind["name"]: bool(kind["active"]) for kind in data["case_types"]}
-    for kind in review.case_types(conn, tenant_id):
-        if kind.name in instructions:
-            review.set_case_type(
-                conn,
-                tenant_id,
-                kind.id,
-                active=active[kind.name],
-                instructions=instructions[kind.name],
-            )
+    configure_tools(
+        conn,
+        tenant_id,
+        base_url=BASE_URL,
+        instructions={kind["name"]: case_type_text(kind["name"]) for kind in data["case_types"]},
+        limits=data.get("tool_limits") or {},
+        active={kind["name"]: bool(kind["active"]) for kind in data["case_types"]},
+    )
     # Ventas cruzadas (decisión 061): las reglas de los fixtures, sin duplicar al regenerar.
     from app.sales import upsell
 
@@ -233,6 +190,71 @@ def configure(conn: psycopg.Connection, tenant_id: uuid.UUID) -> None:
         domains="\n".join(current.domains),
         suggestions="\n".join(brand.get("suggestions") or []),
     )
+
+
+def case_type_text(name: str) -> str:
+    """Las instrucciones de un tipo de caso de Northwind (`case_types/<name>.yaml`)."""
+    return (NORTHWIND_DIR / "case_types" / f"{name}.yaml").read_text("utf-8")
+
+
+def configure_tools(
+    conn: psycopg.Connection,
+    tenant_id: uuid.UUID,
+    *,
+    base_url: str,
+    instructions: dict[str, str],
+    limits: dict[str, dict[str, Any]],
+    active: dict[str, bool],
+) -> None:
+    """Conecta la API simulada (`base_url`), genera las herramientas que piden los tipos de caso
+    desde su OpenAPI, las aprueba con sus límites y activa los tipos de caso. Idempotente. La usa
+    también la prueba gratis, sobre la misma API con otros datos (decisión 075)."""
+    from app.companies import connection as system
+    from app.companies import review
+    from app.onboarding.toolgen import _snake, build_manifests, operations, store_tools
+
+    spec = openapi()
+    system.connect_demo(conn, tenant_id, spec, base_url=base_url)
+    by_tool = {_snake(op.operation_id): op.operation_id for op in operations(spec)}
+    picked = {
+        name: [
+            by_tool[tool]
+            for tool in review.parse_instructions(text).get("herramientas") or []
+            if tool in by_tool
+        ]
+        for name, text in instructions.items()
+    }
+    store_tools(conn, tenant_id, build_manifests(spec, picked))
+    with tenant_scope(conn, tenant_id):
+        for name, text in instructions.items():
+            conn.execute(
+                "insert into case_types (tenant_id, name, instructions, active)"
+                " values (%s, %s, %s, false) on conflict (tenant_id, name) do nothing",
+                (tenant_id, name, text),
+            )
+    for tool in review.tools(conn, tenant_id):
+        mine = limits.get(tool.name, {})
+        review.set_tool(
+            conn,
+            tenant_id,
+            tool.id,
+            approved=True,
+            risk=mine.get("risk", review.UNSET),
+            max_amount=mine.get("max_amount"),
+            approval_over=mine.get("approval_over"),
+            amount_from=mine.get("amount_from"),
+            alternatives=mine.get("alternatives"),
+            retention=mine.get("retention", []),
+        )
+    for kind in review.case_types(conn, tenant_id):
+        if kind.name in instructions:
+            review.set_case_type(
+                conn,
+                tenant_id,
+                kind.id,
+                active=active[kind.name],
+                instructions=instructions[kind.name],
+            )
 
 
 def index_documents(conn: psycopg.Connection, tenant_id: uuid.UUID, embedder: Embedder) -> int:

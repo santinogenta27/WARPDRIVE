@@ -58,9 +58,23 @@ def start_signup(
     email: str,
     password: str,
     base_url: str,
+    trial_token: str = "",
 ) -> None:
-    """Guarda el registro pendiente y envía el enlace de confirmación."""
+    """Guarda el registro pendiente y envía el enlace de confirmación. `trial_token`: viene de
+    "Empezar mi piloto" en una prueba gratis; al confirmar, se convierte esa empresa de prueba
+    (decisión 075). El email tiene que ser el de la prueba."""
     company, email = company.strip(), email.strip().lower()
+    trial_id = None
+    if trial_token:
+        from app.trial import service
+
+        trial = service.find(conn, trial_token)
+        if trial is None or trial.status not in service.ACTIVE:
+            raise SignupError("La prueba ya no está disponible. Registrate sin ella.")
+        if email != trial.email:
+            raise SignupError("Usá el email con el que hiciste la prueba.")
+        trial_id = trial.id
+        service.request_pilot(conn, trial.id)
     if not 2 <= len(company) <= 80:
         raise SignupError("El nombre de la empresa tiene que tener entre 2 y 80 caracteres.")
     if not EMAIL.match(email) or len(email) > 200:
@@ -77,9 +91,16 @@ def start_signup(
         raise SignupError("Demasiados registros con ese email. Probá de nuevo mañana.")
     token = secrets.token_urlsafe(32)
     conn.execute(
-        "insert into signups (company, email, password_hash, token_hash, expires_at)"
-        " values (%s, %s, %s, %s, %s)",
-        (company, email, auth.hash_password(password), _hash(token), _now() + SIGNUP_TTL),
+        "insert into signups (company, email, password_hash, token_hash, expires_at, trial_id)"
+        " values (%s, %s, %s, %s, %s, %s)",
+        (
+            company,
+            email,
+            auth.hash_password(password),
+            _hash(token),
+            _now() + SIGNUP_TTL,
+            trial_id,
+        ),
     )
     link = f"{base_url.rstrip('/')}/registro/confirmar?token={token}"
     mailer.send(
@@ -98,13 +119,19 @@ def confirm_signup(conn: psycopg.Connection, token: str) -> Company:
     """Crea la empresa del registro. El enlace sirve una sola vez."""
     row = conn.execute(
         "delete from signups where token_hash = %s and expires_at > now()"
-        " returning company, email, password_hash",
+        " returning company, email, password_hash, trial_id",
         (_hash(token),),
     ).fetchone()
     if row is None:
         raise SignupError("El enlace no es válido o venció. Registrate de nuevo.")
-    company, email, password_hash = row
+    company, email, password_hash, trial_id = row
     try:
+        if trial_id is not None:  # "Empezar mi piloto": la empresa de prueba pasa a ser real
+            from app.trial import service
+
+            return service.convert(
+                conn, trial_id, company=company, email=email, password_hash=password_hash
+            )
         return create_company(conn, company, email, "", password_hash=password_hash)
     except CompanyError as error:
         raise SignupError(str(error)) from error

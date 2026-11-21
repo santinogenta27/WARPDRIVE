@@ -59,9 +59,68 @@ def _northwind(deps: Any, slug: str) -> None:
         raise HTTPException(status_code=404, detail="No disponible")
 
 
+TRIAL_TEXTS = {
+    "es": ("Tu carrito", "Ver en tu tienda", "Descuento", "Esta es la tienda de ejemplo de tu "
+           "prueba. En tu piloto, el link lleva al checkout de tu tienda: el asistente solo manda "
+           "el link, nunca cobra."),
+    "en": ("Your cart", "See it in your store", "Discount", "This is your trial's sample store. "
+           "In your pilot, the link goes to your store's checkout: the assistant only sends the "
+           "link, it never takes a payment."),
+}  # fmt: skip
+
+
+def _trial_cart(
+    deps: Any, tenant_id: Any, language: str, items: str, discount: str
+) -> HTMLResponse:
+    """El link de compra de una prueba gratis (decisión 075): el carrito con sus productos."""
+    from app.trial import service
+
+    with deps.connection() as conn:
+        trial = service.for_tenant(conn, tenant_id)
+    if trial is None:
+        raise HTTPException(status_code=404, detail="No disponible")
+    api = northwind.api_module()
+    catalog = {
+        v["sku"]: view
+        for view in map(api.product_view, service.mock_products(trial.products))
+        for v in view["variants"]
+    }
+    title, see, off_label, note = TRIAL_TEXTS["en" if language == "en" else "es"]
+    rows, total = "", 0.0
+    for part in items.split(","):
+        sku, _, quantity = part.partition(":")
+        view = catalog.get(sku.strip().upper())
+        if view is None:
+            raise HTTPException(status_code=404, detail="No existe ese producto")
+        count = max(int(quantity or 1), 1)
+        total += view["price"] * count
+        link = (
+            f' · <a href="{html.escape(view["url"])}" rel="noopener">{see}</a>'
+            if view.get("url")
+            else ""
+        )
+        rows += (
+            f'<div class="row"><span>{html.escape(view["name"])} × {count}{link}</span>'
+            f"<b>{html.escape(view['currency'])} {view['price'] * count:,.2f}</b></div>"
+        )
+    off = ""
+    if discount:
+        percent = float("".join(c for c in discount if c.isdigit() or c == ".") or 0)
+        total *= 1 - percent / 100
+        off = f'<div class="row muted"><span>{off_label} {html.escape(discount)}</span></div>'
+    currency = html.escape(next(iter(catalog.values()))["currency"]) if catalog else ""
+    body = (
+        f'<h1>{title}</h1><div class="card">{rows}{off}<div class="row"><b>Total</b>'
+        f'<b>{currency} {total:,.2f}</b></div></div><p class="muted">{note}</p>'
+    )
+    return _page(f"{title} · {trial.name}", body)
+
+
 @router.get("/demo/{slug}/cart/{items}", response_class=HTMLResponse)
 def cart_page(slug: str, items: str, deps: Deps, ref: str = "", discount: str = "") -> HTMLResponse:
-    _northwind(deps, slug)
+    _, tenant_id, language, is_northwind = _company(deps, slug)
+    if not is_northwind:
+        return _trial_cart(deps, tenant_id, language, items, discount)
     catalog = _catalog()
     rows, total = "", 0.0
     for part in items.split(","):

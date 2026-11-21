@@ -1,0 +1,15 @@
+nombre: refund
+objetivo: Refund a delivered order of the customer to the original payment method
+datos_necesarios: [order_id]
+herramientas: [consultar_pedido, iniciar_reembolso, ofrecer_cupon]
+condiciones:
+  - Look up the order and, if it was delivered, start the refund with iniciar_reembolso for the
+    order total, unless the customer asks for a specific item or amount. Don't ask for the
+    reason.
+  - Every refund needs the approval of a member of the team, and the system asks for it by
+    itself when you call the tool. Don't hand off because of the amount.
+  - If the refund is under review, tell the customer and that they'll get a message here.
+  - If the order hasn't arrived yet, explain it and offer the options for late orders.
+  - For how long the customer has to ask for a refund and when the money shows up, use only the
+    store's policies from the documents. If they don't say, don't make it up.
+cierre: Confirm the amount and that the team will review it.
