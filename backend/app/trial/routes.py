@@ -311,14 +311,20 @@ def _form_page(
     return _layout(t["title"], body, language, 400 if error else 200)
 
 
+def _prefill(sitio: str, email: str) -> dict[str, str]:
+    """Datos que llegan del formulario del sitio web (enterprisedataai.com): solo completan los
+    campos. El envío sigue pasando por este formulario, con su sello de tiempo y su trampa."""
+    return {"sitio": sitio.strip()[:300], "email": email.strip()[:200]}
+
+
 @router.get("/probar", response_class=HTMLResponse)
-def trial_form(lang: str = "") -> HTMLResponse:
-    return _form_page(_lang(lang))
+def trial_form(lang: str = "", sitio: str = "", email: str = "") -> HTMLResponse:
+    return _form_page(_lang(lang), values=_prefill(sitio, email))
 
 
 @router.get("/try", response_class=HTMLResponse)
-def trial_form_en() -> HTMLResponse:
-    return _form_page("en")
+def trial_form_en(sitio: str = "", email: str = "") -> HTMLResponse:
+    return _form_page("en", values=_prefill(sitio, email))
 
 
 @router.post("/probar")
