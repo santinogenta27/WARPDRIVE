@@ -110,9 +110,7 @@ def main() -> int:
         if found:
             print(f"    Qué falta: {found.missing} · {found.what}\n    Qué hacer: {found.todo}")
         return 1
-    ok &= _step(
-        bool(creds.access_token), "token recibido (dura 24 horas)"
-    )
+    ok &= _step(bool(creds.access_token), "token recibido (dura 24 horas)")
 
     print("2. Permisos de la app")
     lacking = shopify_auth.missing_scopes(list(creds.scopes))
