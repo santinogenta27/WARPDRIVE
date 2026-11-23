@@ -281,6 +281,7 @@ transition-duration:.01ms!important}
   applyTexts();
 
   var cfg = null, open = embedded, busy = false, typing = null, unread = 0, lastFocus = null;
+  var pendingBrand = null;
   var state = load() || blank();
 
   function blank() { return { session: null, items: [], remaining: null, locked: false }; }
@@ -431,6 +432,8 @@ transition-duration:.01ms!important}
     log.textContent = "";
     log.removeAttribute("aria-busy");
     renderItem({ kind: "agent", text: cfg.greeting, ts: state.items.length ? state.items[0].ts : Date.now() });
+    // Vista previa del panel: una respuesta de ejemplo con la voz de la marca (decisión 087).
+    if (cfg.sample) renderItem({ kind: "agent", text: cfg.sample, ts: Date.now() });
     state.items.forEach(renderItem);
     var last = state.items[state.items.length - 1];
     if (!state.items.length && cfg.suggestions.length) chips(cfg.suggestions, T.suggestions);
@@ -725,6 +728,8 @@ transition-duration:.01ms!important}
       }
       cfg = data;
       form.hidden = false;
+      // Cambios de la vista previa del panel que llegaron antes de la configuración.
+      if (pendingBrand) { var early = pendingBrand; pendingBrand = null; window.EnterpriseChat.setBrand(early); }
       brand();
       renderAll();
       root.setAttribute("data-ready", "");
@@ -743,12 +748,13 @@ transition-duration:.01ms!important}
     close: function () { setOpen(false); },
     toggle: function () { setOpen(!open); },
     setBrand: function (changes) {
-      if (!cfg) return;
+      if (!cfg) { pendingBrand = Object.assign(pendingBrand || {}, changes); return; }
       if (changes.name) { cfg.name = changes.name; cfg.greeting = T.greeting(changes.name); }
       if (changes.greeting) cfg.greeting = changes.greeting;
       if (/^#[0-9a-f]{6}$/i.test(changes.accent || "")) cfg.accent = changes.accent;
       if ("logo" in changes) cfg.logo = changes.logo;
       if (changes.suggestions) cfg.suggestions = changes.suggestions;
+      if ("sample" in changes) cfg.sample = changes.sample;
       brand();
       renderAll();
     }

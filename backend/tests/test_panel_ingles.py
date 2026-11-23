@@ -232,9 +232,9 @@ def test_textos_comunes_en_ingles(world: World) -> None:
         ("/panel/agent/topics", "Where is my order"),
         ("/panel/agent/actions", "Order lookup"),
         ("/panel/agent/actions", "Low risk · requires a verified identity · read only"),
-        ("/panel/agent/actions", "Approved"),
-        ("/panel/agent/actions", "Not approved"),
-        ("/panel/agent/language", "Save language"),
+        ("/panel/agent/actions", ">On<"),
+        ("/panel/agent/actions", ">Off<"),
+        ("/panel/agent/language", "Language your agent speaks"),
     ):
         assert text in client.get(url).text, text
 

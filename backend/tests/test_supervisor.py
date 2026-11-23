@@ -188,7 +188,7 @@ def test_configuracion_muestra_lo_que_agrega_y_lo_apaga(
     stack.send("lucia", ORDER_QUESTION)
     page = panel.get("/panel/agent").text
     assert "Control de respuestas" in page
-    assert re.search(r"<td>Revisiones</td><td>1</td>", page)
+    assert re.search(r"<td>Respuestas revisadas \(30 días\)</td><td class=\"num\">1</td>", page)
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None
     panel.post("/panel/configuracion/supervisor", data={"csrf": token.group(1), "activo": "no"})
