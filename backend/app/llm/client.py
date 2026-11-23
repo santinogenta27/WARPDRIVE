@@ -119,11 +119,16 @@ class LLMClient:
         max_tokens: int,
         system: str | None = None,
         case_id: uuid.UUID | None = None,
+        role: str | None = None,
         **options: Any,
     ) -> LLMResponse:
+        """`role`: el papel de la llamada en los pasos del turno cuando el modelo pedido no
+        alcanza para nombrarla (el supervisor usa el modelo del clasificador, decisión 079)."""
         if model not in PRICES:  # sin precio no hay costo: no se llama
             raise ValueError(f"Modelo sin precio configurado: {model}")
         with timing.step(timing.MODEL, "modelo") as span:
+            if role:
+                span["llm.role"] = role
             response = self._provider.create(
                 model=model, messages=messages, max_tokens=max_tokens, system=system, **options
             )

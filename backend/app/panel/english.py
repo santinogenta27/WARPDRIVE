@@ -860,6 +860,26 @@ PHRASES: dict[str, str] = {
     "No se envió al cliente": "It wasn't sent to the customer",
     "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
+    # Supervisor de respuestas (Hito 12, decisión 079)
+    "Supervisor de respuestas": "Answer supervisor",
+    "Un modelo barato revisa cada respuesta con datos, políticas o acciones antes de enviarla: "
+    "que coincida con las fuentes y las herramientas, con las reglas y con el tono de la marca. "
+    "Puede aprobarla, pedir que se reescriba una vez o derivar a una persona.": (
+        "A low-cost model reviews every answer with data, policies or actions before it's sent: "
+        "that it matches the sources and the tools, the rules and the brand's tone. It can "
+        "approve it, ask for one rewrite or hand off to a person."
+    ),
+    "Últimos 30 días": "Last 30 days",
+    "Revisiones": "Reviews",
+    "Pidió reescribir": "Asked for a rewrite",
+    "Derivó": "Handed off",
+    "Latencia media que agrega": "Average latency it adds",
+    "Costo total": "Total cost",
+    "Supervisor de respuestas activado.": "Answer supervisor turned on.",
+    "Supervisor de respuestas desactivado.": "Answer supervisor turned off.",
+    "El supervisor frenó la respuesta antes de enviarla": (
+        "The supervisor stopped the answer before it was sent"
+    ),
     # Memoria de los clientes (Hito 12, decisión 078)
     "Clientes": "Customers",
     "Sin nombre": "No name",

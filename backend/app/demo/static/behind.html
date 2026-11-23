@@ -312,7 +312,8 @@
       time: { base: "Database", modelo: "Model", espera: "Waiting for Groq", busqueda: "Search", herramientas: "Tools",
         verificaciones: "Checks", email: "Email" },
       queries: function (n) { return n + (n === 1 ? " query" : " queries"); },
-      roles: { classifier: "classifier", agent: "agent", model: "model" },
+      roles: { classifier: "classifier", agent: "agent", supervisor: "supervisor", model: "model" },
+      supervisor: "Supervisor", sup: { aprobar: "Approved", reescribir: "Asked for a rewrite", derivar: "Handed off" },
       caseStatus: { open: "Open", waiting_approval: "Waiting for approval", escalated: "With a person", resolved: "Resolved" }
     },
     es: {
@@ -336,7 +337,8 @@
       time: { base: "Base de datos", modelo: "Modelo", espera: "Esperando a Groq", busqueda: "Búsqueda",
         herramientas: "Herramientas", verificaciones: "Controles", email: "Email" },
       queries: function (n) { return n + (n === 1 ? " consulta" : " consultas"); },
-      roles: { classifier: "clasificador", agent: "agente", model: "modelo" },
+      roles: { classifier: "clasificador", agent: "agente", supervisor: "supervisor", model: "modelo" },
+      supervisor: "Supervisor", sup: { aprobar: "Aprobó", reescribir: "Pidió reescribir", derivar: "Derivó" },
       caseStatus: { open: "Abierto", waiting_approval: "Esperando aprobación", escalated: "Con una persona", resolved: "Resuelto" }
     }
   }[lang];
@@ -417,6 +419,12 @@
         box.appendChild(document.createTextNode(" " + c.reason));
         return box;
       })));
+    }
+    // Supervisor (decisión 079): su veredicto final, con la latencia y el costo que agregó.
+    if (t.supervisor) {
+      var v = t.supervisor.verdict;
+      card.appendChild(row(T.supervisor, [chip(T.sup[v] || v, v === "aprobar" ? "ok" : "warn"),
+        el("span", "mono", " " + secs(t.supervisor.ms) + " · $" + Number(t.supervisor.cost_usd || 0).toFixed(4))]));
     }
     if (t.sources && t.sources.length) card.appendChild(row(T.cited, t.sources.map(function (s) { return chip(s, "accent"); })));
     if (t.approval) {
