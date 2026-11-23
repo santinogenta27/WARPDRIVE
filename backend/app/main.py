@@ -11,6 +11,7 @@ from app.demo.cart import router as cart_router
 from app.panel.billing_routes import router as billing_router
 from app.panel.company_routes import router as company_router
 from app.panel.customers_routes import router as customers_router
+from app.panel.home_routes import router as home_router
 from app.panel.live_routes import router as live_router
 from app.panel.metrics_routes import router as metrics_router
 from app.panel.nav_routes import router as nav_router
@@ -40,6 +41,7 @@ app.include_router(twilio_router)
 app.include_router(web_router)
 app.include_router(panel_router)
 app.include_router(company_router)
+app.include_router(home_router)  # Home (decisión 085)
 app.include_router(nav_router)  # secciones del panel y direcciones de antes (decisión 085)
 app.include_router(live_router)  # probar y salir en vivo (decisión 056)
 app.include_router(signup_router)  # registro self-service e invitaciones (decisión 058)

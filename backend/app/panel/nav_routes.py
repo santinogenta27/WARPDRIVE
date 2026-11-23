@@ -10,21 +10,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.panel import auth
 from app.panel.html import page, toast
-from app.panel.routes import Deps, _draft_cards, _first_steps_html, enter
+from app.panel.routes import Deps, _draft_cards, enter
 
 router = APIRouter(prefix="/panel", include_in_schema=False)
-
-
-@router.get("/home", response_class=HTMLResponse)
-def home_page(request: Request, deps: Deps) -> Response:
-    ctx = enter(request, deps)
-    if isinstance(ctx, Response):
-        return ctx
-    with deps.connection() as conn:
-        steps = _first_steps_html(conn, ctx)
-    body = f"""<div class="pagehead"><div><h1>Home</h1>
-<p class="lead">What your agent is doing and what needs you.</p></div></div>{steps}"""
-    return HTMLResponse(page("Home", body, active="home", session=ctx.session))
 
 
 @router.get("/inbox/drafts", response_class=HTMLResponse)

@@ -795,7 +795,7 @@ PHRASES: dict[str, str] = {
     "Primeros pasos": "First steps",
     "pasos hechos": "steps done",
     "Hecho": "Done",
-    "Cargá tus documentos": "Upload your documents",
+    "Cargá tu conocimiento": "Add your knowledge",
     "Políticas, preguntas frecuentes o tu historial: el agente responde con ellos.": (
         "Policies, FAQs or your history: the agent answers with them."
     ),
@@ -803,13 +803,13 @@ PHRASES: dict[str, str] = {
     "El horario del equipo y a quién avisar cuando el agente deriva.": (
         "Your team's hours and who to notify when the agent hands off."
     ),
-    "Configurá tu marca": "Set up your brand",
+    "Elegí cómo se ve tu chat": "Choose how your chat looks",
     "El nombre, el color y el logo del chat.": "The chat's name, color and logo.",
-    "Probá el agente en el playground": "Try the agent in the playground",
+    "Probá tu agente": "Try your agent",
     "Escribile como un cliente y mirá cada paso que da.": (
         "Write to it like a customer and watch every step it takes."
     ),
-    "Instalá el widget en tu sitio": "Install the widget on your site",
+    "Agregá el chat a tu sitio": "Add the chat to your website",
     "Pegá la línea del script en tu sitio, en uno de tus dominios.": (
         "Paste the script line on your site, on one of your domains."
     ),

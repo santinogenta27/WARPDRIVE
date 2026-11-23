@@ -26,7 +26,6 @@ from app.audit import log as audit_log
 from app.cases import assist, feedback, refund_confirmation, supervision
 from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
-from app.companies import first_steps
 from app.companies.connection import ClientFactory, http_client
 from app.db.connection import connect, tenant_scope
 from app.llm.client import LLMClient
@@ -688,33 +687,6 @@ def reset_demo(request: Request, form: Form, deps: Deps) -> Response:
         archive_cases(conn, ctx.tenant_id, _user_id(conn, ctx.tenant_id, ctx.session.email))
     deps.reset_sandbox()
     return RedirectResponse("/panel/inbox", status_code=303)
-
-
-def _first_steps_html(conn: psycopg.Connection, ctx: Ctx) -> str:
-    """Primeros pasos (decisión 074): el progreso real de la empresa hasta salir en vivo. No se
-    muestra en las demos ni a las personas del equipo; desaparece cuando está todo hecho."""
-    if ctx.demo or ctx.session.admin or ctx.session.role == "agent":
-        return ""
-    found = first_steps.steps(conn, ctx.tenant_id)
-    done = sum(s.done for s in found)
-    if done == len(found):
-        return ""
-    items = "".join(
-        f"""<li class="row" style="gap:10px;align-items:flex-start;margin:8px 0">
-<span class="badge {"resolved" if s.done else ""}" aria-hidden="true">{"✓" if s.done else i}</span>
-<div class="grow"><a href="{s.link}"{' style="text-decoration:line-through"' if s.done else ""}>
-{esc(s.title)}</a><div class="muted small">{esc(s.detail)}</div></div>
-<span class="small muted">{"Hecho" if s.done else "Pendiente"}</span></li>"""
-        for i, s in enumerate(found, start=1)
-    )
-    percent = round(100 * done / len(found))
-    return f"""<div class="card attention"><div class="row"><h2 class="grow" style="margin:0">
-Primeros pasos</h2><span class="muted"><span>{done}/{len(found)}</span> <span>pasos hechos</span>
-</span></div><div role="progressbar" aria-valuenow="{percent}" aria-valuemin="0"
-aria-valuemax="100" style="height:6px;border-radius:3px;background:var(--line, #e5e7eb);
-margin:10px 0"><div style="width:{percent}%;height:100%;border-radius:3px;
-background:var(--ok, #16a34a)"></div></div><ol style="list-style:none;padding:0;margin:0">
-{items}</ol></div>"""
 
 
 def _inbox_rows(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[tuple[Any, ...]]:

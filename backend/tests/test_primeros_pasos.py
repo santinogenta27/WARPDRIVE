@@ -5,7 +5,6 @@ marca, prueba en el playground, widget instalado y salir en vivo. Cada paso tien
 marca solo cuando la empresa lo hizo. La lista desaparece cuando está todo hecho.
 """
 
-import re
 import uuid
 from collections.abc import Iterator
 from contextlib import nullcontext
@@ -87,13 +86,13 @@ def done_keys(world: World) -> list[str]:
 
 def test_una_empresa_nueva_ve_los_seis_pasos_con_su_enlace(world: World) -> None:
     page = login(OWNER, PASSWORD).get("/panel/home").text
-    assert "Primeros pasos" in page and "0/6" in page
+    assert "Primeros pasos" in page and "0 de 6 hechos" in page
     for title in (
-        "Cargá tus documentos",
+        "Cargá tu conocimiento",
         "Definí las reglas de atención",
-        "Configurá tu marca",
-        "Probá el agente en el playground",
-        "Instalá el widget en tu sitio",
+        "Elegí cómo se ve tu chat",
+        "Probá tu agente",
+        "Agregá el chat a tu sitio",
         "Salí en vivo",
     ):
         assert title in page, title
@@ -136,7 +135,7 @@ def test_cada_paso_se_marca_con_el_progreso_real(world: World) -> None:
     assert "widget" in done_keys(world)
 
     page = login(OWNER, PASSWORD).get("/panel/home").text
-    assert "5/6" in page
+    assert "5 de 6 hechos" in page
 
     with tenant_scope(world.conn, tenant):
         world.conn.execute(
@@ -166,6 +165,6 @@ def test_no_aparece_a_una_persona_del_equipo(world: World) -> None:
 def test_en_ingles(world: World) -> None:
     i18n.set_language(world.conn, world.tenant, "en")
     page = login(OWNER, PASSWORD).get("/panel/home").text
-    assert "First steps" in page and "Upload your documents" in page
+    assert "Get started" in page and "Add your knowledge" in page
     assert spanish_left(page) == []
-    assert re.search(r"0/6</span>\s*<span>steps done", page)
+    assert "0 of 6 done" in page

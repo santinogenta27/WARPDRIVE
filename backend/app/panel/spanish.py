@@ -68,6 +68,55 @@ PHRASES: dict[str, str] = {
     "What your agent is doing and what needs you.": (
         "Qué está haciendo tu agente y qué te necesita."
     ),
+    "Get started": "Primeros pasos",
+    "Your agent goes live when these steps are done.": (
+        "Tu agente sale en vivo cuando completes estos pasos."
+    ),
+    "Setup progress": "Avance de la configuración",
+    "Done": "Hecho",
+    "Start": "Empezar",
+    "Needs your attention": "Te necesita",
+    "Open Inbox": "Abrir la bandeja",
+    "Approval": "Aprobación",
+    "View conversation": "Ver conversación",
+    "Reject": "Rechazar",
+    "Approve": "Aprobar",
+    "Handed off": "Derivado",
+    "A customer is waiting for your team": "Un cliente espera a tu equipo",
+    "Reply": "Responder",
+    "Draft": "Borrador",
+    "Draft to review": "Borrador por revisar",
+    "Review": "Revisar",
+    "You're all caught up": "Estás al día",
+    "Nothing needs you right now. Approvals, hand-offs and drafts show up here.": (
+        "Nada te necesita ahora. Acá aparecen las aprobaciones, derivaciones y borradores."
+    ),
+    "Last 7 days": "Últimos 7 días",
+    "See all insights": "Ver todas las métricas",
+    "Resolved by your agent": "Resueltas por tu agente",
+    "Attributed sales": "Ventas atribuidas",
+    "AI cost": "Costo de IA",
+    "Agent status": "Estado del agente",
+    "Live": "En vivo",
+    "Paused": "En pausa",
+    "Setting up": "Configurándose",
+    "Your agent is answering your customers.": "Tu agente está atendiendo a tus clientes.",
+    "Your agent isn't answering. Customers are told a person will reply.": (
+        "Tu agente no está atendiendo. A los clientes se les dice que responde una persona."
+    ),
+    "Finish the steps above to go live.": "Completá los pasos para salir en vivo.",
+    "Pause agent": "Pausar el agente",
+    "Resume": "Reanudar",
+    "Website chat": "Chat del sitio",
+    "Store": "Tienda",
+    "Installed": "Instalado",
+    "Not installed": "Sin instalar",
+    "Connected": "Conectado",
+    "Not active": "Inactivo",
+    "Not connected": "Sin conectar",
+    "Demo store": "Tienda de demo",
+    "Test mode": "Modo de prueba",
+    "Manage channels": "Administrar canales",
     # inbox
     "No drafts waiting": "No hay borradores esperando",
     "With review before sending on, every answer from your agent waits here until someone on "
@@ -156,6 +205,7 @@ _PHRASES = {_normal(k): v for k, v in PHRASES.items()}
 # Textos con partes variables: (patrón en inglés, armado en español).
 PATTERNS: list[tuple[re.Pattern[str], Callable[[re.Match[str]], str]]] = [
     (re.compile(r"(\d+) waiting for approval"), lambda m: f"{m[1]} esperando aprobación"),
+    (re.compile(r"(\d+) of (\d+) done"), lambda m: f"{m[1]} de {m[2]} hechos"),
     (
         re.compile(
             r"Download everything (.+) has here \(conversations, customers, knowledge, rules and "

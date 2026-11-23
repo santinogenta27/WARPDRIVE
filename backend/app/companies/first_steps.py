@@ -26,7 +26,7 @@ class Step:
 STEPS = [
     (
         "documentos",
-        "Cargá tus documentos",
+        "Cargá tu conocimiento",
         "Políticas, preguntas frecuentes o tu historial: el agente responde con ellos.",
         "/panel/knowledge",
     ),
@@ -38,19 +38,19 @@ STEPS = [
     ),
     (
         "marca",
-        "Configurá tu marca",
+        "Elegí cómo se ve tu chat",
         "El nombre, el color y el logo del chat.",
         "/panel/deploy#widget",
     ),
     (
         "playground",
-        "Probá el agente en el playground",
+        "Probá tu agente",
         "Escribile como un cliente y mirá cada paso que da.",
         "/panel/test/playground",
     ),
     (
         "widget",
-        "Instalá el widget en tu sitio",
+        "Agregá el chat a tu sitio",
         "Pegá la línea del script en tu sitio, en uno de tus dominios.",
         "/panel/deploy#widget",
     ),

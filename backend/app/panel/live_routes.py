@@ -127,4 +127,5 @@ def toggle_live(request: Request, form: Form, deps: Deps) -> Response:
             go_live.set_live(conn, ctx.tenant_id, on)
     except go_live.GoLiveError:
         return RedirectResponse("/panel/test", status_code=303)
-    return RedirectResponse("/panel/test", status_code=303)
+    back = form.get("volver", "")
+    return RedirectResponse(back if back.startswith("/panel/") else "/panel/test", status_code=303)
