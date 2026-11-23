@@ -3,7 +3,7 @@
 El idioma del panel es el de la empresa de la sesión (`tenants.settings.language`). `enter` lo
 fija en `LANGUAGE` al principio de cada pedido. Con `en`:
 
-- Las ayudas comunes (estados, montos, fechas, tipos de caso, acciones) ya salen en inglés: ver
+- Las ayudas comunes (estados, montos, fechas, temas, acciones) ya salen en inglés: ver
   `html.py` y `labels.py`.
 - El resto del texto de cada página se traduce al final, en `page()`, con este catálogo: cada
   nodo de texto del HTML (y los atributos `placeholder`, `aria-label`, `title` y `data-done`) se
@@ -45,8 +45,7 @@ PHRASES: dict[str, str] = {
     "La empresa de la demo todavía no está cargada.": "The demo company isn't loaded yet.",
     "Esa aprobación no existe.": "That approval doesn't exist.",
     "Ese caso no existe.": "That case doesn't exist.",
-    "Ese tipo de caso no existe.": "That case type doesn't exist.",
-    "Esa herramienta no existe.": "That tool doesn't exist.",
+    "Ese tema no existe.": "That topic doesn't exist.",
     "Esa acción no existe.": "That action doesn't exist.",
     "Ese documento no existe.": "That document doesn't exist.",
     "Esa empresa no existe.": "That company doesn't exist.",
@@ -63,10 +62,55 @@ PHRASES: dict[str, str] = {
         "Too many attempts. Please try again in a few minutes."
     ),
     "Email o clave incorrectos.": "Wrong email or password.",
+    # registro e invitación (decisión 058; en inglés desde el Hito 13)
+    "Creá la cuenta de tu empresa": "Create your company's account",
+    "Crear cuenta": "Create account",
+    "Un agente que atiende a tus clientes con tus políticas y tu sistema.": (
+        "An AI agent that serves your customers with your policies and your store."
+    ),
+    "Tu piloto conserva las políticas y los productos que cargamos en la prueba.": (
+        "Your pilot keeps the policies and products we loaded in the trial."
+    ),
+    "Nombre de la empresa": "Company name",
+    "Tu email": "Your email",
+    "Te mandamos un enlace para confirmar tu email. ¿Ya tenés cuenta?": (
+        "We'll send you a link to confirm your email. Already have an account?"
+    ),
+    "Ingresá": "Sign in",
+    "Revisá tu email": "Check your email",
+    "Te mandamos un enlace para confirmar tu email y crear la cuenta. Vence en 24 horas.": (
+        "We sent you a link to confirm your email and create the account. It expires in 24 hours."
+    ),
+    "Si no llega en unos minutos, revisá el correo no deseado.": (
+        "If it doesn't arrive in a few minutes, check your spam folder."
+    ),
+    "Elegí tu clave": "Choose your password",
+    "Entrar al panel": "Go to the dashboard",
+    "La prueba ya no está disponible. Registrate sin ella.": (
+        "The trial isn't available anymore. Sign up without it."
+    ),
+    "Usá el email con el que hiciste la prueba.": "Use the email you used for the trial.",
+    "El nombre de la empresa tiene que tener entre 2 y 80 caracteres.": (
+        "The company name must be between 2 and 80 characters."
+    ),
+    "El email no es válido.": "That email isn't valid.",
+    "El email del usuario no es válido.": "That email isn't valid.",
+    "Demasiados registros con ese email. Probá de nuevo mañana.": (
+        "Too many sign-ups with that email. Please try again tomorrow."
+    ),
+    "El enlace no es válido o venció. Registrate de nuevo.": (
+        "The link isn't valid or has expired. Please sign up again."
+    ),
+    "Ya hay una empresa con ese nombre.": "There's already a company with that name.",
+    "Ese email ya tiene un usuario.": "That email already has an account.",
+    "La invitación no es válida, ya se usó o venció.": (
+        "The invitation isn't valid, was already used or has expired."
+    ),
     # menú
     "Casos": "Cases",
     "Aprobaciones": "Approvals",
     "Onboarding": "Onboarding",
+    "Conocimiento": "Knowledge",
     "Reporte": "Report",
     "Configuración": "Settings",
     "Métricas": "Metrics",
@@ -94,9 +138,9 @@ PHRASES: dict[str, str] = {
     "Solicitud rechazada": "Request rejected",
     "No hay pedidos esperando aprobación.": "Nothing is waiting for approval.",
     "Las acciones de riesgo alto (como un reembolso) no se ejecutan hasta que una persona las "
-    "aprueba. Al aprobar, se ejecuta por el guardián y el cliente recibe el aviso en el chat.": (
+    "aprueba. Al aprobar, se ejecuta y el cliente recibe el aviso en el chat.": (
         "High-risk actions (like a refund) don't run until a person approves them. When you "
-        "approve, the policy guard runs the action and the customer is notified in the chat."
+        "approve, the action runs and the customer is notified in the chat."
     ),
     # casos
     "Derivados a una persona": "Handed off to a person",
@@ -133,7 +177,7 @@ PHRASES: dict[str, str] = {
     "Buscó en los documentos": "Searched the documents",
     "Fuentes:": "Sources:",
     "Fuentes: sin resultados": "Sources: no results",
-    "Usó una herramienta": "Used a tool",
+    "Usó una acción": "Used an action",
     "Descartó una respuesta sin respaldo": "Discarded an unsupported answer",
     "Descartó una respuesta que no se podía mostrar": "Discarded an answer it couldn't show",
     "Respondió": "Answered",
@@ -150,7 +194,7 @@ PHRASES: dict[str, str] = {
     ),
     "Referencia": "Reference",
     "Caso resuelto": "Case resolved",
-    "Caso resuelto por el asistente": "Case resolved by the assistant",
+    "Caso resuelto por el agente": "Case resolved by the agent",
     "Caso resuelto con una persona": "Case resolved with a person",
     "Satisfacción": "Satisfaction",
     "Caso reabierto": "Case reopened",
@@ -188,9 +232,7 @@ PHRASES: dict[str, str] = {
     "· sin verificar": "· not verified",
     # motivos internos (derivación, guardián, control de fundamento)
     "El cliente pidió hablar con una persona.": "The customer asked to talk to a person.",
-    "El tipo de caso no está activo para la empresa.": (
-        "The case type isn't active for the company."
-    ),
+    "El tema no está activo para la empresa.": ("The topic isn't active for the company."),
     "El cliente amenaza con una denuncia o acción legal.": (
         "The customer is threatening a complaint or legal action."
     ),
@@ -200,15 +242,15 @@ PHRASES: dict[str, str] = {
     "El modelo no pudo responder este pedido.": "The model couldn't answer this request.",
     "Volvió a pedir la verificación.": "It asked for verification again.",
     "Derivado por el agente.": "Handed off by the agent.",
-    "Herramienta no habilitada para este tipo de caso.": "Tool not enabled for this case type.",
-    "Herramienta inexistente o no aprobada por el cliente.": (
-        "Tool doesn't exist or wasn't approved by the company."
+    "Acción no habilitada para este tema.": "Action not enabled for this topic.",
+    "Acción inexistente o no aprobada por el cliente.": (
+        "Action doesn't exist or wasn't approved by the company."
     ),
     "Parámetros inválidos.": "Invalid parameters.",
     "El contacto no está verificado.": "The contact isn't verified.",
     "El recurso no pertenece al contacto.": "The resource doesn't belong to the contact.",
-    "El monto supera el máximo permitido para esta herramienta.": (
-        "The amount is over this tool's maximum."
+    "El monto supera el máximo permitido para esta acción.": (
+        "The amount is over this action's maximum."
     ),
     "Requiere aprobación humana.": "Requires human approval.",
     "Ya hay una solicitud pendiente de aprobación para el mismo recurso.": (
@@ -221,9 +263,9 @@ PHRASES: dict[str, str] = {
     "Gasto del mes:": "This month's spending:",
     "Tope:": "Cap:",
     "Llamadas al modelo:": "Model calls:",
-    "Al 80 % se envía un aviso; al 100 %, el asistente pasa cada mensaje a una persona del equipo "
+    "Al 80 % se envía un aviso; al 100 %, el agente pasa cada mensaje a una persona del equipo "
     "hasta el mes siguiente o hasta que subas el tope.": (
-        "At 80% you get an alert; at 100%, the assistant hands every message to a person on "
+        "At 80% you get an alert; at 100%, the agent hands every message to a person on "
         "your team until next month or until you raise the cap."
     ),
     "Proveedor": "Provider",
@@ -240,11 +282,11 @@ PHRASES: dict[str, str] = {
     "El tope no puede ser negativo.": "The cap can't be negative.",
     "Falta la API key de ese proveedor.": "The API key for that provider is missing.",
     "Elegí un proveedor de la lista.": "Choose a provider from the list.",
-    # conectar una tienda y probar herramientas (decisión 057)
+    # conectar una tienda y probar acciones (decisión 057)
     "¿Usás Shopify o Tiendanube?": "Do you use Shopify or Tiendanube?",
-    "Conectá tu tienda sin OpenAPI: se crean las herramientas de pedidos, envíos, reembolsos y "
+    "Conectá tu tienda sin OpenAPI: se crean las acciones de pedidos, envíos, reembolsos y "
     "cupones, sin aprobar. Después probá la conexión y aprobalas más arriba.": (
-        "Connect your store without an OpenAPI: the order, shipping, refund and coupon tools are "
+        "Connect your store without an OpenAPI: the order, shipping, refund and coupon actions are "
         "created, unapproved. Then test the connection and approve them above."
     ),
     "Plataforma": "Platform",
@@ -256,9 +298,9 @@ PHRASES: dict[str, str] = {
     ),
     "Conectar tienda": "Connect store",
     "Número de pedido de ejemplo": "Sample order number",
-    "Probar herramientas": "Test tools",
-    "Tienda conectada. Probá la conexión y aprobá sus herramientas.": (
-        "Store connected. Test the connection and approve its tools."
+    "Probar acciones": "Test actions",
+    "Tienda conectada. Probá la conexión y aprobá sus acciones.": (
+        "Store connected. Test the connection and approve its actions."
     ),
     # equipo e invitaciones (decisión 058)
     "¿Tu empresa no tiene cuenta?": "Your company doesn't have an account?",
@@ -278,24 +320,24 @@ PHRASES: dict[str, str] = {
         "An admin sees and changes everything. A team member handles Cases and Approvals but "
         "doesn't change the settings."
     ),
-    # nombre y saludo del asistente (decisión 052)
-    "Nombre del asistente (opcional)": "Assistant's name (optional)",
+    # nombre y saludo del agente (decisión 052)
+    "Nombre del agente (opcional)": "Agent's name (optional)",
     "Saludo al abrir el chat (opcional)": "Greeting when the chat opens (optional)",
     "Por ejemplo: Nina": "For example: Nina",
-    "El nombre del asistente tiene que tener entre 2 y 40 caracteres.": (
-        "The assistant's name has to be 2 to 40 characters long."
+    "El nombre del agente tiene que tener entre 2 y 40 caracteres.": (
+        "The agent's name has to be 2 to 40 characters long."
     ),
     "El saludo puede tener hasta 300 caracteres.": "The greeting can be up to 300 characters.",
     "El nombre y el saludo no pueden llevar < ni >.": "The name and greeting can't contain < or >.",
     # ventas atribuidas (decisión 063)
-    "Ventas atribuidas al agente": "Sales attributed to the assistant",
+    "Ventas atribuidas al agente": "Sales attributed to the agent",
     "ventas": "sales",
     "monto": "amount",
     "links de compra": "checkout links",
     "de los links terminan en compra": "of the links end in a purchase",
     "Cuenta las compras que la tienda informa como completadas desde un link que armó el "
-    "asistente: cada link lleva el identificador de su conversación.": (
-        "Counts the purchases the store reports as completed from a link the assistant built: "
+    "agente: cada link lleva el identificador de su conversación.": (
+        "Counts the purchases the store reports as completed from a link the agent built: "
         "each link carries the identifier of its conversation."
     ),
     "Actualizar ventas": "Update sales",
@@ -312,13 +354,13 @@ PHRASES: dict[str, str] = {
     "Cuándo ofrecerlo": "When to offer it",
     "Descuento máximo (%)": "Maximum discount (%)",
     "Agregar": "Add",
-    "No hay tipos de caso activos donde ofrecer algo.": (
-        "There are no active case types where something can be offered."
+    "No hay temas activos donde ofrecer algo.": (
+        "There are no active topics where something can be offered."
     ),
-    "El asistente ofrece como mucho un producto por conversación, después de resolver lo que "
+    "El agente ofrece como mucho un producto por conversación, después de resolver lo que "
     "pidió el cliente, y nunca si está enojado o en medio de un reclamo. El descuento no pasa el "
     "máximo.": (
-        "The assistant offers at most one product per conversation, after solving what the "
+        "The agent offers at most one product per conversation, after solving what the "
         "customer asked, and never when they're upset or in the middle of a complaint. The "
         "discount never goes over the maximum."
     ),
@@ -327,9 +369,9 @@ PHRASES: dict[str, str] = {
     "El descuento tiene que ser un número.": "The discount has to be a number.",
     "El descuento máximo va de 0 a 50 %.": "The maximum discount goes from 0 to 50%.",
     "Falta el producto.": "The product is missing.",
-    "Elegí al menos un tipo de caso.": "Choose at least one case type.",
-    "Las ventas no se ofrecen en un reclamo: elegí otro tipo de caso.": (
-        "Products aren't offered during a complaint: choose another case type."
+    "Elegí al menos un tema.": "Choose at least one topic.",
+    "Las ventas no se ofrecen en un reclamo: elegí otro tema.": (
+        "Products aren't offered during a complaint: choose another topic."
     ),
     # reglas de atención (decisión 051)
     "Reglas de atención": "Service rules",
@@ -346,9 +388,9 @@ PHRASES: dict[str, str] = {
     "Dom": "Sun",
     "Desde": "From",
     "Hasta": "To",
-    "El asistente atiende siempre. Fuera de este horario, cuando pasa un caso a una persona, le "
+    "El agente atiende siempre. Fuera de este horario, cuando pasa un caso a una persona, le "
     "dice al cliente cuándo le responden. Sin días marcados, no se avisa nada.": (
-        "The assistant is always on. Outside these hours, when it hands a case to a person, it "
+        "The agent is always on. Outside these hours, when it hands a case to a person, it "
         "tells the customer when they'll get a reply. With no days checked, nothing is said."
     ),
     "Email que recibe los casos derivados y las aprobaciones": (
@@ -369,17 +411,17 @@ PHRASES: dict[str, str] = {
     ),
     "Leer el sitio": "Read the website",
     "Documentos indexados": "Indexed documents",
-    "Lo que el asistente puede citar. Para actualizar uno, subí el archivo de nuevo con el mismo "
+    "Lo que el agente puede citar. Para actualizar uno, subí el archivo de nuevo con el mismo "
     "nombre: reemplaza al anterior.": (
-        "What the assistant can cite. To update one, upload the file again with the same name: "
+        "What the agent can cite. To update one, upload the file again with the same name: "
         "it replaces the previous one."
     ),
     "Título": "Title",
     "Fragmentos": "Chunks",
     "Indexado": "Indexed",
     "Borrar": "Delete",
-    "Documento borrado: el asistente ya no lo usa.": (
-        "Document deleted: the assistant no longer uses it."
+    "Documento borrado: el agente ya no lo usa.": (
+        "Document deleted: the agent no longer uses it."
     ),
     "La dirección tiene que empezar con https://.": "The address has to start with https://.",
     # vista detrás de escena (decisión 041)
@@ -388,11 +430,11 @@ PHRASES: dict[str, str] = {
     "Desactivada": "Off",
     "Abrila en": "Open it at",
     "Una página para mostrar la demo: el sitio con el chat a la izquierda y, a la derecha, cada "
-    "paso del caso en vivo (intención, verificación, herramientas, reglas del guardián, fuentes, "
+    "paso del caso en vivo (intención, verificación, acciones, controles, fuentes, "
     "aprobación, latencia y costo). Es de solo lectura y no muestra mensajes ni datos personales "
     "de los clientes.": (
         "A page to show the demo: the site with the chat on the left and, on the right, each step "
-        "of the case live (intent, verification, tools, policy guard rules, sources, approval, "
+        "of the case live (intent, verification, actions, safety checks, sources, approval, "
         "latency and cost). It's read-only and doesn't show customers' messages or personal data."
     ),
     "Vista detrás de escena activada.": "Behind-the-scenes view turned on.",
@@ -401,8 +443,8 @@ PHRASES: dict[str, str] = {
     "Pidió empatía antes de responder": "Asked for empathy before answering",
     "Atendió un segundo tema": "Handled a second topic",
     "Cliente molesto, sin empatía.": "Upset customer, no empathy.",
-    "afirma una acción que ninguna herramienta hizo en este turno": (
-        "it states an action no tool performed in this turn"
+    "afirma una acción que ninguna acción hizo en este turno": (
+        "it states an action no action performed in this turn"
     ),
     "Hay una solicitud pendiente para el mismo recurso en este caso.": (
         "There's a pending request for the same resource in this case."
@@ -410,14 +452,14 @@ PHRASES: dict[str, str] = {
     "Cancelada por el cliente.": "Cancelled by the customer.",
     "No había nada pendiente.": "There was nothing pending.",
     "Pidió verificar a un contacto verificado.": "It asked a verified contact to verify again.",
-    "Quiso derivar con los datos de una herramienta ya disponibles.": (
-        "It tried to hand off with a tool's data already in hand."
+    "Quiso derivar con los datos de una acción ya disponibles.": (
+        "It tried to hand off with an action's data already in hand."
     ),
-    "afirmación factual sin fuente ni herramienta": "factual claim without a source or a tool",
+    "afirmación factual sin fuente ni acción": "factual claim without a source or an action",
     "respuesta vacía": "empty answer",
     "metadatos": "metadata",
     "marcas del modelo": "model markers",
-    "nombre de herramienta": "tool name",
+    "nombre de acción": "action name",
     # reporte
     "Reporte de preparación": "Readiness report",
     "solo información": "information only",
@@ -425,12 +467,12 @@ PHRASES: dict[str, str] = {
     "Volumen": "Volume",
     "Resolvería solo": "Would resolve on its own",
     "Nada pendiente.": "Nothing pending.",
-    "Tipos de caso": "Case types",
+    "Temas": "Topics",
     "Qué falta para resolver más": "What's missing to resolve more",
     "Ataques no frenados:": "Attacks not stopped:",
     "del volumen lo resolvería solo": "of the volume it would resolve on its own",
     "conversaciones analizadas": "conversations analyzed",
-    "tipos de caso detectados": "case types detected",
+    "temas detectados": "topics detected",
     "ataques y pedidos indebidos frenados": "attacks and improper requests stopped",
     "Ajustar las instrucciones del tipo con los casos que fallaron": (
         "Adjust the type's instructions using the cases that failed"
@@ -455,8 +497,8 @@ PHRASES: dict[str, str] = {
     "El análisis terminó.": "The analysis is done.",
     "Mirá el": "See the",
     "reporte de preparación": "readiness report",
-    "y después revisá y aprobá los tipos de caso y las herramientas en": (
-        "and then review and approve the case types and tools in"
+    "y después revisá y aprobá los temas y las acciones en": (
+        "and then review and approve the topics and actions in"
     ),
     "1. Subí tus fuentes": "1. Upload your sources",
     "Historial de chats y documentos": "Chat history and documents",
@@ -487,8 +529,8 @@ PHRASES: dict[str, str] = {
     "Ingesta": "Ingestion",
     "Anonimización": "Anonymization",
     "Descubrimiento de casos": "Case discovery",
-    "Generación de evals": "Eval generation",
-    "Generación de herramientas": "Tool generation",
+    "Generación de pruebas": "Test generation",
+    "Generación de acciones": "Action generation",
     "En curso": "Running",
     "Hecha": "Done",
     "Falló": "Failed",
@@ -502,25 +544,25 @@ PHRASES: dict[str, str] = {
     "Elegí al menos un archivo.": "Choose at least one file.",
     # configuración
     "Idioma": "Language",
-    "Idioma con el que atiende el asistente": "Language the assistant uses",
+    "Idioma con el que atiende el agente": "Language the agent uses",
     "Guardar idioma": "Save language",
-    "Cambia las respuestas del asistente, los textos del chat y del widget y el email del código "
-    "de verificación. En inglés, el asistente usa un tono cálido y profesional; en español, "
+    "Cambia las respuestas del agente, los textos del chat y del widget y el email del código "
+    "de verificación. En inglés, el agente usa un tono cálido y profesional; en español, "
     "rioplatense con voseo.": (
-        "It changes the assistant's answers, the chat and widget texts and the verification code "
-        "email. In English the assistant uses a warm, professional tone; in Spanish, "
+        "It changes the agent's answers, the chat and widget texts and the verification code "
+        "email. In English the agent uses a warm, professional tone; in Spanish, "
         "Rioplatense Spanish."
     ),
     "Idioma guardado: English.": "Language saved: English.",
     "Idioma guardado: Español.": "Language saved: Spanish.",
     "Elegí un idioma de la lista.": "Choose a language from the list.",
-    "Herramientas": "Tools",
+    "Acciones": "Actions",
     "Sistema de la empresa": "Company system",
     "Chat de prueba": "Test chat",
     "Widget para tu sitio": "Widget for your site",
-    "Revisá lo que encontró el análisis y decidí qué usa el asistente. Lo que activás o aprobás "
-    "acá pasa al asistente en vivo en el momento; nada queda activo sin tu aprobación.": (
-        "Review what the analysis found and decide what the assistant uses. Whatever you "
+    "Revisá lo que encontró el análisis y decidí qué usa el agente. Lo que activás o aprobás "
+    "acá pasa al agente en vivo en el momento; nada queda activo sin tu aprobación.": (
+        "Review what the analysis found and decide what the agent uses. Whatever you "
         "activate or approve here goes live right away; nothing is active without your approval."
     ),
     "Activo": "Active",
@@ -529,13 +571,11 @@ PHRASES: dict[str, str] = {
     "Desactivar": "Deactivate",
     "Ver y editar las instrucciones": "View and edit the instructions",
     "Guardar instrucciones": "Save instructions",
-    "Todavía no hay tipos de caso. Salen del análisis del": (
-        "There are no case types yet. They come from the"
-    ),
+    "Todavía no hay temas. Salen del análisis del": ("There are no topics yet. They come from the"),
     "onboarding": "onboarding analysis",
-    "Todavía no hay herramientas. Se generan en el análisis a partir del OpenAPI de tu sistema "
+    "Todavía no hay acciones. Se generan en el análisis a partir del OpenAPI de tu sistema "
     "(cargalo más abajo y volvé a analizar).": (
-        "There are no tools yet. The analysis generates them from your system's OpenAPI (upload "
+        "There are no actions yet. The analysis generates them from your system's OpenAPI (upload "
         "it below and analyze again)."
     ),
     "Aprobada": "Approved",
@@ -547,27 +587,27 @@ PHRASES: dict[str, str] = {
     "Siempre (riesgo alto)": "Always (high risk)",
     "Nunca": "Never",
     "Sin tope": "No cap",
-    "Tipo de caso actualizado.": "Case type updated.",
-    "Herramienta actualizada.": "Tool updated.",
+    "Tema actualizado.": "Topic updated.",
+    "Acción actualizada.": "Action updated.",
     "Widget guardado.": "Widget saved.",
     "Las instrucciones no son un YAML válido.": "The instructions aren't valid YAML.",
     "Las instrucciones tienen que tener un `objetivo`.": "The instructions need an `objetivo`.",
-    "`herramientas` tiene que ser una lista de nombres.": "`herramientas` must be a list of names.",
+    "`acciones` tiene que ser una lista de nombres.": "`acciones` must be a list of names.",
     "Sistema de demo (API simulada de Acme)": "Demo system (Acme's simulated API)",
     "Sistema de demo (API simulada)": "Demo system (simulated API)",
     "Conectado al sistema real": "Connected to the real system",
-    "Modo simulado: las herramientas no tocan tu sistema": (
-        "Simulated mode: the tools don't touch your system"
+    "Modo simulado: las acciones no tocan tu sistema": (
+        "Simulated mode: the actions don't touch your system"
     ),
-    "Sin sistema conectado: el asistente solo informa": (
-        "No system connected: the assistant only gives information"
+    "Sin sistema conectado: el agente solo informa": (
+        "No system connected: the agent only gives information"
     ),
     "Acme usa la API simulada de pedidos de la demo. Las demás empresas conectan acá su sistema "
     "real.": "Acme uses the demo's simulated orders API. Other companies connect their real "
     "system here.",
-    "Esta empresa usa la API simulada de la demo: sus herramientas llegan a pedidos de prueba, "
+    "Esta empresa usa la API simulada de la demo: sus acciones llegan a pedidos de prueba, "
     "nunca a un sistema real.": (
-        "This company uses the demo's simulated API: its tools reach test orders, never a real "
+        "This company uses the demo's simulated API: its actions reach test orders, never a real "
         "system."
     ),
     "Todavía no cargaste el OpenAPI.": "You haven't uploaded the OpenAPI yet.",
@@ -582,9 +622,9 @@ PHRASES: dict[str, str] = {
     "Volver al modo simulado": "Back to simulated mode",
     "Probar conexión": "Test connection",
     "1. OpenAPI de tu sistema": "1. Your system's OpenAPI",
-    "Con el OpenAPI, el análisis genera las herramientas del asistente. Subí el archivo (.json o "
+    "Con el OpenAPI, el análisis genera las acciones del agente. Subí el archivo (.json o "
     ".yaml) o pegalo.": (
-        "With the OpenAPI, the analysis generates the assistant's tools. Upload the file (.json "
+        "With the OpenAPI, the analysis generates the agent's actions. Upload the file (.json "
         "or .yaml) or paste it."
     ),
     "…o pegá acá el OpenAPI": "…or paste the OpenAPI here",
@@ -604,14 +644,14 @@ PHRASES: dict[str, str] = {
     "Guardar acceso": "Save access",
     "3. Probar y activar": "3. Test and activate",
     "La prueba hace una consulta de solo lectura a tu sistema con tus credenciales. Hasta que "
-    "actives, el asistente usa respuestas simuladas.": (
+    "actives, el agente usa respuestas simuladas.": (
         "The test makes a read-only request to your system with your credentials. Until you "
-        "activate, the assistant uses simulated responses."
+        "activate, the agent uses simulated responses."
     ),
-    "Usa los tipos de caso activos, las herramientas aprobadas y tus documentos. Las "
-    "conversaciones aparecen en Casos.": (
-        "It uses the active case types, the approved tools and your documents. Conversations "
-        "show up in Cases."
+    "Usa los temas activos, las acciones aprobadas y tus documentos. Las "
+    "conversaciones aparecen en la Bandeja.": (
+        "It uses the active topics, the approved actions and your documents. Conversations "
+        "show up in the Inbox."
     ),
     "Esta empresa no tiene un chat web.": "This company has no web chat.",
     "El chat de la demo está en": "The demo chat is on",
@@ -653,10 +693,10 @@ PHRASES: dict[str, str] = {
     "La prueba de conexión pasó. Ya podés activar.": (
         "The connection test passed. You can activate now."
     ),
-    "Listo: el asistente ya usa tu sistema real.": "Done: the assistant now uses your real system.",
-    "El asistente volvió al modo simulado.": "The assistant is back in simulated mode.",
+    "Listo: el agente ya usa tu sistema real.": "Done: the agent now uses your real system.",
+    "El agente volvió al modo simulado.": "The agent is back in simulated mode.",
     # métricas
-    "resueltos por el asistente": "resolved by the assistant",
+    "resueltos por el agente": "resolved by the agent",
     "derivados a una persona": "handed off to a person",
     "latencia p50 por respuesta": "p50 latency per answer",
     "latencia p95 por respuesta": "p95 latency per answer",
@@ -666,9 +706,9 @@ PHRASES: dict[str, str] = {
     "derivados": "handed off",
     "en curso": "in progress",
     "reabiertos": "reopened",
-    "Resolución: de los casos ya resueltos, los que cerró el asistente sin una persona. "
+    "Resolución: de los casos ya resueltos, los que cerró el agente sin una persona. "
     "Derivación: de todos los casos, los que pasaron a una persona.": (
-        "Resolution: of the cases already resolved, the ones the assistant closed without a "
+        "Resolution: of the cases already resolved, the ones the agent closed without a "
         "person. Handoff: of all cases, the ones passed to a person."
     ),
     "Para el cobro:": "For billing:",
@@ -688,7 +728,7 @@ PHRASES: dict[str, str] = {
     "respondió el proveedor de respaldo": "answered by the fallback provider",
     "sin respuesta válida del modelo": "no valid answer from the model",
     "llamadas recuperadas": "recovered calls",
-    "herramientas que fallaron": "tool failures",
+    "acciones que fallaron": "action failures",
     "respuestas cortadas por un error": "answers cut by an error",
     "Error": "Error",
     "Veces": "Times",
@@ -714,22 +754,22 @@ PHRASES: dict[str, str] = {
     "Embeddings": "Embeddings",
     "Todavía no hay uso.": "No usage yet.",
     "Todavía no hay casos con uso.": "No cases with usage yet.",
-    "Historial de evals": "Eval history",
+    "Historial de pruebas": "Test history",
     "Modo": "Mode",
     "Prompt": "Prompt",
     "Resolución": "Resolution",
     "Juez": "Judge",
     "Fallas críticas": "Critical failures",
-    "Todavía no hay corridas de evals guardadas.": "No saved eval runs yet.",
-    "Cada corrida de los evals queda con la versión del prompt y el modelo que respondió: así se "
-    "ve si un cambio mejoró o empeoró.": (
-        "Each eval run is saved with the prompt version and the model that answered, so you can "
-        "see whether a change made things better or worse."
+    "Todavía no hay corridas de pruebas guardadas.": "No saved test runs yet.",
+    "Cada corrida de las pruebas queda con la versión de las instrucciones y el modelo que "
+    "respondió: así se ve si un cambio mejoró o empeoró.": (
+        "Each test run is saved with the instructions version and the model that answered, so "
+        "you can see whether a change made things better or worse."
     ),
     "Por ejemplo: Soporte Tienda, Ana de Tienda": "For example: Store Support, Ana from Store",
     "www.tutienda.com *.tutienda.com": "www.yourstore.com\n*.yourstore.com",
     "*.tutienda.com": "*.yourstore.com",
-    "Todavía no hay un onboarding terminado. Empezá en": "There's no finished onboarding yet. "
+    "Todavía no hay un reporte de preparación. Empezá en": "There's no readiness report yet. "
     "Start in",
     "El cliente volvió por el mismo tema dentro de los 7 días.": (
         "The customer came back about the same topic within 7 days."
@@ -756,16 +796,16 @@ PHRASES: dict[str, str] = {
     "pasos hechos": "steps done",
     "Hecho": "Done",
     "Cargá tus documentos": "Upload your documents",
-    "Políticas, preguntas frecuentes o tu historial: el asistente responde con ellos.": (
-        "Policies, FAQs or your history: the assistant answers with them."
+    "Políticas, preguntas frecuentes o tu historial: el agente responde con ellos.": (
+        "Policies, FAQs or your history: the agent answers with them."
     ),
     "Definí las reglas de atención": "Set your service rules",
-    "El horario del equipo y a quién avisar cuando el asistente deriva.": (
-        "Your team's hours and who to notify when the assistant hands off."
+    "El horario del equipo y a quién avisar cuando el agente deriva.": (
+        "Your team's hours and who to notify when the agent hands off."
     ),
     "Configurá tu marca": "Set up your brand",
     "El nombre, el color y el logo del chat.": "The chat's name, color and logo.",
-    "Probá el asistente en el playground": "Try the assistant in the playground",
+    "Probá el agente en el playground": "Try the agent in the playground",
     "Escribile como un cliente y mirá cada paso que da.": (
         "Write to it like a customer and watch every step it takes."
     ),
@@ -774,8 +814,8 @@ PHRASES: dict[str, str] = {
         "Paste the script line on your site, on one of your domains."
     ),
     "Salí en vivo": "Go live",
-    "Cuando el reporte de preparación da el visto bueno, el asistente atiende en tu sitio.": (
-        "When the readiness report gives the go-ahead, the assistant serves your site."
+    "Cuando el reporte de preparación da el visto bueno, el agente atiende en tu sitio.": (
+        "When the readiness report gives the go-ahead, the agent serves your site."
     ),
     # revisión de conversaciones (decisión 073)
     "Para mejorar": "To improve",
@@ -794,15 +834,15 @@ PHRASES: dict[str, str] = {
     "Otro": "Other",
     "Guardar revisión": "Save review",
     "Revisión guardada": "Review saved",
-    "Caso de eval creado · lo prueba el reporte de preparación": (
-        "Eval case created · the readiness report tests it"
+    "Caso de prueba creado · lo prueba el reporte de preparación": (
+        "Test case created · the readiness report tests it"
     ),
     "Esa respuesta no existe.": "That reply doesn't exist.",
     (
         "Las respuestas que el equipo marcó como incorrectas. Escribí la respuesta esperada y "
-        "convertila en un caso de eval: el reporte de preparación la prueba junto con los demás."
+        "convertila en un caso de prueba: el reporte de preparación la prueba junto con los demás."
     ): (
-        "Replies the team marked as incorrect. Write the expected reply and turn it into an eval "
+        "Replies the team marked as incorrect. Write the expected reply and turn it into a test "
         "case: the readiness report tests it along with the rest."
     ),
     "No hay respuestas marcadas como incorrectas.": "No replies are marked as incorrect.",
@@ -810,7 +850,7 @@ PHRASES: dict[str, str] = {
     "Palabras clave que tiene que incluir (opcional, separadas por coma)": (
         "Keywords it must include (optional, comma-separated)"
     ),
-    "Convertir en caso de eval": "Turn into an eval case",
+    "Convertir en caso de prueba": "Turn into an test case",
     (
         "Cargá un documento que responda esta pregunta (por ejemplo, la política o la página de "
         "ayuda del tema)."
@@ -820,7 +860,7 @@ PHRASES: dict[str, str] = {
     ),
     "Tema:": "Topic:",
     "Cliente": "Customer",
-    "Asistente": "Assistant",
+    "Agente": "Agent",
     "La búsqueda no encontró ningún documento sobre esto.": (
         "The search didn't find any document about this."
     ),
@@ -832,14 +872,13 @@ PHRASES: dict[str, str] = {
     "Modo supervisado activado.": "Supervised mode turned on.",
     "Modo supervisado desactivado.": "Supervised mode turned off.",
     (
-        "Cada respuesta del asistente queda como borrador en Casos. Una persona del equipo la "
+        "Cada respuesta del agente queda como borrador en la Bandeja. Una persona del equipo la "
         "envía, la edita o la rechaza antes de que llegue al cliente, que mientras tanto ve "
-        "“escribiendo…”. Las acciones con herramientas siguen pasando por el guardián y sus "
-        "aprobaciones."
+        "“escribiendo…”. Las acciones de riesgo alto siguen esperando su aprobación."
     ): (
-        "Every reply from the assistant is saved as a draft in Cases. A team member sends, edits "
+        "Every reply from the agent is saved as a draft in the Inbox. A team member sends, edits "
         "or rejects it before it reaches the customer, who sees “typing…” in the meantime. "
-        "Actions with tools still go through the guardian and its approvals."
+        "High-risk actions still wait for their approval."
     ),
     "Borradores por revisar": "Drafts to review",
     (
@@ -848,8 +887,8 @@ PHRASES: dict[str, str] = {
     ): "Supervised mode: the customer sees “typing…” until a person sends or rejects the reply.",
     "Borrador": "Draft",
     "Canal": "Channel",
-    "Respuesta del asistente (podés editarla antes de enviarla)": (
-        "Assistant's reply (you can edit it before sending it)"
+    "Respuesta del agente (podés editarla antes de enviarla)": (
+        "Agent's reply (you can edit it before sending it)"
     ),
     "Respuesta enviada al cliente": "Reply sent to the customer",
     "Borrador rechazado · no se envió nada": "Draft rejected · nothing was sent",
@@ -864,8 +903,8 @@ PHRASES: dict[str, str] = {
     "Tiene": "It has",
     # Promesas cumplidas (Hito 12, decisión 084)
     "Avisos programados": "Scheduled notices",
-    "El asistente solo puede prometerle un aviso al cliente si hay uno de estos pendiente.": (
-        "The assistant can only promise the customer a notice if one of these is pending."
+    "El agente solo puede prometerle un aviso al cliente si hay uno de estos pendiente.": (
+        "The agent can only promise the customer a notice if one of these is pending."
     ),
     "Avisarle al cliente cuando se decida la aprobación": (
         "Let the customer know when the approval is decided"
@@ -881,20 +920,20 @@ PHRASES: dict[str, str] = {
     ),
     # Resultados medibles (Hito 12, decisión 083)
     "Resultados": "Results",
-    "Lo que resolvió el asistente, medido de forma auditable, y de qué hablan tus clientes.": (
-        "What the assistant resolved, measured in an auditable way, and what your customers talk "
-        "about."
+    "Lo que resolvió el agente, medido de forma auditable, y de qué hablan tus clientes.": (
+        "What the agent resolved, measured in an auditable way, and what your customers talk about."
     ),
     "Resolución autónoma": "Autonomous resolution",
     "Ver": "View",
     "Mes": "Month",
     "Exportar CSV": "Export CSV",
-    "Un caso es una resolución autónoma si nunca se derivó, lo resolvió el asistente, no se "
+    "Un caso es una resolución autónoma si nunca se derivó, lo resolvió el agente, no se "
     "reabrió dentro de las 72 h y el cliente no dijo que no se resolvió. El CSV trae un renglón "
-    "por caso, sin datos del cliente: con el número de caso se audita en Casos.": (
-        "A case is an autonomous resolution if it was never handed off, the assistant resolved "
+    "por caso, sin datos del cliente: con el número de caso se audita en la Bandeja.": (
+        "A case is an autonomous resolution if it was never handed off, the agent resolved "
         "it, it wasn't reopened within 72 h and the customer didn't say it wasn't resolved. The "
-        "CSV has one row per case, with no customer data: audit it in Cases with the case number."
+        "CSV has one row per case, with no customer data: audit it in the Inbox with the case "
+        "number."
     ),
     "resoluciones autónomas": "autonomous resolutions",
     "casos resueltos": "resolved cases",
@@ -903,9 +942,9 @@ PHRASES: dict[str, str] = {
     "Temas principales": "Main topics",
     "Motivos de derivación": "Handoff reasons",
     "Preguntas sin respuesta": "Unanswered questions",
-    "Lo que el asistente no pudo responder, agrupado por la palabra que más se repite. Sirve para "
+    "Lo que el agente no pudo responder, agrupado por la palabra que más se repite. Sirve para "
     "saber qué documento cargar. Los ejemplos no tienen datos personales.": (
-        "What the assistant couldn't answer, grouped by the most repeated word. It tells you "
+        "What the agent couldn't answer, grouped by the most repeated word. It tells you "
         "which document to upload. The examples have no personal data."
     ),
     "Otras": "Others",
@@ -916,8 +955,8 @@ PHRASES: dict[str, str] = {
         "Every Monday, an email to the admins with the previous week: conversations, autonomous "
         "resolutions, handoffs, CSAT, topics and unanswered questions."
     ),
-    # Asistente para el equipo (Hito 12, decisión 082)
-    "Asistente para el equipo": "Team assistant",
+    # Copiloto del equipo (Hito 12, decisión 082)
+    "Copiloto del equipo": "Team copilot",
     "Volver a sugerir": "Suggest again",
     "Resumen": "Summary",
     "Paso siguiente": "Next step",
@@ -929,8 +968,8 @@ PHRASES: dict[str, str] = {
         "The suggested reply is below, in “Reply as a team member”: check it and edit it before "
         "sending it."
     ),
-    "Sin respuesta sugerida: el asistente no está disponible ahora.": (
-        "No suggested reply: the assistant isn't available right now."
+    "Sin respuesta sugerida: el agente no está disponible ahora.": (
+        "No suggested reply: the agent isn't available right now."
     ),
     "Revisá el motivo de la derivación y la conversación, y respondé al cliente.": (
         "Check the reason for the handoff and the conversation, and reply to the customer."
@@ -947,10 +986,10 @@ PHRASES: dict[str, str] = {
     "Palabras a evitar (separadas por coma)": "Words to avoid (comma-separated)",
     "Usar emojis": "Use emojis",
     "Firma": "Signature",
-    "Va en el prompt del asistente y la controla el supervisor de respuestas: una palabra a evitar "
-    "hace que la respuesta se reescriba. La firma se agrega al final de cada respuesta y, sin "
-    "emojis, se sacan antes de enviar.": (
-        "It goes into the assistant's prompt and the answer supervisor checks it: a word to "
+    "Va en las instrucciones del agente y la controla el supervisor de respuestas: una palabra "
+    "a evitar hace que la respuesta se reescriba. La firma se agrega al final de cada "
+    "respuesta y, sin emojis, se sacan antes de enviar.": (
+        "It goes into the agent's instructions and the answer supervisor checks it: a word to "
         "avoid makes the answer be rewritten. The signature is added at the end of every answer "
         "and, without emojis, they're removed before sending."
     ),
@@ -965,16 +1004,16 @@ PHRASES: dict[str, str] = {
     "La última simulación falló.": "The last simulation failed.",
     "Simular 20 conversaciones": "Simulate 20 conversations",
     "clientes, 3 corridas cada uno": "customers, 3 runs each",
-    "Tipo de caso": "Type of request",
+    "Tema": "Topic",
     "Corridas que fallaron": "Runs that failed",
     "corrida": "run",
-    "Clientes simulados (enojados, confundidos o apurados) creados desde tus documentos, tipos de "
-    "caso y reglas conversan con el asistente. Cada conversación se repite 3 veces y un juez "
+    "Clientes simulados (enojados, confundidos o apurados) creados desde tus documentos, temas y "
+    "reglas conversan con el agente. Cada conversación se repite 3 veces y un juez "
     "revisa si el cliente logró su objetivo, si se respetaron las reglas y la marca y si la "
     "respuesta fue correcta. pass^3: los clientes que pasaron las 3 veces. No toca tu sistema ni "
     "deja datos.": (
-        "Simulated customers (angry, confused or in a hurry), built from your documents, types "
-        "of request and rules, talk with the assistant. Each conversation is repeated 3 times "
+        "Simulated customers (angry, confused or in a hurry), built from your documents, "
+        "topics and rules, talk with the agent. Each conversation is repeated 3 times "
         "and a judge checks whether the customer reached their goal, whether the rules and the "
         "brand were respected and whether the answer was correct. pass^3: the customers who "
         "passed all 3 times. It doesn't touch your system or leave any data."
@@ -982,10 +1021,10 @@ PHRASES: dict[str, str] = {
     # Supervisor de respuestas (Hito 12, decisión 079)
     "Supervisor de respuestas": "Answer supervisor",
     "Un modelo barato revisa cada respuesta con datos, políticas o acciones antes de enviarla: "
-    "que coincida con las fuentes y las herramientas, con las reglas y con el tono de la marca. "
+    "que coincida con las fuentes y las acciones, con las reglas y con el tono de la marca. "
     "Puede aprobarla, pedir que se reescriba una vez o derivar a una persona.": (
         "A low-cost model reviews every answer with data, policies or actions before it's sent: "
-        "that it matches the sources and the tools, the rules and the brand's tone. It can "
+        "that it matches the sources and the actions, the rules and the brand's tone. It can "
         "approve it, ask for one rewrite or hand off to a person."
     ),
     "Últimos 30 días": "Last 30 days",
@@ -1013,10 +1052,10 @@ PHRASES: dict[str, str] = {
     "meses": "months",
     "Meses de retención:": "Months of retention:",
     "Retención": "Retention",
-    "Lo que el asistente recuerda de cada cliente verificado: nombre, conversaciones anteriores, "
+    "Lo que el agente recuerda de cada cliente verificado: nombre, conversaciones anteriores, "
     "preferencias y compras. Solo lo usa después de verificar la identidad y nunca guarda datos "
     "de pago.": (
-        "What the assistant remembers about each verified customer: name, earlier "
+        "What the agent remembers about each verified customer: name, earlier "
         "conversations, preferences and purchases. It only uses it after verifying their "
         "identity and never stores payment data."
     ),
@@ -1033,8 +1072,8 @@ PHRASES: dict[str, str] = {
     ),
     "Guardar cambios": "Save changes",
     "Borrar la memoria": "Delete the memory",
-    "El asistente deja de recordar a este cliente. Sus conversaciones siguen en Casos.": (
-        "The assistant stops remembering this customer. Their conversations stay in Cases."
+    "El agente deja de recordar a este cliente. Sus conversaciones siguen en la Bandeja.": (
+        "The agent stops remembering this customer. Their conversations stay in the Inbox."
     ),
     "Borrar la memoria de este cliente": "Delete this customer's memory",
     "Ese cliente no existe.": "That customer doesn't exist.",
@@ -1069,11 +1108,11 @@ def _thousands(text: str) -> str:
 
 
 _STEPS = {"modelo": "model", "base de datos": "database", "búsqueda": "search",
-          "herramientas": "tools"}  # fmt: skip
+          "acciones": "actions"}  # fmt: skip
 _CHANNELS = {"Chat web": "Web chat", "WhatsApp": "WhatsApp", "Canal": "Channel"}
 _TOOL_STATUS = {
     "ejecutada": "executed",
-    "negada por el guardián": "denied by the policy guard",
+    "bloqueada por las reglas": "blocked by the rules",
     "necesita aprobación": "needs approval",
     "falló": "failed",
 }
@@ -1133,7 +1172,7 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
     (re.compile(r"Motivo: (.*)"), lambda m: f"Reason: {translate_text(m[1])}"),
     (re.compile(r"Fuentes citadas: (.*)"), lambda m: f"Cited sources: {m[1]}"),
     (
-        re.compile(r"→ (ejecutada|negada por el guardián|necesita aprobación|falló)(?: · (.+))?"),
+        re.compile(r"→ (ejecutada|bloqueada por las reglas|necesita aprobación|falló)(?: · (.+))?"),
         lambda m: f"→ {_TOOL_STATUS[m[1]]}" + (f" · {translate_text(m[2])}" if m[2] else ""),
     ),
     (
@@ -1142,11 +1181,11 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
     ),
     (re.compile(r"(\S+ s) en total · (.+)"), _steps),
     (
-        re.compile(r"(Cliente|Asistente|Equipo de (.+)) · (\d\d:\d\d)"),
+        re.compile(r"(Cliente|Agente|Equipo de (.+)) · (\d\d:\d\d)"),
         lambda m: (
             f"{m[2]} team · {m[3]}"
             if m[2]
-            else f"{'Customer' if m[1] == 'Cliente' else 'Assistant'} · {m[3]}"
+            else f"{'Customer' if m[1] == 'Cliente' else 'Agent'} · {m[3]}"
         ),
     ),
     (re.compile(r"Equipo de (.+)"), lambda m: f"{m[1]} team"),
@@ -1179,25 +1218,25 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
     # reporte
     (
         re.compile(
-            r"Qué parte de la atención de (.+) resolvería el asistente por su cuenta, "
+            r"Qué parte de la atención de (.+) resolvería el agente por su cuenta, "
             r"medido con su propio historial(.*)\."
         ),
         lambda m: (
-            f"How much of {m[1]}'s support the assistant would resolve on its own, "
+            f"How much of {m[1]}'s support the agent would resolve on its own, "
             f"measured with its own history{m[2]}."
         ),
     ),
-    (re.compile(r"Herramientas: (.*)"), lambda m: f"Tools: {translate_text(m[1])}"),
+    (re.compile(r"Acciones: (.*)"), lambda m: f"Actions: {translate_text(m[1])}"),
     (re.compile(r"\((\d+) de (\d+)\)"), lambda m: f"({m[1]} of {m[2]})"),
     (re.compile(r"(\d+) de (\d+)"), lambda m: f"{m[1]} of {m[2]}"),
     (
         re.compile(r"Cómo se mide: (.+) \((\d+) en total\) (.+)"),
         lambda m: (
-            "How it's measured: the history is anonymized and grouped into case types; "
+            "How it's measured: the history is anonymized and grouped into topics; "
             "for each type, test cases are generated from real conversations "
-            f"({m[2]} in total) and the assistant solves them against a test copy of the system, "
+            f"({m[2]} in total) and the agent solves them against a test copy of the system, "
             "without touching real data. The percentage weights each type by its volume. Refunds "
-            "count as resolved when the assistant prepares the approval request: the decision is "
+            "count as resolved when the agent prepares the approval request: the decision is "
             "always made by a person."
         ),
     ),
@@ -1205,13 +1244,13 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
     # onboarding
     (
         re.compile(
-            r"Subí el historial de atención y los documentos de (.+)\. El asistente aprende "
-            r"de ahí: detecta los tipos de caso, arma sus pruebas y te dice qué parte de la "
+            r"Subí el historial de atención y los documentos de (.+)\. El agente aprende "
+            r"de ahí: detecta los temas, arma sus pruebas y te dice qué parte de la "
             r"atención resolvería solo\."
         ),
         lambda m: (
-            f"Upload {m[1]}'s support history and documents. The assistant learns from "
-            "them: it detects the case types, builds its tests and tells you how much of your "
+            f"Upload {m[1]}'s support history and documents. The agent learns from "
+            "them: it detects the topics, builds its tests and tells you how much of your "
             "support it would resolve on its own."
         ),
     ),
@@ -1223,9 +1262,9 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
         re.compile(r"(\d+) datos personales reemplazados, 0 en claro"),
         lambda m: f"{m[1]} personal data items replaced, 0 left in clear",
     ),
-    (re.compile(r"(\d+) tipos de caso"), lambda m: f"{m[1]} case types"),
+    (re.compile(r"(\d+) temas"), lambda m: f"{m[1]} topics"),
     (re.compile(r"(\d+) casos de prueba"), lambda m: f"{m[1]} test cases"),
-    (re.compile(r"(\d+) herramientas"), lambda m: f"{m[1]} tools"),
+    (re.compile(r"(\d+) acciones"), lambda m: f"{m[1]} actions"),
     (
         re.compile(r"resolvería solo el (\d+)%"),
         lambda m: f"would resolve {m[1]}% on its own",
@@ -1239,12 +1278,12 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
     ),
     # configuración
     (
-        re.compile(r"(\d+) conversaciones del historial · Herramientas: (.*)"),
-        lambda m: f"{m[1]} conversations in the history · Tools: {translate_text(m[2])}",
+        re.compile(r"(\d+) conversaciones del historial · Acciones: (.*)"),
+        lambda m: f"{m[1]} conversations in the history · Actions: {translate_text(m[2])}",
     ),
     (
-        re.compile(r"Usa herramientas sin aprobar: (.+)\. Hasta aprobarlas, no las usa\."),
-        lambda m: f"Uses tools that aren't approved: {m[1]}. It won't use them until you do.",
+        re.compile(r"Usa acciones sin aprobar: (.+)\. Hasta aprobarlas, no las usa\."),
+        lambda m: f"Uses actions that aren't approved: {m[1]}. It won't use them until you do.",
     ),
     (
         re.compile(r"(· )?Riesgo (bajo|medio|alto) · (.+)"),
@@ -1259,12 +1298,12 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
     (
         re.compile(
             r"(Todavía no cargaste el OpenAPI\.|OpenAPI cargado: \d+ operaciones\.) Con "
-            r"el OpenAPI, el análisis genera las herramientas del asistente\. Subí el "
+            r"el OpenAPI, el análisis genera las acciones del agente\. Subí el "
             r"archivo \(\.json o \.yaml\) o pegalo\."
         ),
         lambda m: (
             f"{translate_text(m[1])} With the OpenAPI, the analysis generates the "
-            "assistant's tools. Upload the file (.json or .yaml) or paste it."
+            "agent's actions. Upload the file (.json or .yaml) or paste it."
         ),
     ),
     (
@@ -1272,16 +1311,24 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
         lambda m: f"OpenAPI saved: {m[1]} operations.",
     ),
     (
+        re.compile(r"Clave \(al menos (\d+) caracteres\)"),
+        lambda m: f"Password (at least {m[1]} characters)",
+    ),
+    (
+        re.compile(r"La clave tiene que tener al menos (\d+) caracteres\."),
+        lambda m: f"The password must have at least {m[1]} characters.",
+    ),
+    (
         re.compile(r"Quién usa el panel de (.+)\."),
         lambda m: f"Who uses {m[1]}'s dashboard.",
     ),
     (
-        re.compile(r"Probá el asistente de (.+) en su propio chat:"),
-        lambda m: f"Try {m[1]}'s assistant in its own chat:",
+        re.compile(r"Probá el agente de (.+) en su propio chat:"),
+        lambda m: f"Try {m[1]}'s agent in its own chat:",
     ),
     (
-        re.compile(r"Es el chat real de (.+): lo que escribas acá aparece en Casos\."),
-        lambda m: f"It's {m[1]}'s real chat: whatever you type here shows up in Cases.",
+        re.compile(r"Es el chat real de (.+): lo que escribas acá aparece en la Bandeja\."),
+        lambda m: f"It's {m[1]}'s real chat: whatever you type here shows up in the Inbox.",
     ),
     (
         re.compile(r"La prueba de conexión falló: (.+)"),
@@ -1289,8 +1336,8 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
     ),
     # métricas
     (
-        re.compile(r"Cómo viene atendiendo el asistente de (.+) en los últimos (\d+) días\."),
-        lambda m: f"How {m[1]}'s assistant has been doing over the last {m[2]} days.",
+        re.compile(r"Cómo viene atendiendo el agente de (.+) en los últimos (\d+) días\."),
+        lambda m: f"How {m[1]}'s agent has been doing over the last {m[2]} days.",
     ),
     (
         re.compile(
@@ -1362,7 +1409,7 @@ _MESSAGE = re.compile(r'\bclass="(?:[^"]*\s)?msg(?:\s[^"]*)?"|\btranslate="no"')
 def translate_html(markup: str, translate_text: Callable[[str], str] = translate_text) -> str:
     """El HTML de una página con su texto traducido (ver el docstring del módulo): al inglés por
     defecto; `translate_text` elige otro catálogo (decisión 085). El texto de un mensaje del chat
-    (`class="msg"`) es del cliente o del asistente, y lo marcado con `translate="no"` queda tal
+    (`class="msg"`) es del cliente o del agente, y lo marcado con `translate="no"` queda tal
     cual."""
 
     def _attributes(tag: str) -> str:

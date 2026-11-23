@@ -67,7 +67,7 @@ def customers_page(request: Request, deps: Deps) -> Response:
         else f"<p><span>Meses de retención:</span> {months}</p>"
     )
     body = f"""{toast(request.query_params.get("aviso"))}<h1>Clientes</h1>
-<p class="lead">Lo que el asistente recuerda de cada cliente verificado: nombre, conversaciones
+<p class="lead">Lo que el agente recuerda de cada cliente verificado: nombre, conversaciones
 anteriores, preferencias y compras. Solo lo usa después de verificar la identidad y nunca guarda
 datos de pago.</p>
 <div class="card"><h2>Retención</h2>{retention}</div>
@@ -143,7 +143,7 @@ def customer_page(memory_id: uuid.UUID, request: Request, deps: Deps) -> Respons
 <p class="muted small">Una preferencia con datos de pago no se guarda.</p>
 <p><button class="primary" type="submit">Guardar cambios</button></p></form></div>
 <div class="card"><h2>Borrar la memoria</h2>
-<p>El asistente deja de recordar a este cliente. Sus conversaciones siguen en Casos.</p>
+<p>El agente deja de recordar a este cliente. Sus conversaciones siguen en la Bandeja.</p>
 <form method="post" action="/panel/clientes/{found.id}/borrar">
 <input type="hidden" name="csrf" value="{ctx.csrf}">
 <button class="danger" type="submit">Borrar la memoria de este cliente</button></form></div>"""

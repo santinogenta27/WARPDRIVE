@@ -78,7 +78,7 @@ def render(data: dict[str, Any], company: str) -> str:
         "modelo": "modelo",
         "base": "base de datos",
         "busqueda": "búsqueda",
-        "herramientas": "herramientas",
+        "herramientas": "acciones",
     }
     step_row = " · ".join(f"{step_names[k]} {_seconds(steps[k])}" for k in step_names)
     cut = sum(e["cantidad"] for e in errors["turnos_cortados"])
@@ -142,20 +142,20 @@ def render(data: dict[str, Any], company: str) -> str:
         ]
         for c in rated["comentarios"]
     ]
-    return f"""<h1>Métricas</h1><p class="lead">Cómo viene atendiendo el asistente de
+    return f"""<h1>Métricas</h1><p class="lead">Cómo viene atendiendo el agente de
 {esc(company)} en los últimos {days} días.</p>
-<div class="kpis">{_kpi(_pct(cases["tasa_resolucion"]), "resueltos por el asistente", True)}
+<div class="kpis">{_kpi(_pct(cases["tasa_resolucion"]), "resueltos por el agente", True)}
 {_kpi(_pct(cases["tasa_derivacion"]), "derivados a una persona")}
 {_kpi(_seconds(latency["p50_ms"]), "latencia p50 por respuesta")}
 {_kpi(_seconds(latency["p95_ms"]), "latencia p95 por respuesta")}</div>
 
 <h2>Resolución y derivación</h2><div class="card">
 <div class="kpis" style="margin:0">{_kpi(str(cases["total"]), "casos")}
-{_kpi(str(cases["resueltos_asistente"]), "resueltos por el asistente")}
+{_kpi(str(cases["resueltos_asistente"]), "resueltos por el agente")}
 {_kpi(str(cases["resueltos_persona"]), "resueltos con una persona")}
 {_kpi(str(cases["derivados"]), "derivados")}{_kpi(str(cases["en_curso"]), "en curso")}
 {_kpi(str(cases["reabiertos"]), "reabiertos")}</div>
-<p class="muted small">Resolución: de los casos ya resueltos, los que cerró el asistente sin una
+<p class="muted small">Resolución: de los casos ya resueltos, los que cerró el agente sin una
 persona. Derivación: de todos los casos, los que pasaron a una persona.</p>
 <p><b>Para el cobro:</b> {billing["cobrables"]} cobrables · {billing["en_ventana"]} dentro de los
 7 días (todavía pueden reabrirse) · {billing["con_persona"]} con una persona ·
@@ -186,7 +186,7 @@ menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
 {_kpi(str(model["respaldos"]), "respondió el proveedor de respaldo")}
 {_kpi(str(model["rechazos"]), "sin respuesta válida del modelo")}
 {_kpi(str(model["recuperadas"]), "llamadas recuperadas")}
-{_kpi(str(errors["herramientas_fallidas"]), "herramientas que fallaron")}
+{_kpi(str(errors["herramientas_fallidas"]), "acciones que fallaron")}
 {_kpi(str(cut), "respuestas cortadas por un error")}</div>
 {_table(["Error", ">Veces", "Último"], error_rows, "Ninguna respuesta se cortó por un error.")}
 </div>
@@ -220,16 +220,16 @@ menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
     }
 </div>
 
-<h2>Historial de evals</h2><div class="card">
+<h2>Historial de pruebas</h2><div class="card">
 {
         _table(
             ["Fecha", "Modo", "Prompt", "Modelo", ">Resolución", ">Juez", ">Fallas críticas"],
             eval_rows,
-            "Todavía no hay corridas de evals guardadas.",
+            "Todavía no hay corridas de pruebas guardadas.",
         )
     }
-<p class="muted small">Cada corrida de los evals queda con la versión del prompt y el modelo que
-respondió: así se ve si un cambio mejoró o empeoró.</p></div>"""
+<p class="muted small">Cada corrida de las pruebas queda con la versión de las instrucciones y el
+modelo que respondió: así se ve si un cambio mejoró o empeoró.</p></div>"""
 
 
 def _money(currency: str, amount: Decimal) -> str:
@@ -238,7 +238,7 @@ def _money(currency: str, amount: Decimal) -> str:
 
 def sales_html(found: list[attribution.SalesTotal], csrf: str) -> str:
     """Ventas atribuidas al agente (decisión 063): compras completadas desde un link de compra
-    que armó el asistente, con el identificador de su conversación."""
+    que armó el agente, con el identificador de su conversación."""
     sales = sum(t.sales for t in found)
     links = sum(t.links for t in found)
     amounts = " · ".join(_money(t.currency, t.amount) for t in found if t.sales) or "0"
@@ -251,7 +251,7 @@ def sales_html(found: list[attribution.SalesTotal], csrf: str) -> str:
     )
     return f"""<h2>Ventas atribuidas al agente</h2><div class="card"><div class="kpis">{kpis}</div>
 <p class="muted small">Cuenta las compras que la tienda informa como completadas desde un link que
-armó el asistente: cada link lleva el identificador de su conversación.</p>
+armó el agente: cada link lleva el identificador de su conversación.</p>
 <form method="post" action="/panel/metricas/ventas">{csrf}
 <button type="submit" class="secondary">Actualizar ventas</button></form></div>"""
 
@@ -270,7 +270,7 @@ def metrics_page(request: Request, deps: Deps) -> Response:
 
 @router.post("/metricas/ventas")
 def refresh_sales(request: Request, form: Form, deps: Deps) -> Response:
-    """Pregunta a la tienda por las compras de los links del asistente (idempotente)."""
+    """Pregunta a la tienda por las compras de los links del agente (idempotente)."""
     ctx = enter(request, deps, form)
     if isinstance(ctx, Response):
         return ctx

@@ -26,7 +26,7 @@ GUIDES = (
     (
         "WhatsApp",
         "<p>Si tu empresa tiene un número de WhatsApp Business verificado por Meta, el mismo "
-        "asistente atiende ahí. Conectalo vos mismo en <b>Canales → WhatsApp</b>, más abajo, "
+        "agente atiende ahí. Conectalo vos mismo en <b>Canales → WhatsApp</b>, más abajo, "
         "con la guía paso a paso.</p>",
     ),
 )
@@ -56,7 +56,7 @@ GUIDES_EN = (
     ),
     (
         "WhatsApp",
-        "<p>If your company has a WhatsApp Business number verified by Meta, the same assistant "
+        "<p>If your company has a WhatsApp Business number verified by Meta, the same agent "
         "can answer there. Connect it yourself under <b>Channels → WhatsApp</b>, below, with "
         "the step-by-step guide.</p>",
     ),
@@ -138,7 +138,7 @@ SHOPIFY_APP = (
     '<li>Entrá a <span class="mono">dev.shopify.com/dashboard</span> con la cuenta dueña de tu '
     "tienda. Desde el admin también llegás: <b>Configuración → Apps → Desarrollar apps</b>.</li>"
     "<li><b>Crear app</b> → <b>Empezar desde el Dev Dashboard</b>. Ponele un nombre, por ejemplo "
-    "<i>Asistente</i>.</li>"
+    "<i>Agente</i>.</li>"
     "<li>En <b>Versiones → Crear versión</b>, en <b>Acceso → Scopes</b>, marcá solo estos "
     "permisos: {scopes}. Desmarcá <i>Embed app in Shopify admin</i> y publicá la versión "
     "(<b>Release</b>).</li>"
@@ -150,8 +150,9 @@ SHOPIFY_APP = (
     "<li>Tocá <b>Probar conexión</b>. Si falta un permiso, la prueba dice cuál: agregalo en una "
     "versión nueva de la app, publicala y conectá de nuevo.</li>"
     "</ol><p>El token que entrega Shopify dura 24 horas; lo renovamos solos antes de que venza. "
-    "El Client Secret se guarda cifrado y no se vuelve a mostrar. Si la prueba de herramientas no "
-    "trae el email o el teléfono del cliente, en la app pedí acceso a <b>Protected customer "
+    "El Client Secret se guarda cifrado y no se vuelve a mostrar. Si la prueba de acciones no "
+    "trae el email o el teléfono del cliente, en la app pedí acceso a "
+    '<b translate="no">Protected customer '
     "data</b> (nombre, email y teléfono).</p>"
 )
 
@@ -160,7 +161,7 @@ SHOPIFY_APP_EN = (
     '<li>Go to <span class="mono">dev.shopify.com/dashboard</span> with the account that owns '
     "your store. From the admin: <b>Settings → Apps → Develop apps</b>.</li>"
     "<li><b>Create app</b> → <b>Start from Dev Dashboard</b>. Name it, for example "
-    "<i>Assistant</i>.</li>"
+    "<i>Agent</i>.</li>"
     "<li>In <b>Versions → Create version</b>, under <b>Access → Scopes</b>, check only these: "
     "{scopes}. Uncheck <i>Embed app in Shopify admin</i> and <b>Release</b> the version.</li>"
     "<li>On the app's home: <b>Install app</b> → pick your store → <b>Install</b>.</li>"
@@ -170,8 +171,9 @@ SHOPIFY_APP_EN = (
     "<li>Click <b>Test connection</b>. If a scope is missing, the test names it: add it in a new "
     "app version, release it and connect again.</li>"
     "</ol><p>Shopify's token lasts 24 hours; we renew it before it expires. The Client Secret is "
-    "stored encrypted and never shown again. If the tool test doesn't bring the customer's email "
-    "or phone, request <b>Protected customer data</b> access in the app (name, email and phone)."
+    "stored encrypted and never shown again. If the action test doesn't bring the customer's email "
+    'or phone, request <b translate="no">Protected customer data</b> access in the app '
+    "(name, email and phone)."
     "</p>"
 )
 

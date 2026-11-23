@@ -92,7 +92,7 @@ def test_una_empresa_nueva_ve_los_seis_pasos_con_su_enlace(world: World) -> None
         "Cargá tus documentos",
         "Definí las reglas de atención",
         "Configurá tu marca",
-        "Probá el asistente en el playground",
+        "Probá el agente en el playground",
         "Instalá el widget en tu sitio",
         "Salí en vivo",
     ):

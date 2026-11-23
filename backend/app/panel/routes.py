@@ -70,7 +70,7 @@ def _no_embedder(conn: psycopg.Connection) -> Embedder:
 
 
 def _team_llm(conn: psycopg.Connection, tenant_id: uuid.UUID) -> LLMClient | None:
-    """El modelo del asistente para el equipo (decisión 082): la key propia de la empresa o la
+    """El modelo del copiloto del equipo (decisión 082): la key propia de la empresa o la
     de la plataforma. None sin ninguna: la tarjeta se arma en código."""
     from app.companies.agent import shared_provider
     from app.llm.client import PostgresUsageRecorder
@@ -89,7 +89,7 @@ def _team_llm(conn: psycopg.Connection, tenant_id: uuid.UUID) -> LLMClient | Non
 class PanelDeps:
     connection: Callable[[], AbstractContextManager[psycopg.Connection]]
     tenant_id: uuid.UUID | None  # la empresa de demo (Acme): a la que entra el operador
-    # El guardián de la empresa de la sesión: sus herramientas llegan a su propio sistema.
+    # El guardián de la empresa de la sesión: sus acciones llegan a su propio sistema.
     guardian: Callable[[psycopg.Connection, uuid.UUID], Guardian]
     report_tenant: uuid.UUID | None = None  # reporte de Acme del hito 4 (otro tenant)
     # "Reiniciar demo" también devuelve los pedidos de la API simulada a su estado inicial.
@@ -103,7 +103,7 @@ class PanelDeps:
     mailer: Callable[[], Mailer] = mailer_from_env
     # La entrega de un borrador aprobado del modo supervisado por su canal (decisión 072).
     deliver: supervision.Deliver = supervision.deliver
-    # El modelo del asistente para el equipo en los casos derivados (decisión 082).
+    # El modelo del copiloto del equipo en los casos derivados (decisión 082).
     # Por defecto sin modelo (como el embedder): la configuración de producción le pasa el suyo.
     team_llm: Callable[[psycopg.Connection, uuid.UUID], LLMClient | None] = lambda c, t: None
 
@@ -311,7 +311,7 @@ def login_form(request: Request, lang: str = "") -> HTMLResponse:
     english.THEME.set("light")
     response = HTMLResponse(_login_page())
     if auth.chosen(lang):  # eligió el idioma acá: vale también para el panel
-        response.set_cookie(LANG_COOKIE, lang, max_age=365 * 86400, samesite="lax", path="/panel")
+        response.set_cookie(LANG_COOKIE, lang, max_age=365 * 86400, samesite="lax", path="/")
     return response
 
 
@@ -332,7 +332,7 @@ def _set_session(request: Request, response: Response, token: str, language: str
     )
     if language:
         response.set_cookie(
-            LANG_COOKIE, language, max_age=365 * 86400, samesite="lax", secure=secure, path="/panel"
+            LANG_COOKIE, language, max_age=365 * 86400, samesite="lax", secure=secure, path="/"
         )
 
 
@@ -493,7 +493,7 @@ def approvals_page(request: Request, deps: Deps) -> Response:
     )
     body = f"""{toast(request.query_params.get("aviso"))}
 <h1>Aprobaciones</h1><p class="lead">Las acciones de riesgo alto (como un reembolso)
-no se ejecutan hasta que una persona las aprueba. Al aprobar, se ejecuta por el guardián y el
+no se ejecutan hasta que una persona las aprueba. Al aprobar, se ejecuta y el
 cliente recibe el aviso en el chat.</p>{cards}
 {f"<h2>Decididas</h2>{history}" if history else ""}"""
     return HTMLResponse(page("Aprobaciones", body, active="inbox/approvals", session=ctx.session))
@@ -750,7 +750,7 @@ VERIFICATION = {
 }
 TOOL_STATUS = {
     "executed": "ejecutada",
-    "denied": "negada por el guardián",
+    "denied": "bloqueada por las reglas",
     "approval_required": "necesita aprobación",
     "failed": "falló",
 }
@@ -784,7 +784,7 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "tool_call":
         status = TOOL_STATUS.get(str(p.get("status")), esc(p.get("status")))
         reason = f" · {esc(p.get('reason'))}" if p.get("reason") else ""
-        return "Usó una herramienta", (
+        return "Usó una acción", (
             f"<span class=mono>{esc(p.get('tool'))}</span> "
             f"<span class=mono>{esc(json.dumps(p.get('input'), ensure_ascii=False))}</span>"
             f" → {status}{reason}"
@@ -831,7 +831,7 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
                 ("modelo_ms", "modelo"),
                 ("base_ms", "base de datos"),
                 ("busqueda_ms", "búsqueda"),
-                ("herramientas_ms", "herramientas"),
+                ("herramientas_ms", "acciones"),
             )
         )
         return "Tiempo de la respuesta", f"{_seconds(p.get('total_ms'))} en total · {parts}"
@@ -865,7 +865,7 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     return kind, esc(json.dumps(p, ensure_ascii=False))
 
 
-ROLES = {"customer": "Cliente", "agent": "Asistente"}
+ROLES = {"customer": "Cliente", "agent": "Agente"}
 
 
 @router.get("/casos/{case_id}", response_class=HTMLResponse)
@@ -897,7 +897,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         drafts = _draft_cards(
             conn, tenant_id, ctx.csrf, back=f"/panel/casos/{case_id}", case_id=case_id
         )
-        # Asistente para el equipo (decisión 082): en un caso derivado o con borrador.
+        # Copiloto del equipo (decisión 082): en un caso derivado o con borrador.
         helper = (
             assist.for_case(conn, tenant_id, case_id, deps.team_llm(conn, tenant_id))
             if assist.needed(str(case[0]), bool(drafts))
@@ -908,7 +908,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     csrf = ctx.csrf
     roles = {**ROLES, "human": f"Equipo de {company}"}
 
-    # Cada respuesta del asistente se puede marcar como correcta o incorrecta (decisión 073).
+    # Cada respuesta del agente se puede marcar como correcta o incorrecta (decisión 073).
     from app.panel.review_routes import review_form
 
     chat = (
@@ -1013,7 +1013,7 @@ def reply(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Respo
                     detail={
                         "by": str(user_id),
                         "envio": sending,
-                        # Salió de la respuesta sugerida por el asistente (decisión 082).
+                        # Salió de la respuesta sugerida por el agente (decisión 082).
                         **({"sugerida": True} if form.get("origen") == "sugerida" else {}),
                     },
                 )
@@ -1041,13 +1041,13 @@ def _notices_card(notices: list[promises.Notice]) -> str:
     )
     return (
         '<div class="card"><h2 style="margin-top:0">Avisos programados</h2>'
-        '<p class="muted small">El asistente solo puede prometerle un aviso al cliente si '
+        '<p class="muted small">El agente solo puede prometerle un aviso al cliente si '
         "hay uno de estos pendiente.</p>"
         f'<ul class="small">{items}</ul></div>'
     )
 
 
-# -- asistente para el equipo (decisión 082) ------------------------------------------------
+# -- copiloto del equipo (decisión 082) ------------------------------------------------
 def _assist_card(helper: assist.Assist | None, case_id: uuid.UUID, csrf: str) -> str:
     if helper is None:
         return ""
@@ -1068,11 +1068,11 @@ def _assist_card(helper: assist.Assist | None, case_id: uuid.UUID, csrf: str) ->
         '<p class="muted small">La respuesta sugerida está abajo, en “Responder como persona '
         "del equipo”: revisala y editala antes de enviarla.</p>"
         if helper.reply
-        else '<p class="muted small">Sin respuesta sugerida: el asistente no está '
+        else '<p class="muted small">Sin respuesta sugerida: el agente no está '
         "disponible ahora.</p>"
     )
     return f"""<div class="card attention"><div class="row">
-<h2 class="grow" style="margin:0">Asistente para el equipo</h2>
+<h2 class="grow" style="margin:0">Copiloto del equipo</h2>
 <form method="post" action="/panel/casos/{case_id}/asistente" style="margin:0">
 <input type="hidden" name="csrf" value="{csrf}">
 <button type="submit">Volver a sugerir</button></form></div>
@@ -1104,7 +1104,7 @@ def _draft_cards(
     back: str,
     case_id: uuid.UUID | None = None,
 ) -> str:
-    """Las respuestas del asistente que esperan a una persona: texto editable, Enviar y
+    """Las respuestas del agente que esperan a una persona: texto editable, Enviar y
     Rechazar. En la bandeja (todas) y en el detalle de un caso (las suyas)."""
     drafts = supervision.pending(conn, tenant_id, case_id)
     if not drafts:
@@ -1117,7 +1117,7 @@ def _draft_cards(
 {"" if case_id else f'<a class="small" href="/panel/casos/{d.case_id}">ver caso</a>'}</div>
 <form method="post" action="/panel/borradores/{d.id}" style="margin-top:8px">
 <input type="hidden" name="csrf" value="{csrf}"><input type="hidden" name="volver" value="{back}">
-<label for="borrador-{d.id}">Respuesta del asistente (podés editarla antes de enviarla)</label>
+<label for="borrador-{d.id}">Respuesta del agente (podés editarla antes de enviarla)</label>
 <textarea id="borrador-{d.id}" name="texto"
  maxlength="{MAX_REPLY}" required>{esc(d.text)}</textarea>
 <div class="row" style="justify-content:flex-end">
@@ -1199,7 +1199,7 @@ def report_page(request: Request, deps: Deps) -> Response:
     if report is None:
         body = (
             f'<h1>Reporte de preparación</h1>{live}<div class="card empty">Todavía no hay un '
-            'onboarding terminado. Empezá en <a href="/panel/knowledge">Onboarding</a>.</div>'
+            'reporte de preparación. Empezá en <a href="/panel/knowledge">Conocimiento</a>.</div>'
         )
         return HTMLResponse(page("Reporte", body, active="test", session=ctx.session))
     body = _report_body(report, finished, ctx.session.company).replace("</h1>", f"</h1>{live}", 1)
@@ -1239,7 +1239,7 @@ def _report_body(report: dict[str, Any], finished: Any, company: str) -> str:
         rows.append(
             f"""<div class="card"><div class="type"><div><b>{esc(type_label(t.get("nombre")))}</b>
 <div class="muted small">{esc(t.get("objetivo"))}</div>
-<div class="muted small">Herramientas: {tools}</div></div>
+<div class="muted small">Acciones: {tools}</div></div>
 <div><div class="row small"><span class="grow muted">Volumen</span><b>{volume}</b>
 <span class="muted">({_pct(volume / total if total else 0)})</span></div>
 <div class="track"><div class="fill" style="width:{volume / top * 100:.0f}%"></div></div></div>
@@ -1256,23 +1256,23 @@ def _report_body(report: dict[str, Any], finished: Any, company: str) -> str:
     gaps_html = "".join(f"<li>{g}</li>" for g in gaps) or "<li>Nada pendiente.</li>"
     when = f" · {local_time(finished, '%d/%m/%Y')}" if finished else ""
     return f"""<h1>Reporte de preparación</h1>
-<p class="lead">Qué parte de la atención de {esc(company)} resolvería el asistente por su cuenta,
+<p class="lead">Qué parte de la atención de {esc(company)} resolvería el agente por su cuenta,
 medido con su propio historial{when}.</p>
 <div class="kpis"><div class="kpi big"><div class="n">{_pct(estimate)}</div><div class="muted">del
 volumen lo resolvería solo</div></div><div class="kpi"><div class="n">{total}</div>
 <div class="muted">conversaciones analizadas</div></div><div class="kpi"><div class="n">
-{len(types)}</div><div class="muted">tipos de caso detectados</div></div><div class="kpi">
+{len(types)}</div><div class="muted">temas detectados</div></div><div class="kpi">
 <div class="n">{esc(adversarial.get("superados", 0))} de {esc(adversarial.get("total", 0))}</div>
 <div class="muted">ataques y pedidos indebidos frenados</div></div></div>
-<h2>Tipos de caso</h2>{"".join(rows)}
+<h2>Temas</h2>{"".join(rows)}
 <h2>Qué falta para resolver más</h2><div class="card"><ul>{gaps_html}</ul>
 {
         f'<p class="muted small">Ataques no frenados:</p><ul class="small">{adversarial_fails}</ul>'
         if adversarial_fails
         else ""
     }</div>
-<p class="muted small">Cómo se mide: el historial se anonimiza y se agrupa en tipos de caso; por
+<p class="muted small">Cómo se mide: el historial se anonimiza y se agrupa en temas; por
 cada tipo se generan casos de prueba a partir de conversaciones reales ({evals} en total) y el
-asistente los resuelve contra una copia de prueba del sistema, sin tocar datos reales. El
+agente los resuelve contra una copia de prueba del sistema, sin tocar datos reales. El
 porcentaje pondera cada tipo por su volumen. Los reembolsos cuentan como resueltos cuando el
-asistente prepara el pedido de aprobación: la decisión siempre es de una persona.</p>"""
+agente prepara el pedido de aprobación: la decisión siempre es de una persona.</p>"""

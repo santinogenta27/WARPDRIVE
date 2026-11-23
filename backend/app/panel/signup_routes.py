@@ -6,8 +6,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.companies import signup
 from app.mailer import mailer_from_env
-from app.panel import auth
-from app.panel.html import esc, page
+from app.panel import auth, english
+from app.panel.html import auth_card, esc, page
 from app.panel.routes import Deps, Form
 
 router = APIRouter(include_in_schema=False)
@@ -18,9 +18,17 @@ def _base(request: Request) -> str:
     return f"{proto}://{request.headers.get('host') or request.url.netloc}"
 
 
+def _language(request: Request, lang: str = "") -> None:
+    """Antes de entrar no hay usuario: el idioma es el elegido en este navegador (decisión 085)."""
+    from app.panel.routes import LANG_COOKIE
+
+    english.set_language(auth.language_or_default(lang or request.cookies.get(LANG_COOKIE)))
+    english.THEME.set("light")
+
+
 def _signup_page(error: str = "", values: dict[str, str] | None = None) -> str:
     v = values or {}
-    alert = f'<p style="color:var(--bad)">{esc(error)}</p>' if error else ""
+    alert = f'<div class="note" role="alert">{esc(error)}</div>' if error else ""
     # Desde una prueba gratis (decisión 075): el nombre y el email ya vienen cargados.
     trial = v.get("prueba", "")
     hidden = f'<input type="hidden" name="prueba" value="{esc(trial)}">' if trial else ""
@@ -28,10 +36,9 @@ def _signup_page(error: str = "", values: dict[str, str] | None = None) -> str:
     lead = (
         "Tu piloto conserva las políticas y los productos que cargamos en la prueba."
         if trial
-        else "Un asistente que atiende a tus clientes con tus políticas y tu sistema."
+        else "Un agente que atiende a tus clientes con tus políticas y tu sistema."
     )
-    body = f"""<div class="card" style="max-width:440px;margin:40px auto">
-<h1>Creá la cuenta de tu empresa</h1>
+    body = f"""<h1>Creá la cuenta de tu empresa</h1>
 <p class="lead">{lead}</p>{alert}
 <form method="post" action="/registro">{hidden}
 <label for="empresa">Nombre de la empresa</label>
@@ -42,12 +49,13 @@ def _signup_page(error: str = "", values: dict[str, str] | None = None) -> str:
 <input id="clave" name="clave" type="password" required autocomplete="new-password">
 <p><button class="primary" type="submit" style="width:100%">Crear cuenta</button></p></form>
 <p class="muted small">Te mandamos un enlace para confirmar tu email. ¿Ya tenés cuenta?
-<a href="/panel/login">Ingresá</a>.</p></div>"""
-    return page("Crear cuenta", body, logged_in=False)
+<a href="/panel/login">Ingresá</a>.</p>"""
+    return page("Crear cuenta", auth_card(body), logged_in=False)
 
 
 @router.get("/registro", response_class=HTMLResponse)
-def signup_form(deps: Deps, prueba: str = "") -> HTMLResponse:
+def signup_form(request: Request, deps: Deps, prueba: str = "", lang: str = "") -> HTMLResponse:
+    _language(request, lang)
     if not prueba:
         return HTMLResponse(_signup_page())
     from app.trial import service
@@ -62,6 +70,7 @@ def signup_form(deps: Deps, prueba: str = "") -> HTMLResponse:
 
 @router.post("/registro", response_class=HTMLResponse)
 def signup_submit(request: Request, form: Form, deps: Deps) -> HTMLResponse:
+    _language(request)
     values = {k: form.get(k, "") for k in ("empresa", "email", "prueba")}
     try:
         with deps.connection() as conn:
@@ -76,10 +85,10 @@ def signup_submit(request: Request, form: Form, deps: Deps) -> HTMLResponse:
             )
     except signup.SignupError as error:
         return HTMLResponse(_signup_page(str(error), values), status_code=400)
-    body = """<div class="card" style="max-width:440px;margin:40px auto"><h1>Revisá tu email</h1>
+    body = """<h1>Revisá tu email</h1>
 <p>Te mandamos un enlace para confirmar tu email y crear la cuenta. Vence en 24 horas.</p>
-<p class="muted small">Si no llega en unos minutos, revisá el correo no deseado.</p></div>"""
-    return HTMLResponse(page("Revisá tu email", body, logged_in=False))
+<p class="muted small">Si no llega en unos minutos, revisá el correo no deseado.</p>"""
+    return HTMLResponse(page("Revisá tu email", auth_card(body), logged_in=False))
 
 
 def _login(request: Request, token: str, target: str) -> RedirectResponse:
@@ -99,6 +108,7 @@ def _login(request: Request, token: str, target: str) -> RedirectResponse:
 
 @router.get("/registro/confirmar")
 def signup_confirm(request: Request, token: str, deps: Deps) -> Response:
+    _language(request)
     try:
         with deps.connection() as conn:
             company = signup.confirm_signup(conn, token)
@@ -115,24 +125,26 @@ def signup_confirm(request: Request, token: str, deps: Deps) -> Response:
 
 
 def _invite_page(token: str, error: str = "") -> str:
-    alert = f'<p style="color:var(--bad)">{esc(error)}</p>' if error else ""
-    body = f"""<div class="card" style="max-width:400px;margin:40px auto"><h1>Elegí tu clave</h1>
+    alert = f'<div class="note" role="alert">{esc(error)}</div>' if error else ""
+    body = f"""<h1>Elegí tu clave</h1>
 {alert}<form method="post" action="/panel/invitacion">
 <input type="hidden" name="token" value="{esc(token)}">
 <label for="clave">Clave (al menos {auth.MIN_PASSWORD} caracteres)</label>
 <input id="clave" name="clave" type="password" required autocomplete="new-password">
 <p><button class="primary" type="submit" style="width:100%">Entrar al panel</button></p>
-</form></div>"""
-    return page("Invitación", body, logged_in=False)
+</form>"""
+    return page("Invitación", auth_card(body), logged_in=False)
 
 
 @router.get("/panel/invitacion", response_class=HTMLResponse)
-def invitation_form(token: str = "") -> HTMLResponse:
+def invitation_form(request: Request, token: str = "") -> HTMLResponse:
+    _language(request)
     return HTMLResponse(_invite_page(token))
 
 
 @router.post("/panel/invitacion")
 def invitation_accept(request: Request, form: Form, deps: Deps) -> Response:
+    _language(request)
     token = form.get("token", "")
     try:
         with deps.connection() as conn:

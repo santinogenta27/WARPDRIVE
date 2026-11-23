@@ -1,5 +1,5 @@
 """Panel, pantallas del hito 6 (decisión 026): alta de empresas, onboarding sin comandos,
-revisión de tipos de caso y herramientas, y conexión con el sistema de la empresa.
+revisión de temas y acciones, y conexión con el sistema de la empresa.
 
 Todas las rutas entran por `enter` (app/panel/routes.py): la empresa sale de la sesión y cada
 consulta corre dentro de `tenant_scope`, así que un id de otra empresa responde 404 igual que
@@ -140,8 +140,8 @@ TABLE_LABELS = {
     "users": "usuarios",
     "contacts": "contactos",
     "audit_events": "eventos de auditoría",
-    "tools": "herramientas",
-    "case_types": "tipos de caso",
+    "tools": "acciones",
+    "case_types": "temas",
 }
 
 
@@ -298,12 +298,12 @@ def onboarding_page(request: Request, deps: Deps) -> Response:
     done = (
         '<div class="card okmsg"><b>El análisis terminó.</b> Mirá el '
         '<a href="/panel/test">reporte de preparación</a> y después revisá y aprobá los tipos '
-        'de caso y las herramientas en <a href="/panel/agent/topics">Configuración</a>.</div>'
+        'de caso y las acciones en <a href="/panel/agent/topics">Configuración</a>.</div>'
         if run is not None and run.status == "done" and not running
         else ""
     )
-    body = f"""<h1>Onboarding</h1><p class="lead">Subí el historial de atención y los documentos
-de {esc(ctx.session.company)}. El asistente aprende de ahí: detecta los tipos de caso, arma sus
+    body = f"""<h1>Conocimiento</h1><p class="lead">Subí el historial de atención y los documentos
+de {esc(ctx.session.company)}. El agente aprende de ahí: detecta los temas, arma sus
 pruebas y te dice qué parte de la atención resolvería solo.</p>{_notice(request)}{done}
 {_pending_html(ctx, waiting)}
 <div class="card"><h2 style="margin-top:0">1. Subí tus fuentes</h2>{sources_table}
@@ -346,7 +346,7 @@ actualiza las páginas.</p><button type="submit">Leer el sitio</button></form></
 
 
 def _indexed_html(ctx: Ctx, indexed: list[ingestion.IndexedDocument]) -> str:
-    """Lo que el asistente puede citar (decisión 050). Subir un archivo con el mismo nombre lo
+    """Lo que el agente puede citar (decisión 050). Subir un archivo con el mismo nombre lo
     reemplaza; borrarlo lo saca de las respuestas en el momento."""
     if not indexed:
         return ""
@@ -358,7 +358,7 @@ def _indexed_html(ctx: Ctx, indexed: list[ingestion.IndexedDocument]) -> str:
         for doc in indexed
     )
     return f"""<div class="card"><h2 style="margin-top:0">Documentos indexados</h2>
-<p class="muted small">Lo que el asistente puede citar. Para actualizar uno, subí el archivo de
+<p class="muted small">Lo que el agente puede citar. Para actualizar uno, subí el archivo de
 nuevo con el mismo nombre: reemplaza al anterior.</p>
 <table><tr><th>Título</th><th>Archivo</th><th class=num>Fragmentos</th><th>Indexado</th><th></th>
 </tr>{rows}</table></div>"""
@@ -373,7 +373,7 @@ def delete_indexed(document_id: uuid.UUID, request: Request, form: Form, deps: D
         found = ingestion.delete_document(conn, ctx.tenant_id, document_id)
     if not found:
         return _not_found("Ese documento", ctx.session)
-    return _back("knowledge", ok="Documento borrado: el asistente ya no lo usa.")
+    return _back("knowledge", ok="Documento borrado: el agente ya no lo usa.")
 
 
 @router.post("/onboarding/sitio")
@@ -407,7 +407,7 @@ def _pending_html(ctx: Ctx, waiting: list[ingestion.PendingDocument]) -> str:
     return f"""<div class="card alert" style="color:var(--ink)">
 <h2 style="margin-top:0">Documentos que esperan tu confirmación</h2>
 <p>Estos documentos parecen tener datos de personas y todavía <b>no se indexaron</b>. El
-asistente responde con lo que dicen tus documentos: si uno trae emails o teléfonos de clientes,
+agente responde con lo que dicen tus documentos: si uno trae emails o teléfonos de clientes,
 podría mostrárselos a otro cliente.</p>
 <ul style="list-style:none;padding:0;margin:0">{items}</ul>
 <p class="muted small">Si es una política con los contactos de tu empresa, indexalo. Si es una
@@ -584,26 +584,26 @@ def delete_company_route(
     )
 
 
-# -- configuración: tipos de caso, herramientas, sistema y chat ------------------------------
+# -- configuración: temas, acciones, sistema y chat ------------------------------
 MODES = {
     "demo": ("resolved", "Sistema de demo (API simulada de Acme)"),
     "real": ("resolved", "Conectado al sistema real"),
-    "simulado": ("waiting_approval", "Modo simulado: las herramientas no tocan tu sistema"),
-    "sin_sistema": ("escalated", "Sin sistema conectado: el asistente solo informa"),
+    "simulado": ("waiting_approval", "Modo simulado: las acciones no tocan tu sistema"),
+    "sin_sistema": ("escalated", "Sin sistema conectado: el agente solo informa"),
 }
 
 
 def _types_html(ctx: Ctx, types: list[review.CaseType], approved: set[str]) -> str:
     if not types:
         return (
-            '<p class="muted">Todavía no hay tipos de caso. Salen del análisis del '
+            '<p class="muted">Todavía no hay temas. Salen del análisis del '
             '<a href="/panel/knowledge">onboarding</a>.</p>'
         )
     cards = []
     for kind in types:
         missing = [t for t in kind.tools if t not in approved]
         warning = (
-            f'<div class="missing">Usa herramientas sin aprobar: '
+            f'<div class="missing">Usa acciones sin aprobar: '
             f"{esc(', '.join(tool_label(t) for t in missing))}. Hasta aprobarlas, no las usa.</div>"
             if missing
             else ""
@@ -612,9 +612,9 @@ def _types_html(ctx: Ctx, types: list[review.CaseType], approved: set[str]) -> s
         cards.append(
             f"""<div class="card"><div class="row"><div class="grow">
 <span class="badge {"resolved" if kind.active else ""}">{"Activo" if kind.active else "Inactivo"}
-</span> <b>{esc(type_label(kind.name))}</b>
-<div class="muted small">{esc(kind.goal)}</div>
-<div class="muted small">{kind.volume} conversaciones del historial · Herramientas: {esc(tools)}
+</span> <b class="data">{esc(type_label(kind.name))}</b>
+<div class="muted small data">{esc(kind.goal)}</div>
+<div class="muted small">{kind.volume} conversaciones del historial · Acciones: {esc(tools)}
 </div>{warning}</div>
 <form method="post" action="/panel/configuracion/tipos/{kind.id}">{_csrf(ctx)}
 <button class="{"" if kind.active else "primary"}" name="activo"
@@ -632,7 +632,7 @@ instrucciones</summary>
 def _tools_html(ctx: Ctx, tools: list[review.Tool]) -> str:
     if not tools:
         return (
-            '<p class="muted">Todavía no hay herramientas. Se generan en el análisis a partir '
+            '<p class="muted">Todavía no hay acciones. Se generan en el análisis a partir '
             "del OpenAPI de tu sistema (cargalo más abajo y volvé a analizar).</p>"
         )
     cards = []
@@ -682,7 +682,7 @@ Exige identidad verificada</label>
             f"""<div class="card"><div class="row"><div class="grow">
 <span class="badge {"resolved" if tool.approved else ""}">
 {"Aprobada" if tool.approved else "Sin aprobar"}</span> <b>{esc(tool_label(tool.name))}</b>
-<div class="muted small">{esc(m.get("description"))}</div>
+<div class="muted small data">{esc(m.get("description"))}</div>
 <div class="muted small"><span class="mono">{esc(m["upstream"]["method"])}
 {esc(m["upstream"]["path"])}</span> · {esc(" · ".join(facts))}</div></div>
 <form method="post" action="/panel/configuracion/herramientas/{tool.id}">{_csrf(ctx)}
@@ -817,12 +817,12 @@ def _platforms_html(ctx: Ctx) -> str:
         }</p>"""
     return f"""<h3>{t("¿Usás Shopify?", "Do you use Shopify?")}</h3><p class="muted small">{
         t(
-            "Conectá tu tienda sin OpenAPI: se crean las herramientas de pedidos, envíos, "
+            "Conectá tu tienda sin OpenAPI: se crean las acciones de pedidos, envíos, "
             "reembolsos, cupones y cancelaciones, sin aprobar. Después probá la conexión y "
             "aprobalas más arriba.",
             "Connect your store without an OpenAPI: the order, shipping, refund, coupon and "
-            "cancellation tools are created, unapproved. Then test the connection and approve them "
-            "above.",
+            "cancellation actions are created, unapproved. Then test the connection and approve "
+            "them above.",
         )
     }</p>
 <form method="post" action="/panel/configuracion/sistema/plataforma">{_csrf(ctx)}
@@ -872,7 +872,7 @@ def _system_html(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> 
         # Otra empresa de demo (Northwind, decisión 038): su propia API simulada.
         return (
             f'<div class="card"><span class="badge {badge}">Sistema de demo (API simulada)</span>'
-            '<p class="muted small">Esta empresa usa la API simulada de la demo: sus herramientas '
+            '<p class="muted small">Esta empresa usa la API simulada de la demo: sus acciones '
             "llegan a pedidos de prueba, nunca a un sistema real.</p></div>"
         )
     if mode == "demo":
@@ -929,14 +929,14 @@ def _system_html(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> 
         f'<form method="post" action="/panel/configuracion/sistema/herramientas" class="row"'
         f' style="align-items:flex-end">{_csrf(ctx)}<div><label for="ejemplo">Número de pedido'
         ' de ejemplo</label><input id="ejemplo" name="ejemplo" required placeholder="1001"'
-        ' style="max-width:200px"></div><button type="submit">Probar herramientas</button></form>'
+        ' style="max-width:200px"></div><button type="submit">Probar acciones</button></form>'
         if found and found.base_url
         else ""
     )
     return f"""<div class="card"><span class="badge {badge}">{label}</span>
 {_platforms_html(ctx)}
 <h3>1. OpenAPI de tu sistema</h3><p class="muted small">{esc(spec_note)} Con el OpenAPI, el
-análisis genera las herramientas del asistente. Subí el archivo (.json o .yaml) o pegalo.</p>
+análisis genera las acciones del agente. Subí el archivo (.json o .yaml) o pegalo.</p>
 <form method="post" action="/panel/configuracion/sistema/openapi" enctype="multipart/form-data">
 {_csrf(ctx)}<input name="archivo" type="file" accept=".json,.yaml,.yml">
 <textarea name="texto" class="mono" placeholder="…o pegá acá el OpenAPI"></textarea>
@@ -957,7 +957,7 @@ análisis genera las herramientas del asistente. Subí el archivo (.json o .yaml
 mostrar. Cualquier cambio obliga a probar la conexión de nuevo.</p>
 <button type="submit">Guardar acceso</button></form>
 <h3>3. Probar y activar</h3><p class="muted small">La prueba hace una consulta de solo lectura
-a tu sistema con tus credenciales. Hasta que actives, el asistente usa respuestas simuladas.</p>
+a tu sistema con tus credenciales. Hasta que actives, el agente usa respuestas simuladas.</p>
 <div class="row">{probe}{activate}</div>{test}{tools_probe}</div>"""
 
 
@@ -1026,7 +1026,7 @@ subdominios y <span class="mono">localhost</span> para probar en tu computadora.
  pattern="#[0-9a-fA-F]{{6}}" value="{esc(found.accent)}"></div>
 <label for="logo">Logo (PNG, JPG o WebP, cuadrado, hasta 200 KB)</label>
 <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">{logo_note}
-<label for="asistente">Nombre del asistente (opcional)</label>
+<label for="asistente">Nombre del agente (opcional)</label>
 <input id="asistente" name="asistente" maxlength="40" value="{esc(found.assistant)}"
  placeholder="Por ejemplo: Nina">
 <label for="saludo">Saludo al abrir el chat (opcional)</label>
@@ -1040,7 +1040,7 @@ subdominios y <span class="mono">localhost</span> para probar en tu computadora.
 <div><label>Vista previa</label>
 <div id="widget-preview" style="width:min(372px,calc(100vw - 66px));height:560px"></div>
 <p class="muted small">Es el chat real de {esc(ctx.session.company)}: lo que escribas acá
-aparece en Casos.</p></div></div></form></div>
+aparece en la Bandeja.</p></div></div></form></div>
 <script src="/widget.js" data-chat="{esc(slug)}" data-mode="inline"
  data-target="#widget-preview"></script><script>{WIDGET_PREVIEW_JS}</script>"""
 
@@ -1073,17 +1073,17 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
 
 
 def _language_html(ctx: Ctx, language: str) -> str:
-    """Idioma de la empresa (decisión 036): el del asistente, el chat, el widget y los emails."""
+    """Idioma de la empresa (decisión 036): el del agente, el chat, el widget y los emails."""
     options = "".join(
         f'<option value="{code}"{" selected" if code == language else ""}>{name}</option>'
         for code, name in i18n.NAMES.items()
     )
     return f"""<div class="card"><form method="post" action="/panel/configuracion/idioma">
-{_csrf(ctx)}<label for="idioma">Idioma con el que atiende el asistente</label>
+{_csrf(ctx)}<label for="idioma">Idioma con el que atiende el agente</label>
 <div class="row"><select id="idioma" name="idioma" style="max-width:260px">{options}</select>
 <button type="submit">Guardar idioma</button></div>
-<p class="muted small">Cambia las respuestas del asistente, los textos del chat y del widget y el
-email del código de verificación. En inglés, el asistente usa un tono cálido y profesional; en
+<p class="muted small">Cambia las respuestas del agente, los textos del chat y del widget y el
+email del código de verificación. En inglés, el agente usa un tono cálido y profesional; en
 español, rioplatense con voseo.</p></form></div>"""
 
 
@@ -1131,8 +1131,8 @@ def _voice_html(ctx: Ctx, found: brand_voice.Voice, language: str) -> str:
 <label for="firma">Firma</label>
 <input id="firma" name="firma" maxlength="{brand_voice.MAX_SIGNATURE}" value="{esc(found.firma)}"
  placeholder="{esc(signature)}">
-<p class="muted small">Va en el prompt del asistente y la controla el supervisor de respuestas: una
-palabra a evitar hace que la respuesta se reescriba. La firma se agrega al final de cada
+<p class="muted small">Va en las instrucciones del agente y la controla el supervisor de respuestas:
+una palabra a evitar hace que la respuesta se reescriba. La firma se agrega al final de cada
 respuesta y, sin emojis, se sacan antes de enviar.</p>
 <button type="submit">Guardar voz de marca</button></form></div>"""
 
@@ -1164,10 +1164,9 @@ def _supervised_html(ctx: Ctx, on: bool) -> str:
     state = "Activado" if on else "Desactivado"
     return f"""<div class="card"><div class="row"><div class="grow">
 <span class="badge {"resolved" if on else ""}">{state}</span>
-<p class="muted small">Cada respuesta del asistente queda como borrador en Casos. Una persona del
+<p class="muted small">Cada respuesta del agente queda como borrador en la Bandeja. Una persona del
 equipo la envía, la edita o la rechaza antes de que llegue al cliente, que mientras tanto ve
-“escribiendo…”. Las acciones con herramientas siguen pasando por el guardián y sus
-aprobaciones.</p></div>
+“escribiendo…”. Las acciones de riesgo alto siguen esperando su aprobación.</p></div>
 <form method="post" action="/panel/configuracion/supervisado">{_csrf(ctx)}
 <button name="activo" value="{"no" if on else "si"}" class="{"" if on else "primary"}">
 {"Desactivar" if on else "Activar"}</button></form></div></div>"""
@@ -1180,7 +1179,7 @@ def _answer_supervisor_html(ctx: Ctx, on: bool, found: dict[str, Any]) -> str:
     return f"""<div class="card"><div class="row"><div class="grow">
 <span class="badge {"resolved" if on else ""}">{state}</span>
 <p class="muted small">Un modelo barato revisa cada respuesta con datos, políticas o acciones
-antes de enviarla: que coincida con las fuentes y las herramientas, con las reglas y con el tono
+antes de enviarla: que coincida con las fuentes y las acciones, con las reglas y con el tono
 de la marca. Puede aprobarla, pedir que se reescriba una vez o derivar a una persona.</p>
 <table class="small"><thead><tr><th>Últimos 30 días</th><th></th></tr></thead><tbody>
 <tr><td>Revisiones</td><td>{found["reviews"]}</td></tr>
@@ -1230,7 +1229,7 @@ def _behind_html(ctx: Ctx, slug: str | None, on: bool) -> str:
     return f"""<div class="card"><div class="row"><div class="grow">
 <span class="badge {"resolved" if on else ""}">{state}</span>
 <p class="muted small">Una página para mostrar la demo: el sitio con el chat a la izquierda y,
-a la derecha, cada paso del caso en vivo (intención, verificación, herramientas, reglas del
+a la derecha, cada paso del caso en vivo (intención, verificación, acciones, reglas del
 guardián, fuentes, aprobación, latencia y costo). Es de solo lectura y no muestra mensajes ni
 datos personales de los clientes.</p>{link}</div>
 <form method="post" action="/panel/configuracion/detras-de-escena">{_csrf(ctx)}
@@ -1285,7 +1284,7 @@ def _model_html(ctx: Ctx, conn: Any) -> str:
     return f"""<div class="card"><p><strong>Key en uso:</strong> {chosen}</p>
 <p{warn}><strong>Gasto del mes:</strong> <span class="mono">USD {spent.usd:.2f} ·
 {used:.0%}</span> · {cap}{calls}</p>
-<p class="muted small">Al 80 % se envía un aviso; al 100 %, el asistente pasa cada mensaje a una
+<p class="muted small">Al 80 % se envía un aviso; al 100 %, el agente pasa cada mensaje a una
 persona del equipo hasta el mes siguiente o hasta que subas el tope.</p>
 <form method="post" action="/panel/configuracion/modelo">{_csrf(ctx)}
 <label for="proveedor">Proveedor</label><select id="proveedor" name="proveedor"
@@ -1301,8 +1300,8 @@ DAYS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
 
 
 def _rules_html(ctx: Ctx, found: rules.Rules) -> str:
-    """Horario del equipo y a quién derivar (decisión 051). Las reglas por herramienta están en
-    cada herramienta, más abajo."""
+    """Horario del equipo y a quién derivar (decisión 051). Las reglas por acción están en
+    cada acción, más abajo."""
     hours = found.hours
     days = "".join(
         f'<label style="font-weight:400"><input type="checkbox" name="dia_{n}" value="si"'
@@ -1317,7 +1316,7 @@ def _rules_html(ctx: Ctx, found: rules.Rules) -> str:
 <input id="desde" name="desde" type="time" value="{start}"></div>
 <div><label for="hasta">Hasta</label><input id="hasta" name="hasta" type="time" value="{end}">
 </div></div>
-<p class="muted small">El asistente atiende siempre. Fuera de este horario, cuando pasa un caso a
+<p class="muted small">El agente atiende siempre. Fuera de este horario, cuando pasa un caso a
 una persona, le dice al cliente cuándo le responden. Sin días marcados, no se avisa nada.</p>
 <label for="derivar_a">Email que recibe los casos derivados y las aprobaciones</label>
 <input id="derivar_a" name="derivar_a" type="email" value="{esc(found.handoff_email or "")}"
@@ -1350,7 +1349,7 @@ def _upsell_html(ctx: Ctx, found: list[upsell.Rule], kinds: list[str]) -> str:
     reclamo."""
     rows = "".join(
         f"<tr><td>{esc(r.product)}</td>"
-        f"<td>{esc(', '.join(type_label(k) for k in r.case_types))}</td>"
+        f'<td class="data">{esc(", ".join(type_label(k) for k in r.case_types))}</td>'
         f'<td class="mono">{r.max_discount:g} %</td><td>'
         f'<form method="post" action="/panel/configuracion/ventas/{r.id}/borrar">{_csrf(ctx)}'
         '<button type="submit" class="secondary">Quitar</button></form></td></tr>'
@@ -1364,7 +1363,7 @@ def _upsell_html(ctx: Ctx, found: list[upsell.Rule], kinds: list[str]) -> str:
     )
     boxes = "".join(
         f'<label style="font-weight:400"><input type="checkbox" name="tipo_{esc(k)}" value="si">'
-        f" {esc(type_label(k))}</label> "
+        f' <span class="data">{esc(type_label(k))}</span></label> '
         for k in kinds
     )
     form = (
@@ -1376,10 +1375,10 @@ def _upsell_html(ctx: Ctx, found: list[upsell.Rule], kinds: list[str]) -> str:
 <input id="descuento" name="descuento" inputmode="decimal" value="0" style="max-width:120px">
 <button type="submit">Agregar</button></form>"""
         if kinds
-        else '<p class="muted small">No hay tipos de caso activos donde ofrecer algo.</p>'
+        else '<p class="muted small">No hay temas activos donde ofrecer algo.</p>'
     )
     return f"""<div class="card">{table}
-<p class="muted small">El asistente ofrece como mucho un producto por conversación, después de
+<p class="muted small">El agente ofrece como mucho un producto por conversación, después de
 resolver lo que pidió el cliente, y nunca si está enojado o en medio de un reclamo. El descuento
 no pasa el máximo.</p>{form}</div>"""
 
@@ -1703,8 +1702,8 @@ def update_case_type(type_id: uuid.UUID, request: Request, form: Form, deps: Dep
     except review.ReviewError as error:
         return _back("agent/topics", error=str(error))
     if not found:
-        return _not_found("Ese tipo de caso", ctx.session)
-    return _back("agent/topics", ok="Tipo de caso actualizado.")
+        return _not_found("Ese tema", ctx.session)
+    return _back("agent/topics", ok="Tema actualizado.")
 
 
 @router.post("/configuracion/herramientas/{tool_id}")
@@ -1714,7 +1713,7 @@ def update_tool(tool_id: uuid.UUID, request: Request, form: Form, deps: Deps) ->
         return ctx
     approved = {"si": True, "no": False}.get(form.get("aprobada", ""))
     limits = form.get("limites") == "si"
-    # Reglas por herramienta (decisión 051): casillas sin marcar no llegan en el formulario.
+    # Reglas por acción (decisión 051): casillas sin marcar no llegan en el formulario.
     rules_sent = form.get("reglas") == "si"
     try:
         with deps.connection() as conn:
@@ -1739,8 +1738,8 @@ def update_tool(tool_id: uuid.UUID, request: Request, form: Form, deps: Deps) ->
     except review.ReviewError as error:
         return _back("agent/actions", error=str(error))
     if not found:
-        return _not_found("Esa herramienta", ctx.session)
-    return _back("agent/actions", ok="Herramienta actualizada.")
+        return _not_found("Esa acción", ctx.session)
+    return _back("agent/actions", ok="Acción actualizada.")
 
 
 @router.post("/configuracion/sistema/openapi")
@@ -1826,7 +1825,7 @@ def connect_platform(request: Request, form: Form, deps: Deps) -> Response:
         return _back("deploy", error=detail)
     return _back(
         "configuracion",
-        ok="Tienda conectada. Probá la conexión y aprobá sus herramientas.",
+        ok="Tienda conectada. Probá la conexión y aprobá sus acciones.",
     )
 
 
@@ -1910,7 +1909,7 @@ def shopify_callback(request: Request, deps: Deps) -> Response:
         message = str(error) if isinstance(error, ValueError) else "Shopify no respondió."
         return fail(message, used=True)
     response = _back(
-        "configuracion", ok="Tienda conectada. Probá la conexión y aprobá sus herramientas."
+        "configuracion", ok="Tienda conectada. Probá la conexión y aprobá sus acciones."
     )
     response.delete_cookie(OAUTH_COOKIE, path=OAUTH_PATH)
     return response
@@ -1918,7 +1917,7 @@ def shopify_callback(request: Request, deps: Deps) -> Response:
 
 @router.post("/configuracion/sistema/herramientas")
 def probe_system_tools(request: Request, form: Form, deps: Deps) -> Response:
-    """Prueba cada herramienta de solo lectura con un pedido de ejemplo (decisión 057)."""
+    """Prueba cada acción de solo lectura con un pedido de ejemplo (decisión 057)."""
     ctx = enter(request, deps, form)
     if isinstance(ctx, Response):
         return ctx
@@ -1929,7 +1928,7 @@ def probe_system_tools(request: Request, form: Form, deps: Deps) -> Response:
             )
     except system.ConnectionError_ as error:
         return _back("deploy", error=str(error))
-    summary = " · ".join(f"{tool_label(r['herramienta'])}: {r['detalle']}" for r in results)
+    summary = " · ".join(f"{tool_label(r['acción'])}: {r['detalle']}" for r in results)
     failed = any(r["ok"] is False for r in results)
     return _back("deploy", **({"warning": summary} if failed else {"ok": summary}))
 
@@ -1944,7 +1943,7 @@ def activate_system(request: Request, form: Form, deps: Deps) -> Response:
             system.activate(conn, ctx.tenant_id)
     except system.ConnectionError_ as error:
         return _back("deploy", error=str(error))
-    return _back("deploy", ok="Listo: el asistente ya usa tu sistema real.")
+    return _back("deploy", ok="Listo: el agente ya usa tu sistema real.")
 
 
 @router.post("/configuracion/sistema/desactivar")
@@ -1954,7 +1953,7 @@ def deactivate_system(request: Request, form: Form, deps: Deps) -> Response:
         return ctx
     with deps.connection() as conn:
         system.deactivate(conn, ctx.tenant_id)
-    return _back("deploy", ok="El asistente volvió al modo simulado.")
+    return _back("deploy", ok="El agente volvió al modo simulado.")
 
 
 # -- Canales → WhatsApp (self-service, decisión 068) ------------------------------------------
@@ -2016,7 +2015,7 @@ def send_whatsapp_test(request: Request, form: Form, deps: Deps) -> Response:
 def activate_whatsapp(request: Request, form: Form, deps: Deps) -> Response:
     def run(conn: Any, tenant_id: uuid.UUID) -> str:
         whatsapp.activate(conn, tenant_id)
-        return "WhatsApp activo: el asistente ya responde en tu número."
+        return "WhatsApp activo: el agente ya responde en tu número."
 
     return _whatsapp_action(request, form, deps, run)
 
@@ -2025,6 +2024,6 @@ def activate_whatsapp(request: Request, form: Form, deps: Deps) -> Response:
 def deactivate_whatsapp(request: Request, form: Form, deps: Deps) -> Response:
     def run(conn: Any, tenant_id: uuid.UUID) -> str:
         whatsapp.deactivate(conn, tenant_id)
-        return "WhatsApp desactivado: el asistente ya no responde en tu número."
+        return "WhatsApp desactivado: el agente ya no responde en tu número."
 
     return _whatsapp_action(request, form, deps, run)

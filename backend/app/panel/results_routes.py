@@ -71,7 +71,7 @@ def _analysis_html(found: dict[str, Any]) -> str:
         f'<table class="small"><tbody>{reasons}</tbody></table>' if reasons else empty
     }</div>
 <div class="card"><h2>Preguntas sin respuesta</h2>
-<p class="muted small">Lo que el asistente no pudo responder, agrupado por la palabra que más se
+<p class="muted small">Lo que el agente no pudo responder, agrupado por la palabra que más se
 repite. Sirve para saber qué documento cargar. Los ejemplos no tienen datos personales.</p>{
         f'<table class="small"><tbody>{groups}</tbody></table>' if groups else empty
     }</div>"""
@@ -104,7 +104,7 @@ def results_page(request: Request, deps: Deps) -> Response:
         else ""
     )
     body = f"""{toast(request.query_params.get("aviso"))}<h1>Resultados</h1>
-<p class="lead">Lo que resolvió el asistente, medido de forma auditable, y de qué hablan tus
+<p class="lead">Lo que resolvió el agente, medido de forma auditable, y de qué hablan tus
 clientes.</p>
 <div class="card"><div class="row"><h2 class="grow" style="margin:0">Resolución autónoma</h2>
 <form method="get" action="/panel/insights/results" class="row" style="gap:6px;margin:0">
@@ -112,8 +112,8 @@ clientes.</p>
 <button type="submit">Ver</button></form>
 <a class="button" href="/panel/resultados/export?mes={period}">Exportar CSV</a></div>
 <p class="muted small">Un caso es una resolución autónoma si nunca se derivó, lo resolvió el
-asistente, no se reabrió dentro de las 72 h y el cliente no dijo que no se resolvió. El CSV trae
-un renglón por caso, sin datos del cliente: con el número de caso se audita en Casos.</p>
+agente, no se reabrió dentro de las 72 h y el cliente no dijo que no se resolvió. El CSV trae
+un renglón por caso, sin datos del cliente: con el número de caso se audita en la Bandeja.</p>
 <div class="kpis"><div class="kpi"><div class="n">{report.autonomous}</div>
 <div class="muted">resoluciones autónomas</div></div>
 <div class="kpi"><div class="n">{report.total}</div><div class="muted">casos resueltos</div></div>

@@ -70,7 +70,7 @@ def test_un_caso_derivado_muestra_resumen_memoria_paso_y_respuesta(stack: Simula
     case_id = escalate(stack)
     client = panel_for(stack, stack.llm)
     page = client.get(f"/panel/casos/{case_id}").text
-    assert "Asistente para el equipo" in page
+    assert "Copiloto del equipo" in page
     assert "Resumen" in page and "Paso siguiente" in page
     from simulated.claude import ASSIST_REPLY, ASSIST_SUMMARY
 
@@ -146,7 +146,7 @@ def test_la_respuesta_sugerida_se_edita_y_se_envia(stack: SimulatedStack) -> Non
 def test_un_caso_sin_derivar_ni_borradores_no_lo_muestra(stack: SimulatedStack) -> None:
     result = stack.send("lucia", "¿Dónde está mi pedido 1001?")
     page = panel_for(stack, stack.llm).get(f"/panel/casos/{result.case_id}").text
-    assert "Asistente para el equipo" not in page
+    assert "Copiloto del equipo" not in page
     assert assist_calls(stack) == 0
 
 
@@ -158,13 +158,13 @@ def test_un_borrador_del_modo_supervisado_lo_muestra(stack: SimulatedStack) -> N
     )
     assert supervision.pending(stack.conn, stack.seed.tenant_id, result.case_id)
     page = panel_for(stack, stack.llm).get(f"/panel/casos/{result.case_id}").text
-    assert "Asistente para el equipo" in page
+    assert "Copiloto del equipo" in page
 
 
 def test_sin_modelo_se_arma_en_codigo(stack: SimulatedStack) -> None:
     case_id = escalate(stack)
     page = panel_for(stack, None).get(f"/panel/casos/{case_id}").text
-    assert "Asistente para el equipo" in page
+    assert "Copiloto del equipo" in page
     assert "El cliente pidió hablar con una persona." in page  # el motivo de la derivación
     assert assist_calls(stack) == 0
     with tenant_scope(stack.conn, stack.seed.tenant_id):

@@ -236,7 +236,7 @@ def test_la_bandeja_cierra_los_casos_sin_respuesta_hace_24_horas(
         ).fetchone()
     assert row == ("resolved", "agent")
     detail = client.get(f"/panel/casos/{answered.case_id}").text
-    assert "Resuelto por el asistente" in detail
+    assert "Resuelto por el agente" in detail
 
 
 def test_el_detalle_muestra_la_auditoria_con_fuentes_y_costo(
