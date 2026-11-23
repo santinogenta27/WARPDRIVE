@@ -18,7 +18,7 @@ import psycopg
 import yaml
 
 from app import i18n, memory
-from app.agent import conduct, manipulation, presentable, prompt
+from app.agent import conduct, manipulation, presentable, prompt, supervisor
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
     CHAT,
@@ -268,6 +268,7 @@ HANDOFF_CAUSES = (
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
     "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
+    "supervisor",  # detalle: `derivar` o `reescribir` (lo pidió dos veces), decisión 079
 )
 _FIXED_VERIFICATION = (
     "Para darte datos de tu pedido necesito verificar",
@@ -357,6 +358,8 @@ class _Turn:
     tone: str = "rioplatense"
     lang: str = "es"  # idioma de la empresa (decisión 036)
     memory: str = ""  # memoria del cliente verificado (decisión 078), para el prompt
+    rules: str = ""  # instrucciones del tipo de caso, para el supervisor (decisión 079)
+    supervisor_retries: int = 0  # el supervisor ya pidió una reescritura (decisión 079)
 
     def say(self, key: str, **values: Any) -> str:
         return i18n.text(self.lang, key, **values)
@@ -417,6 +420,7 @@ class Agent:
         self._max_steps = max_steps
         self._mailer = mailer or mailer_from_env()
         self._assistant = ""  # nombre del asistente de la empresa del turno (decisión 052)
+        self._supervisor_on = True  # supervisor de respuestas de la empresa (decisión 079)
 
     # -- entrada ---------------------------------------------------------------------------
     def handle_message(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
@@ -771,6 +775,7 @@ class Agent:
             },
         )
         self._load_memory(turn)
+        turn.rules = instructions
         system = prompt.system_prompt(
             company, tone, instructions, self._assistant, memory=bool(turn.memory)
         )
@@ -1107,6 +1112,35 @@ class Agent:
                         messages.append({"role": "assistant", "content": response.content})
                         messages.append(_grounding_correction(final_id, verdict.reason, turn.lang))
                         continue
+                    # Supervisor (decisión 079): después de los controles fijos, un modelo barato
+                    # revisa la respuesta con datos, políticas o acciones antes de enviarla.
+                    if (
+                        chat is None
+                        and self._supervisor_on
+                        and supervisor.needs_review(final_input, bool(turn.decisions))
+                    ):
+                        review = self._supervise(turn, said)
+                        if review.verdict == supervisor.REWRITE and turn.supervisor_retries == 0:
+                            self._audit(
+                                turn,
+                                "supervisor_rejected",
+                                {"motivo": review.reason, "rejected_message": final_input},
+                            )
+                            turn.supervisor_retries += 1
+                            messages.append({"role": "assistant", "content": response.content})
+                            messages.append(
+                                _correction(
+                                    final_id, supervisor.correction(review.reason, turn.lang)
+                                )
+                            )
+                            continue
+                        if review.verdict != supervisor.APPROVE:
+                            return self._give_up(
+                                turn,
+                                f"Supervisor: {review.reason or review.verdict}.",
+                                chat,
+                                {"tipo": "supervisor", "detalle": review.verdict},
+                            )
                 if final_name == "derivar" and chat is not None:
                     raise _ChatFallback  # en la charla no se deriva
                 if (
@@ -1392,6 +1426,34 @@ class Agent:
             language=turn.lang,
         )
 
+    def _supervise(self, turn: _Turn, answer: str) -> supervisor.Review:
+        """Revisión del supervisor (decisión 079), con su costo y su latencia en la auditoría."""
+        documents: dict[str, str] = {}
+        for doc in turn.documents:
+            documents[doc.source] = f"{documents.get(doc.source, '')}\n{doc.text}".strip()
+        results = [
+            {"herramienta": call.name, "estado": decision.status, "resultado": decision.result}
+            for call, decision in zip(turn.tool_calls, turn.decisions, strict=False)
+        ]
+        found = supervisor.review(
+            self._llm,
+            tenant_id=turn.tenant_id,
+            case_id=turn.case_id,
+            language=turn.lang,
+            message=turn.text,
+            answer=answer,
+            documents=documents,
+            tool_results=results,
+            rules=turn.rules,
+            tone=prompt.TONES.get(turn.tone, prompt.TONES["rioplatense"]),
+        )
+        if found.response is not None:
+            self._audit_model_call(turn, supervisor.ROLE, found.response)
+        self._audit(turn, "supervisor_review", found.audit())
+        if found.error:
+            self._audit(turn, "supervisor_unavailable", {"error": found.error})
+        return found
+
     def _check_grounding(self, turn: _Turn, data: dict[str, Any]) -> GroundingVerdict:
         documents: dict[str, str] = {}
         for doc in turn.documents:
@@ -1540,6 +1602,7 @@ class Agent:
             tone = "english"
         # El nombre que eligió la empresa para el asistente (decisión 052), para el prompt.
         self._assistant = str((settings.get("brand") or {}).get("assistant") or "")
+        self._supervisor_on = settings.get(supervisor.SETTING) is not False
         return row[0], tone, lang
 
     def _contact(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> ContactContext:

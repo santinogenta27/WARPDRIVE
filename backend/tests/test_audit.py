@@ -25,6 +25,8 @@ def test_un_caso_se_reconstruye_completo(stack: SimulatedStack) -> None:
         "model_call",  # agente: pide consultar_pedido
         "tool_call",
         "model_call",  # agente: responde
+        "model_call",  # supervisor (decisión 079)
+        "supervisor_review",
         "final_action",
         "turn_timing",  # cuánto tardó cada paso (decisión 025)
     ]
@@ -41,6 +43,7 @@ def test_un_caso_se_reconstruye_completo(stack: SimulatedStack) -> None:
         "claude-haiku-5-5",
         "claude-sonnet-5-5",
         "claude-sonnet-5-5",
+        "claude-haiku-5-5",  # supervisor (decisión 079)
     ]
     assert all(float(m["cost_usd"]) > 0 for m in model_calls)
     assert verify_chain(stack.conn, stack.seed.tenant_id, result.case_id).ok

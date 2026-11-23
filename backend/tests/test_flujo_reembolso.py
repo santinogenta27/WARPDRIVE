@@ -97,7 +97,7 @@ def test_el_modelo_no_ve_el_intercambio_de_verificacion_en_el_historial(
     send(stack, contact, "martin@example.com")
     send(stack, contact, last_code(stack))
     assert stack.claude is not None
-    agent_turn = stack.claude_requests[-1]["body"]["messages"][0]["content"]
+    agent_turn = stack.agent_requests[-1]["body"]["messages"][0]["content"]
     history = agent_turn.split("<historial>")[1].split("</historial>")[0]
     assert "código" not in history and "martin@example.com" not in history
 

@@ -18,6 +18,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
+from app.agent import supervisor as answer_supervisor
 from app.cases import supervision
 from app.channels.web import widget
 from app.channels.whatsapp import selfservice as whatsapp
@@ -1108,6 +1109,38 @@ aprobaciones.</p></div>
 {"Desactivar" if on else "Activar"}</button></form></div></div>"""
 
 
+def _answer_supervisor_html(ctx: Ctx, on: bool, found: dict[str, Any]) -> str:
+    """Supervisor de respuestas (decisión 079): encendido por defecto, con lo que agregó."""
+    state = "Activado" if on else "Desactivado"
+    seconds = f"{found['avg_ms'] / 1000:.1f} s"
+    return f"""<div class="card"><div class="row"><div class="grow">
+<span class="badge {"resolved" if on else ""}">{state}</span>
+<p class="muted small">Un modelo barato revisa cada respuesta con datos, políticas o acciones
+antes de enviarla: que coincida con las fuentes y las herramientas, con las reglas y con el tono
+de la marca. Puede aprobarla, pedir que se reescriba una vez o derivar a una persona.</p>
+<table class="small"><thead><tr><th>Últimos 30 días</th><th></th></tr></thead><tbody>
+<tr><td>Revisiones</td><td>{found["reviews"]}</td></tr>
+<tr><td>Pidió reescribir</td><td>{found["rewrites"]}</td></tr>
+<tr><td>Derivó</td><td>{found["escalations"]}</td></tr>
+<tr><td>Latencia media que agrega</td><td>{seconds}</td></tr>
+<tr><td>Costo total</td><td>US$ {found["cost_usd"]:.4f}</td></tr></tbody></table></div>
+<form method="post" action="/panel/configuracion/supervisor">{_csrf(ctx)}
+<button name="activo" value="{"no" if on else "si"}" class="{"" if on else "primary"}">
+{"Desactivar" if on else "Activar"}</button></form></div></div>"""
+
+
+@router.post("/configuracion/supervisor")
+def save_answer_supervisor(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    on = form.get("activo") == "si"
+    with deps.connection() as conn:
+        answer_supervisor.set_enabled(conn, ctx.tenant_id, on)
+    state = "activado" if on else "desactivado"
+    return _back("configuracion", ok=f"Supervisor de respuestas {state}.")
+
+
 @router.post("/configuracion/supervisado")
 def save_supervised(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
@@ -1358,6 +1391,11 @@ def settings_page(request: Request, deps: Deps) -> Response:
         language = i18n.tenant_language(conn, ctx.tenant_id)
         behind_on = behind.enabled(conn, ctx.tenant_id)
         supervised = supervision.enabled(conn, ctx.tenant_id)
+        reviewer = _answer_supervisor_html(
+            ctx,
+            answer_supervisor.enabled(conn, ctx.tenant_id),
+            answer_supervisor.stats(conn, ctx.tenant_id),
+        )
         whatsapp_setup = whatsapp.load(conn, ctx.tenant_id)
         model = _model_html(ctx, conn)
         attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
@@ -1381,6 +1419,7 @@ qué usa el asistente. Lo que activás o aprobás acá pasa al asistente en vivo
 queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Idioma</h2>{_language_html(ctx, language)}
 <h2>Modo supervisado</h2>{_supervised_html(ctx, supervised)}
+<h2>Supervisor de respuestas</h2>{reviewer}
 <h2>Modelo y gasto</h2>{model}
 <h2 id="reglas">Reglas de atención</h2>{attention}
 <h2>Ventas cruzadas</h2>{offers}

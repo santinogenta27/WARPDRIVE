@@ -90,6 +90,7 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
         "agente_reconsiderada": (
             "The agent chose to hand off, even after being asked to answer with the tool's data"
         ),
+        "supervisor": "The supervisor stopped the answer before it was sent",
     },
     "es": {
         "pidio_persona": "El cliente pidió hablar con una persona",
@@ -110,6 +111,7 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
             "El agente eligió derivar, aun después de que se le pidió responder con los datos de "
             "la herramienta"
         ),
+        "supervisor": "El supervisor frenó la respuesta antes de enviarla",
     },
 }
 GROUNDING_DETAILS = {
@@ -346,7 +348,7 @@ def _tool(manifests: dict[str, dict[str, Any]], payload: dict[str, Any]) -> dict
     return found
 
 
-ROLES = {"clasificador": "classifier", "agente": "agent"}
+ROLES = {"clasificador": "classifier", "agente": "agent", "supervisor": "supervisor"}
 
 
 def _timing(payload: dict[str, Any]) -> dict[str, Any]:
@@ -403,6 +405,7 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
                     "cost_usd": 0.0,
                     "tokens": 0,
                     "model_calls": 0,
+                    "supervisor": None,
                 }
             )
             continue
@@ -446,6 +449,14 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
         elif kind == "escalated":
             turn["action"] = "derivar"
             turn["handoff"] = handoff_line(p.get("causa"), english=english.english())
+        elif kind == "supervisor_review":  # decisión 079: veredicto, latencia y costo
+            before = turn["supervisor"] or {}  # una reescritura: se suman las dos revisiones
+            turn["supervisor"] = {
+                "verdict": str(p.get("veredicto") or ""),
+                "ms": int(before.get("ms", 0)) + int(p.get("ms") or 0),
+                "cost_usd": float(before.get("cost_usd", 0.0)) + float(_number(p.get("cost_usd"))),
+                "reviews": int(before.get("reviews", 0)) + 1,
+            }
         elif kind == "model_call":
             turn["cost_usd"] = float(_number(turn["cost_usd"]) + _number(p.get("cost_usd")))
             turn["tokens"] += int(p.get("input_tokens") or 0) + int(p.get("output_tokens") or 0)

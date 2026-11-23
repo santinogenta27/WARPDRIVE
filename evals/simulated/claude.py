@@ -19,6 +19,8 @@ from simulated import english
 from simulated.voyage import tokens
 
 INVENTED = "¡Sí, claro! Lo hacemos sin ningún problema y sin costo."
+# Lo que pide el supervisor simulado cuando no aprueba (decisión 079).
+SUPERVISOR_REASON = "La respuesta no menciona la fecha estimada de entrega de la herramienta"
 _GENERIC = {"tiene", "quier", "puedo", "hacen", "pedid", "acme", "hola", "graci", "neces"}
 _STATUS = {
     "paid": "pagado y todavía no fue despachado",
@@ -50,6 +52,7 @@ class SimulatedClaude:
     mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
+    _supervised: int = 0  # revisiones del supervisor (decisión 079)
 
     def transport(self) -> httpx2.MockTransport:
         return httpx2.MockTransport(self._handle)
@@ -63,6 +66,8 @@ class SimulatedClaude:
             blocks = [self._tool_use("clasificar", _classification(body))]
         elif "calificar" in tool_names:
             blocks = [self._tool_use("calificar", _judge(body))]
+        elif "supervisar" in tool_names:  # supervisor de respuestas (decisión 079)
+            blocks = self._supervisor()
         else:
             blocks = self._agent(body, tool_names)
         has_tool = any(b["type"] == "tool_use" for b in blocks)
@@ -84,6 +89,23 @@ class SimulatedClaude:
                 },
             },
         )
+
+    def _supervisor(self) -> list[dict[str, Any]]:
+        """Aprueba, salvo en los modos del supervisor: "supervisor_reescribe_una_vez" (pide
+        reescribir y después aprueba), "supervisor_reescribe_siempre", "supervisor_deriva" y
+        "supervisor_sin_herramienta" (contesta sin la herramienta, como un modelo que falla)."""
+        self._supervised += 1
+        if self.mode == "supervisor_sin_herramienta":
+            return [{"type": "text", "text": "Parece correcta."}]
+        verdict = "aprobar"
+        if self.mode == "supervisor_deriva":
+            verdict = "derivar"
+        elif self.mode == "supervisor_reescribe_siempre" or (
+            self.mode == "supervisor_reescribe_una_vez" and self._supervised == 1
+        ):
+            verdict = "reescribir"
+        reason = SUPERVISOR_REASON if verdict != "aprobar" else "Coincide con las fuentes."
+        return [self._tool_use("supervisar", {"veredicto": verdict, "motivo": reason})]
 
     def _tool_use(self, name: str, data: dict[str, Any]) -> dict[str, Any]:
         self._counter += 1

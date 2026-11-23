@@ -107,7 +107,7 @@ def test_en_ingles_el_agente_y_el_clasificador_usan_prompts_en_ingles(
     assert "warm and professional English" in system
     assert "voseo" not in system and "Sos el asistente" not in system
     assert _classifier_systems(english)[-1].startswith("You classify messages")
-    tools = english.claude_requests[-1]["body"]["tools"]
+    tools = english.agent_requests[-1]["body"]["tools"]
     final = next(t for t in tools if t["name"] == "responder")
     assert final["description"] == "Sends the final answer to the customer."
 

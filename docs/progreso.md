@@ -709,6 +709,19 @@ Rama `h12-memoria-cliente`.
 - **Cómo probarlo:**
   - `python -m pytest backend/tests/test_memoria_cliente.py`
   - `python evals/runner.py --simulated`
+### Tarea 2 — Supervisor de respuestas (decisión 079)
+
+Rama `h12-supervisor`.
+
+- **Hecho:**
+  - **Qué revisa.** Después de los controles fijos y antes de enviar, el modelo del clasificador revisa cada respuesta con datos, políticas o acciones: factual, con fuentes o con herramientas. Comprueba que coincida con los documentos y los resultados de las herramientas, con las reglas del tipo de caso y con el tono de la marca (`app/agent/supervisor.py`).
+  - **Qué puede hacer.** Aprueba, pide una reescritura con el motivo (una sola vez; la nueva respuesta vuelve a pasar todos los controles) o deriva con la causa `supervisor`. La charla, los mensajes fijos y las derivaciones no pasan por él. Si falla, aprueba y lo registra (`supervisor_unavailable`).
+  - **Medición.** `supervisor_review` en la auditoría, con el veredicto, el motivo, los ms, los tokens y el costo. La llamada queda con el papel `supervisor` en los pasos del turno.
+  - **Behind the scenes.** Muestra el veredicto con su latencia y su costo.
+  - **Configuración.** Tiene el interruptor por empresa (encendido por defecto) y los números de los últimos 30 días.
+- **Validado con Gemini real:** pasan 3 casos con datos, política y acción. El supervisor aprobó con un motivo concreto, agregó unos 6 s con Gemini gratis y su costo fue 0 en ese nivel.
+- **A tener en cuenta:** la latencia que agrega con el nivel gratis es alta. Con Haiku pago debería ser bastante menor. Se puede apagar por empresa.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_supervisor.py`.
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
