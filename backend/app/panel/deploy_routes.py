@@ -102,7 +102,10 @@ def _diagnosis_html(diagnosis: deploy.Diagnosis | None) -> str:
     if diagnosis is None:
         return ""
     if diagnosis.ok:
-        return f'<div class="diag good" role="status"><b>✓ {esc(diagnosis.what)}</b></div>'
+        return (
+            '<div class="diag good" role="status"><span aria-hidden="true">✓</span> '
+            f"<b>{esc(diagnosis.what)}</b></div>"
+        )
     missing = {
         deploy.PERMISSION: "A permission",
         deploy.CREDENTIAL: "A credential",

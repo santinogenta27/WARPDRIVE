@@ -121,7 +121,7 @@ def test_conectar_shopify_prueba_en_el_momento_y_suma_los_dominios(world: World)
     page = connect(world)
     assert "Store connected. We added mitienda.myshopify.com, www.mitienda.com.ar" in page
     store = step(page, "store")
-    assert "✓ Connected to Mi Tienda." in store
+    assert "<b>Connected to Mi Tienda.</b>" in store
     assert ">Test mode<" in store and "Use my real store" in store
     domains = widget.load(world.conn, world.tenant).domains
     assert "mitienda.myshopify.com" in domains and "www.mitienda.com.ar" in domains

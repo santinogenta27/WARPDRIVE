@@ -6,7 +6,7 @@ Las mismas guías que muestra el panel en **Deploy → Add the chat to your webs
 <script src="https://TU-SERVICIO/widget.js" data-chat="ENLACE-DE-TU-CHAT" async></script>
 ```
 
-**Dominios permitidos.** El chat solo abre en los dominios cargados en **Allowed domains** (mismo paso). Si conectaste tu tienda de Shopify o Tiendanube en el paso 1, sus dominios ya están cargados. Detalle en [widget.md](widget.md).
+**Dominios permitidos.** El chat solo abre en los dominios cargados en **Allowed domains** (Dominios permitidos, en el mismo paso). Si conectaste tu tienda de Shopify o Tiendanube en el paso 1, sus dominios ya están cargados. Detalle en [widget.md](widget.md).
 
 **Revisar la instalación.** Después de pegar el código y publicar, tocá **Check installation**: confirma que el chat cargó desde tu dominio, o te dice si el código no está en la página.
 

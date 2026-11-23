@@ -26,7 +26,7 @@ NORTE, NORTE_PASSWORD = "ana@tiendanorte.example", "clave-de-tienda-norte"
 
 def test_la_guia_de_instalacion_cubre_cada_plataforma() -> None:
     text = (DOCS / "instalacion.md").read_text(encoding="utf-8")
-    for platform in ("Shopify", "WordPress", "Tiendanube", "Cualquier sitio"):
+    for platform in ("Shopify", "WordPress", "Tiendanube", "WhatsApp"):
         assert f"## {platform}" in text
     assert "theme.liquid" in text and "Dominios permitidos" in text
 
