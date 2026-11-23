@@ -168,6 +168,12 @@ class SimulatedClaude:
                 text = f"{text} Dime si necesitas algo más."
             if self.mode == "emojis":  # voz de marca (decisión 081): pone un emoji
                 text = f"{text} 😊"
+            # Promesas (decisión 084): promete avisar más adelante; con "_una_vez", corregido ya
+            # no lo promete.
+            if self.mode == "promete_aviso_siempre" or (
+                self.mode == "promete_aviso" and not corrected
+            ):
+                text = f"{text} Te avisamos por acá cuando salga."
             data = {"mensaje": text, "fuentes": sources or [], "factual": factual}
             loose = _loose_text(self.mode, data, corrected)
             if loose is not None:

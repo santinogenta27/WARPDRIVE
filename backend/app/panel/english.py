@@ -860,6 +860,23 @@ PHRASES: dict[str, str] = {
     "No se envió al cliente": "It wasn't sent to the customer",
     "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
+    # Promesas cumplidas (Hito 12, decisión 084)
+    "Avisos programados": "Scheduled notices",
+    "El asistente solo puede prometerle un aviso al cliente si hay uno de estos pendiente.": (
+        "The assistant can only promise the customer a notice if one of these is pending."
+    ),
+    "Avisarle al cliente cuando se decida la aprobación": (
+        "Let the customer know when the approval is decided"
+    ),
+    "Responderle al cliente desde el equipo": "Reply to the customer from the team",
+    "Cumplido": "Done",
+    "Cancelado": "Cancelled",
+    "promete un aviso a futuro sin un aviso programado que lo cumpla": (
+        "it promised a future notice with no scheduled notice to keep it"
+    ),
+    "Respuesta frenada: prometió avisarle al cliente sin un aviso programado": (
+        "Answer blocked: it promised to notify the customer and no notice was scheduled"
+    ),
     # Resultados medibles (Hito 12, decisión 083)
     "Resultados": "Results",
     "Lo que resolvió el asistente, medido de forma auditable, y de qué hablan tus clientes.": (

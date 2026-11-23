@@ -10,6 +10,7 @@ from typing import Any
 
 import psycopg
 
+from app.agent import promises
 from app.audit import log as audit_log
 from app.db.connection import tenant_scope
 
@@ -31,3 +32,9 @@ def notify_customer(
         )
         conn.execute("update cases set updated_at = now() where id = %s", (case_id,))
     audit_log.record(conn, tenant_id, case_id, kind, {"text": text, **(detail or {})})
+    # El aviso programado que esto cumple (decisión 084).
+    if kind == "approval_decided":
+        reference = str((detail or {}).get("approval_id") or "")
+        promises.fulfill(conn, tenant_id, case_id, promises.APPROVAL, reference or None)
+    elif kind == "human_reply":
+        promises.fulfill(conn, tenant_id, case_id, promises.TEAM)

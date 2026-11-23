@@ -58,7 +58,13 @@ VERIFICATION_STEPS = {
     "verification_code_sent": "code_sent",
     "verification_code_failed": "code_failed",
 }
-CHECKS = {"grounding_rejected", "format_rejected", "tone_rejected", "handoff_rejected"}
+CHECKS = {
+    "grounding_rejected",
+    "format_rejected",
+    "tone_rejected",
+    "handoff_rejected",
+    "promise_rejected",  # decisión 084
+}
 
 # Por qué derivó (decisión 045): una línea por causa, armada solo con textos fijos. El motivo que
 # escribe el modelo no se muestra: puede traer cualquier dato del cliente.
@@ -91,6 +97,9 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
             "The agent chose to hand off, even after being asked to answer with the tool's data"
         ),
         "supervisor": "The supervisor stopped the answer before it was sent",
+        "promesa_sin_aviso": (
+            "Answer blocked: it promised to notify the customer and no notice was scheduled"
+        ),
     },
     "es": {
         "pidio_persona": "El cliente pidió hablar con una persona",
@@ -112,6 +121,9 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
             "la herramienta"
         ),
         "supervisor": "El supervisor frenó la respuesta antes de enviarla",
+        "promesa_sin_aviso": (
+            "Respuesta frenada: prometió avisarle al cliente sin un aviso programado"
+        ),
     },
 }
 GROUNDING_DETAILS = {
