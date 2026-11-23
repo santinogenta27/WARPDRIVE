@@ -68,6 +68,19 @@ class SimulatedClaude:
             blocks = [self._tool_use("calificar", _judge(body))]
         elif "supervisar" in tool_names:  # supervisor de respuestas (decisión 079)
             blocks = self._supervisor()
+        elif "crear_clientes" in tool_names:  # simulaciones (decisión 080)
+            blocks = [self._tool_use("crear_clientes", _personas(body))]
+        elif "hablar_como_cliente" in tool_names:
+            more = self.mode == "simulacion_larga"
+            said = "¿Y qué más tengo que hacer? Contame el detalle." if more else "Gracias."
+            blocks = [
+                self._tool_use("hablar_como_cliente", {"mensaje": said, "terminar": not more})
+            ]
+        elif "juzgar_simulacion" in tool_names:
+            ok = self.mode != "simulacion_falla"
+            verdict = {"objetivo": ok, "reglas_y_marca": ok, "correcta": ok}
+            reason = "Logró el objetivo." if ok else "No logró el objetivo."
+            blocks = [self._tool_use("juzgar_simulacion", {**verdict, "motivo": reason})]
         else:
             blocks = self._agent(body, tool_names)
         has_tool = any(b["type"] == "tool_use" for b in blocks)
@@ -316,6 +329,45 @@ class SimulatedClaude:
         if name in {"cancelar_pedido", "iniciar_reembolso"}:
             return reply(f"Listo, quedó registrada la operación sobre el pedido {order_id}.")
         return reply("Listo.")
+
+
+# -- simulaciones (decisión 080) ----------------------------------------------------------
+_FIRST_MESSAGES = {
+    "donde_esta_mi_pedido": "¿Dónde está mi pedido 1001?",
+    "cambiar_direccion": "Quiero cambiar la dirección del pedido 1002 a Av. Corrientes 1234, CABA",
+    "cancelar_pedido": "Quiero cancelar el pedido 1002",
+    "reembolso": "Quiero el reembolso del pedido 1005",
+    "cambio_por_talle": "¿Cómo cambio un producto por otro talle?",
+    "medios_de_pago_y_cuotas": "¿Tienen cuotas sin interés?",
+    "facturacion": "¿Cómo pido la factura?",
+    "horarios_y_sucursales": "¿Abren los domingos?",
+}
+_TONE_LEADS = {"enojado": "¡Es la tercera vez que pregunto! ", "confundido": "No entiendo bien. ",
+               "apurado": "Rápido, por favor: "}  # fmt: skip
+
+
+def _personas(body: dict[str, Any]) -> dict[str, Any]:
+    """Clientes simulados: recorre los tipos de caso y los tres tonos."""
+    content = body["messages"][0]["content"]
+    size = int(_tag(content, "cantidad"))
+    language = _tag(content, "idioma")
+    types = re.findall(r"^- ([\w-]+): (.*)$", _tag(content, "tipos_de_caso"), re.M)
+    tones = list(_TONE_LEADS)
+    found = []
+    for n in range(size):
+        name, goal = types[n % len(types)]
+        tone = tones[n % len(tones)]
+        first = _FIRST_MESSAGES.get(name, f"Hola, necesito ayuda: {html.unescape(goal).lower()}")
+        found.append(
+            {
+                "tipo_de_caso": name,
+                "idioma": language,
+                "tono": tone,
+                "objetivo": html.unescape(goal),
+                "primer_mensaje": _TONE_LEADS[tone] + first,
+            }
+        )
+    return {"clientes": found}
 
 
 # -- utilidades --------------------------------------------------------------------------

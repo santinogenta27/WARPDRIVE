@@ -104,8 +104,14 @@ def readiness_html(ctx: Ctx, found: go_live.Readiness) -> str:
     )
     try_it = "Try the assistant" if en else "Probar el asistente"
     missing = f'<ul class="small">{reasons}</ul>' if reasons else ""
+    simulated = (  # la última simulación (decisión 080): informativa
+        f'<div class="small">{"Simulation" if en else "Simulación"}: pass^3 '
+        f"{found.simulation:.0%}</div>"
+        if found.simulation is not None
+        else ""
+    )
     return f"""<div class="card"><div class="row"><div class="grow"><b>{html.escape(state)}</b>
-<div class="muted small">{html.escape(rule)}</div>{missing}
+<div class="muted small">{html.escape(rule)}</div>{simulated}{missing}
 </div><a class="button" href="/panel/probar" target="_blank" rel="noopener">{try_it}</a>
 {button}</div></div>"""
 

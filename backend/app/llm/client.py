@@ -110,6 +110,11 @@ class LLMClient:
         self._provider = provider
         self._recorder = recorder
 
+    def with_recorder(self, recorder: UsageRecorder) -> "LLMClient":
+        """El mismo proveedor con otro registro de uso (las simulaciones guardan el uso aparte y
+        lo escriben después de revertir lo simulado, decisión 080)."""
+        return LLMClient(provider=self._provider, recorder=recorder)
+
     def complete(
         self,
         *,

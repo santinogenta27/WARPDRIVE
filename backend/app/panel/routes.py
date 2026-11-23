@@ -998,10 +998,13 @@ def report_page(request: Request, deps: Deps) -> Response:
     finished = None
     from app.companies import go_live
     from app.panel.live_routes import readiness_html
+    from app.panel.simulation_routes import simulation_card
 
     with deps.connection() as conn:
-        # Probar y salir en vivo (decisión 056): arriba de todo.
+        # Probar y salir en vivo (decisión 056): arriba de todo. Después, las simulaciones
+        # (decisión 080).
         live = readiness_html(ctx, go_live.readiness(conn, ctx.tenant_id))
+        live += simulation_card(ctx, conn)
         for source in sources:
             with tenant_scope(conn, source):
                 row = conn.execute(

@@ -860,6 +860,28 @@ PHRASES: dict[str, str] = {
     "No se envió al cliente": "It wasn't sent to the customer",
     "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
+    # Simulaciones (Hito 12, decisión 080)
+    "Simulaciones": "Simulations",
+    "Las conversaciones simuladas corren en segundo plano. Volvé a abrir el Reporte en unos "
+    "minutos.": "The simulated conversations run in the background. Open the Report again in a "
+    "few minutes.",
+    "La última simulación falló.": "The last simulation failed.",
+    "Simular 20 conversaciones": "Simulate 20 conversations",
+    "clientes, 3 corridas cada uno": "customers, 3 runs each",
+    "Tipo de caso": "Type of request",
+    "Corridas que fallaron": "Runs that failed",
+    "corrida": "run",
+    "Clientes simulados (enojados, confundidos o apurados) creados desde tus documentos, tipos de "
+    "caso y reglas conversan con el asistente. Cada conversación se repite 3 veces y un juez "
+    "revisa si el cliente logró su objetivo, si se respetaron las reglas y la marca y si la "
+    "respuesta fue correcta. pass^3: los clientes que pasaron las 3 veces. No toca tu sistema ni "
+    "deja datos.": (
+        "Simulated customers (angry, confused or in a hurry), built from your documents, types "
+        "of request and rules, talk with the assistant. Each conversation is repeated 3 times "
+        "and a judge checks whether the customer reached their goal, whether the rules and the "
+        "brand were respected and whether the answer was correct. pass^3: the customers who "
+        "passed all 3 times. It doesn't touch your system or leave any data."
+    ),
     # Supervisor de respuestas (Hito 12, decisión 079)
     "Supervisor de respuestas": "Answer supervisor",
     "Un modelo barato revisa cada respuesta con datos, políticas o acciones antes de enviarla: "

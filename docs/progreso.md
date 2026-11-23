@@ -722,6 +722,20 @@ Rama `h12-supervisor`.
 - **Validado con Gemini real:** pasan 3 casos con datos, política y acción. El supervisor aprobó con un motivo concreto, agregó unos 6 s con Gemini gratis y su costo fue 0 en ese nivel.
 - **A tener en cuenta:** la latencia que agrega con el nivel gratis es alta. Con Haiku pago debería ser bastante menor. Se puede apagar por empresa.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_supervisor.py`.
+### Tarea 3 — Simulaciones por empresa (decisión 080)
+
+Rama `h12-simulaciones`.
+
+- **Hecho:**
+  - **Clientes simulados.** Opus genera los clientes desde los tipos de caso activos, un extracto de los documentos y las reglas. Cada uno tiene tipo, idioma, tono (enojado, confundido o apurado), objetivo y primer mensaje. Lo que falte se completa en código.
+  - **Conversación y juez.** Haiku hace de cliente: hasta 4 mensajes, o termina antes. Cada cliente conversa 3 veces. Un juez califica cada corrida: logró el objetivo, respetó las reglas y la marca, fue correcta. El resultado es pass^3 por tipo de caso y general, más pass^1 (`app/simulation/runner.py`).
+  - **Aislamiento.** Cada corrida va en un savepoint que se revierte. Las herramientas usan un sandbox desde el OpenAPI de la empresa, nunca el sistema real. El uso de los modelos se escribe en `usage` al final, así el costo de simular queda registrado.
+  - **Job y panel.** El job `simulation` corre en el worker de la API y es idempotente; si falla, la corrida queda `failed`. La migración 0031 crea `simulation_runs`. En el Reporte está la tarjeta **Simulaciones**, con "Simular 20 conversaciones" (20 clientes × 3 corridas), el pass^3 por tipo y las corridas que fallaron con el motivo del juez. La tarjeta de salir en vivo muestra el pass^3 de la última simulación, como dato informativo.
+- **Validado con Gemini real** (39 llamadas): la simulación encontró un problema real del sandbox. Rellenaba el nombre del cliente con "dato de prueba" y el agente saludaba "Hola, dato de prueba". Lo arreglé: el sandbox de la simulación no inventa nombres. Una corrida falló por un 429 de Gemini gratis y quedó marcada como fallida. Después del arreglo, la corrida pasa.
+- **A tener en cuenta:**
+  - 20 clientes × 3 corridas son cientos de llamadas: no entra en la cuota diaria de Gemini gratis. Con un proveedor pago, tarda varios minutos.
+  - El job corre en una sola transacción.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_simulaciones.py`.
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

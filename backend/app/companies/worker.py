@@ -26,10 +26,13 @@ IDLE_SECONDS = 600.0
 
 def _handlers() -> dict[str, Handler]:
     """El onboarding y la prueba gratis: su armado y su borrado a los 7 días (decisión 075)."""
+    from app.simulation import runner as simulation
     from app.trial import service as trial
 
     return {
         JOB_KIND: run_onboarding_job,
+        # Simulaciones por empresa (decisión 080).
+        simulation.JOB_KIND: lambda conn, job: simulation.run_simulation_job(conn, job),
         trial.JOB_KIND: trial.run_build_job,
         trial.EXPIRE_JOB: trial.run_expire_job,
     }
