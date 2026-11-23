@@ -830,6 +830,19 @@ Rama `h13-idioma`, PR #51.
 - **Test de aceptación:** `test_panel_idioma.py` recorre las 22 pantallas y el detalle de un caso en inglés y en español: falla si queda texto del otro idioma o jerga (tenant, RAG, guardián, embeddings, evals, onboarding, tipo de caso, herramienta, asistente, prompt).
 - **Cómo probarlo:** `python -m pytest backend/tests/test_panel_idioma.py`; en el panel, el botón "Español"/"English" del pie de la barra lateral.
 
+### Tarea 3 — Home
+
+Rama `h13-home`, PR #52.
+
+- **Hecho** (`app/panel/home_routes.py`), en dos columnas en la computadora y una en el celular:
+  - **Get started:** los 6 primeros pasos con su progreso real, empezando por "Add your knowledge"; el paso actual resaltado y un botón para empezar cada uno. Desaparece cuando todo está hecho, y no se muestra en las demos ni a las personas del equipo.
+  - **Needs your attention:** aprobaciones (con Approve y Reject, que vuelven a Home), casos derivados que esperan al equipo (Reply) y borradores por revisar (Review). Vacío: "You're all caught up".
+  - **Last 7 days:** conversaciones, resueltas por el agente, derivadas, ventas atribuidas y costo de IA.
+  - **Agent status:** Live, Paused o Setting up (pausado = salió en vivo y lo pausaron), con el botón para pausar, y el estado del chat del sitio, WhatsApp y la tienda.
+  - Los primeros pasos tienen nombres más claros ("Add your knowledge", "Choose how your chat looks", "Add the chat to your website").
+- **Test de aceptación:** `test_panel_home.py`.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_home.py`; en el panel, `/panel/home`.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
