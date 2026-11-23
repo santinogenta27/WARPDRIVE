@@ -203,9 +203,10 @@ def test_lee_un_pdf_con_texto() -> None:
     assert document.title == "Garantía de productos" and document.source == "garantia"
     assert "6 meses de garantía por fallas de fabricación" in document.text  # con tildes
     assert "ayuda@acmestore.example" in document.text
-    # Cada página es un párrafo aparte: así se parte en fragmentos para la búsqueda.
-    first, second = document.text.split("\n\n")
-    assert first.startswith("Garantía de productos") and "3 meses de garantía" in second
+    # El título queda como título y cada párrafo, aparte (decisión 088).
+    blocks = document.text.split("\n\n")
+    assert blocks[0] == "# Garantía de productos" and len(blocks) >= 3
+    assert any("3 meses de garantía" in block for block in blocks[2:])
 
 
 def test_un_pdf_escaneado_avisa_que_no_tiene_texto() -> None:

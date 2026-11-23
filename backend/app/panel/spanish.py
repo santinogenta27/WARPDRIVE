@@ -602,7 +602,7 @@ PHRASES: dict[str, str] = {
         "Revisá que siga siendo correcto, y reemplazalo si no."
     ),
     "not updated in over a year": "sin actualizar hace más de un año",
-    "Your website": "Tu sitio web",
+    "Your website": "Sitio web",
     "We read your site's pages (up to 30, without leaving your domain) and your agent learns from "
     "them.": (
         "Leemos las páginas de tu sitio (hasta 30, sin salir de tu dominio) y tu agente aprende "
