@@ -250,6 +250,11 @@ class EnglishAgent:
                     "number and I'll look into it right away.",
                     factual=False,
                 )
+            from simulated.claude import remembered_greeting  # import circular a nivel módulo
+
+            remembered = remembered_greeting(first, english_reply=True)  # decisión 078
+            if remembered:
+                return reply(remembered, factual=False)
             return reply(
                 "Hi! I'm the store's virtual assistant. I can help with your orders and any "
                 "question about the store. How can I help?",

@@ -860,6 +860,49 @@ PHRASES: dict[str, str] = {
     "No se envió al cliente": "It wasn't sent to the customer",
     "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
+    # Memoria de los clientes (Hito 12, decisión 078)
+    "Clientes": "Customers",
+    "Sin nombre": "No name",
+    "Compras": "Purchases",
+    "Conversaciones": "Conversations",
+    "Última vez": "Last seen",
+    "Última vez:": "Last seen:",
+    "Todavía no hay clientes verificados con memoria.": (
+        "There are no verified customers with memory yet."
+    ),
+    "Guardar la memoria sin actividad durante": "Keep inactive memory for",
+    "meses": "months",
+    "Meses de retención:": "Months of retention:",
+    "Retención": "Retention",
+    "Lo que el asistente recuerda de cada cliente verificado: nombre, conversaciones anteriores, "
+    "preferencias y compras. Solo lo usa después de verificar la identidad y nunca guarda datos "
+    "de pago.": (
+        "What the assistant remembers about each verified customer: name, earlier "
+        "conversations, preferences and purchases. It only uses it after verifying their "
+        "identity and never stores payment data."
+    ),
+    "Esta acción es solo para los admins de la empresa.": "Only the company's admins can do this.",
+    "← Clientes": "← Customers",
+    "Pedido": "Order",
+    "Sin compras registradas.": "No purchases recorded.",
+    "Conversaciones anteriores": "Earlier conversations",
+    "Corregir": "Correct",
+    "Nombre": "Name",
+    "Preferencias (una por línea)": "Preferences (one per line)",
+    "Una preferencia con datos de pago no se guarda.": (
+        "A preference with payment data isn't saved."
+    ),
+    "Guardar cambios": "Save changes",
+    "Borrar la memoria": "Delete the memory",
+    "El asistente deja de recordar a este cliente. Sus conversaciones siguen en Casos.": (
+        "The assistant stops remembering this customer. Their conversations stay in Cases."
+    ),
+    "Borrar la memoria de este cliente": "Delete this customer's memory",
+    "Ese cliente no existe.": "That customer doesn't exist.",
+    "Memoria del cliente corregida": "Customer memory corrected",
+    "Memoria del cliente borrada": "Customer memory deleted",
+    "Retención guardada": "Retention saved",
+    "La retención va de 1 a 36 meses": "Retention goes from 1 to 36 months",
     ".": ".",
 }
 

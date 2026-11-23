@@ -678,6 +678,37 @@ Rama `h9-conectores-y-registro`, [abrir PR](https://github.com/santinogenta27/WA
 
 Las diez tareas están en sus ramas, apiladas: conviene mergearlas en orden, de `h9-calidad` a `h9-conectores-y-registro`. Ninguna está mergeada. No se hizo ninguna llamada a Groq real.
 
+## Hito 12 — De conversaciones a relaciones (desde el 23 de noviembre de 2026)
+
+Rama de integración `hito-12`, que sale de `main`. Cada tarea va en su rama con su PR contra `hito-12`. Los tests y las migraciones corren contra `DATABASE_URL_STAGING`, una base de Neon aparte.
+
+- Se le aplicaron las 29 migraciones.
+- Se cargaron Acme y Northwind con `make demo-setup`.
+- Se probó la demo de Northwind en local: el chat respondió la política de devoluciones con el modelo real.
+
+### Tarea 1 — Memoria del cliente (decisión 078)
+
+Rama `h12-memoria-cliente`.
+
+- **Hecho:**
+  - **Perfil por empresa y cliente verificado** (`app/memory.py`, migración 0030 `customer_memories` con RLS). Guarda:
+    - el nombre y las compras: solo de pedidos que pasaron el control de dueño, con una lista blanca de campos (sin medio de pago, montos, dirección ni teléfono);
+    - las preferencias que dijo el cliente ("soy talle 39"), sin datos de pago;
+    - una línea por conversación anterior.
+
+    Los casos abiertos se calculan al leer. Se arma en código, sin modelo y sin costo.
+  - **Uso solo después de verificar:** el agente recibe `<memoria_cliente>` únicamente con el contacto verificado y solo la de su propia clave. Sin verificar no se lee ni se escribe. Con memoria, el prompt suma estas reglas:
+    - saludar por el nombre;
+    - retomar el caso abierto;
+    - recomendar según sus compras, dentro de las reglas de venta.
+
+    Sin memoria, el prompt no cambia.
+  - **Privacidad:** la retención es configurable (12 meses por defecto, de 1 a 36) y lo vencido se borra al leer. La página **Clientes** del panel permite ver, corregir y borrar la memoria, y cada cambio queda auditado. La memoria entra sola en exportar y borrar empresa.
+  - **Evals:** `19_memoria_correcta`, `20_memoria_sin_verificar` y `21_memoria_de_otro_cliente`. Una fuga de datos es la falla crítica `dato_de_otro_cliente`. Cada caso empieza sin memoria, salvo la que siembra.
+- **Validado con Gemini real:** pasan los 3 casos, con unas 7 llamadas. "¡Hola, Lucía! … ¿Seguimos con el cambio de las botas?"
+- **Cómo probarlo:**
+  - `python -m pytest backend/tests/test_memoria_cliente.py`
+  - `python evals/runner.py --simulated`
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

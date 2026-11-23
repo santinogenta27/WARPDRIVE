@@ -372,6 +372,58 @@ def judge(
     return 0.0
 
 
+def seed_memory(stack: SimulatedStack, memoria: dict[str, Any]) -> None:
+    """La memoria del cliente `memoria.cliente` (decisión 078), como si hubiera hablado antes:
+    nombre, compras, preferencias y, con `caso_abierto`, un caso abierto en otra conversación."""
+    import uuid
+    from datetime import date
+
+    from psycopg.types.json import Jsonb
+
+    from app.contacts import hash_address, hash_phone
+
+    tenant = stack.seed.tenant_id
+    key = hash_phone(stack.seed.phones[memoria["cliente"]])
+    history: list[dict[str, Any]] = []
+    with tenant_scope(stack.conn, tenant):
+        opened = memoria.get("caso_abierto")
+        if opened:
+            contact = stack.conn.execute(
+                "insert into contacts (tenant_id, phone_hash, verified_phone_hash) values"
+                " (%s, %s, %s) returning id",
+                (tenant, hash_address(f"web:memoria-{uuid.uuid4().hex}"), key),
+            ).fetchone()
+            assert contact is not None
+            case = stack.conn.execute(
+                "insert into cases (tenant_id, contact_id, status) values (%s, %s, 'escalated')"
+                " returning id",
+                (tenant, contact[0]),
+            ).fetchone()
+            assert case is not None
+            history.append(
+                {
+                    "caso": str(case[0]),
+                    "fecha": date.today().isoformat(),
+                    "tema": opened["tema"],
+                    "pedido": opened.get("pedido", ""),
+                    "productos": opened.get("productos", []),
+                    "resultado": "derivado",
+                }
+            )
+        stack.conn.execute(
+            "insert into customer_memories (tenant_id, customer_key, name, preferences,"
+            " purchases, history) values (%s, %s, %s, %s, %s, %s)",
+            (
+                tenant,
+                key,
+                memoria.get("nombre", ""),
+                Jsonb(memoria.get("preferencias", [])),
+                Jsonb(memoria.get("compras", [])),
+                Jsonb(history),
+            ),
+        )
+
+
 def send_case(stack: SimulatedStack, case: dict[str, Any]) -> AgentResult:
     """Corre el caso. Con `turnos`, una conversación entera (`{codigo}` es el código de
     verificación que le llegó por email); se califica el resultado del último turno, y la
@@ -435,6 +487,8 @@ def run_evals(
         if pause and results:
             time.sleep(pause)
         stack.start_case()  # cada caso con los pedidos en su estado inicial
+        if case.get("memoria"):
+            seed_memory(stack, case["memoria"])
         mails = len(stack.mailer.sent)
         agent_result = send_case(stack, case)
         graded = grade(case, agent_result, high_risk)
