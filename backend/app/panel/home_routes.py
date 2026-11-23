@@ -141,8 +141,8 @@ def _attention_html(
     rows: list[str] = []
     for approval_id, tool, params, case_id, created, texts in approvals[:MAX_ITEMS]:
         rows.append(
-            f"""<li class="item"><span class="badge waiting_approval">Approval</span>
-<div class="grow"><b>{esc(action_label(tool, params))}</b>
+            f"""<li class="item"><div class="grow"><span class="badge waiting_approval">Approval</span><br>
+<b>{esc(action_label(tool, params))}</b>
 <div class="muted small ellipsis">“{esc(summary(texts or []) or "")}” ·
 <a href="/panel/casos/{case_id}">View conversation</a> · {local_time(created)}</div></div>
 <form method="post" action="/panel/aprobaciones/{approval_id}" class="row" style="gap:6px">
@@ -153,15 +153,15 @@ def _attention_html(
         )
     for case_id, updated, texts in escalated:
         rows.append(
-            f"""<li class="item"><span class="badge escalated">Handed off</span>
-<div class="grow"><b>A customer is waiting for your team</b>
+            f"""<li class="item"><div class="grow"><span class="badge escalated">Handed off</span><br>
+<b>A customer is waiting for your team</b>
 <div class="muted small ellipsis">“{esc(summary(texts or []) or "")}” · {local_time(updated)}</div>
 </div><a class="btn primary" href="/panel/casos/{case_id}">Reply</a></li>"""
         )
     for draft in drafts[:MAX_ITEMS]:
         rows.append(
-            f"""<li class="item"><span class="badge info">Draft</span>
-<div class="grow"><b>Draft to review</b>
+            f"""<li class="item"><div class="grow"><span class="badge info">Draft</span><br>
+<b>Draft to review</b>
 <div class="muted small ellipsis">“{esc(draft.text)}” · {local_time(draft.created_at)}</div>
 </div><a class="btn primary" href="/panel/casos/{draft.case_id}">Review</a></li>"""
         )
@@ -208,7 +208,7 @@ def _week_html(found: Week) -> str:
     return f"""<section aria-labelledby="week"><div class="row" style="margin:24px 0 10px">
 <h2 id="week" class="grow" style="margin:0">Last 7 days</h2>
 <a class="small" href="/panel/insights">See all insights</a></div>
-<div class="kpis">{kpis}</div></section>"""
+<div class="kpis week">{kpis}</div></section>"""
 
 
 STATE = {
@@ -271,8 +271,13 @@ flex:none;font-size:12.5px;font-weight:700;background:var(--sunken);color:var(--
 .checklist .done b{color:var(--muted);font-weight:500}
 .checklist a{color:inherit;text-decoration:none}
 .items{list-style:none;padding:0;margin:10px 0 0}
-.items .item{display:flex;gap:12px;align-items:center;padding:10px 0;
-border-top:1px solid var(--line);flex-wrap:wrap}
+.items .item{display:flex;gap:8px 12px;align-items:center;padding:12px 0;
+border-top:1px solid var(--line);flex-wrap:wrap}.items .item>.grow{flex:1 1 240px}
+.items .item .badge{margin-bottom:4px}
+.kpis.week{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:1100px){.kpis.week{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.kpis.week{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpis.week .n{font-size:22px}
 .channels{list-style:none;padding:0;margin:12px 0 8px}
 .channels li{display:flex;justify-content:space-between;gap:8px;padding:8px 0;
 border-top:1px solid var(--line)}

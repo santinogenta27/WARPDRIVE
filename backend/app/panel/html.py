@@ -42,6 +42,8 @@ a{color:var(--brand-ink)}a:hover{text-decoration-thickness:2px}
 .skip:focus{left:8px}
 /* layout */
 .shell{display:flex;min-height:100vh}
+@media (min-width:901px){.shell{background:linear-gradient(to right,var(--surface) var(--side),
+var(--line) var(--side),var(--line) calc(var(--side) + 1px),var(--bg) calc(var(--side) + 1px))}}
 .side{position:sticky;top:0;height:100vh;width:var(--side);flex:none;display:flex;
 flex-direction:column;gap:6px;padding:14px 12px;background:var(--surface);
 border-right:1px solid var(--line);overflow-y:auto}
