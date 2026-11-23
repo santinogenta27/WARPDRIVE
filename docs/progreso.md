@@ -819,6 +819,17 @@ Rama `h13-navegacion`, PR #50.
 - **Ojo:** una corrida local de este test usó por error `DATABASE_URL` (la base de la demo) en vez de la de staging, así que la migración 0035 ya está aplicada ahí. Es aditiva (`add column if not exists`) y no cambia nada para la demo.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_panel_navegacion.py`; `make api` y entrar a `/panel`.
 
+### Tarea 2 — Idioma y textos claros (decisión 085)
+
+Rama `h13-idioma`, PR #51.
+
+- **Hecho:**
+  - **Inglés por defecto** para todos, con selector English/Español por usuario. Vale en el panel, el login, el registro y la invitación (la cookie del idioma ahora llega a `/registro`). Un usuario sin preferencia ve el panel en inglés; el idioma de la empresa sigue siendo el del agente con sus clientes.
+  - **Vocabulario sin jerga**, en los dos idiomas: agente (no "asistente"), acciones (no "herramientas"), temas (no "tipos de caso"), pruebas (no "evals"), "Conocimiento" (no "Onboarding"), instrucciones (no "prompt"), sin "guardián". El "asistente para el equipo" pasó a "Copiloto del equipo".
+  - Los datos de la empresa (descripciones de acciones, nombres de temas) se marcan como datos y no se traducen; el nombre del producto tampoco.
+- **Test de aceptación:** `test_panel_idioma.py` recorre las 22 pantallas y el detalle de un caso en inglés y en español: falla si queda texto del otro idioma o jerga (tenant, RAG, guardián, embeddings, evals, onboarding, tipo de caso, herramienta, asistente, prompt).
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_idioma.py`; en el panel, el botón "Español"/"English" del pie de la barra lateral.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
