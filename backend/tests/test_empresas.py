@@ -478,7 +478,7 @@ def test_la_empresa_sube_su_historial_corre_el_analisis_y_aprueba_desde_el_panel
     assert [(name, approved) for _, name, approved in tools] == [("consultar_pedido", False)]
     settings = norte.get("/panel/agent/actions").text + norte.get("/panel/agent/topics").text
     assert "Consulta de pedido" in settings and "Sin aprobar" in settings
-    assert "Usa herramientas sin aprobar" in settings
+    assert "Usa acciones sin aprobar" in settings
 
     # Aprobar pasa al agente en vivo de esa empresa (y solo de esa).
     type_id, type_name, _ = types[0]
