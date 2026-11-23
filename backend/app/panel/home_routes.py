@@ -141,7 +141,8 @@ def _attention_html(
     rows: list[str] = []
     for approval_id, tool, params, case_id, created, texts in approvals[:MAX_ITEMS]:
         rows.append(
-            f"""<li class="item"><div class="grow"><span class="badge waiting_approval">Approval</span><br>
+            f"""<li class="item"><div class="grow">
+<span class="badge waiting_approval">Approval</span><br>
 <b>{esc(action_label(tool, params))}</b>
 <div class="muted small ellipsis">“{esc(summary(texts or []) or "")}” ·
 <a href="/panel/casos/{case_id}">View conversation</a> · {local_time(created)}</div></div>
@@ -153,7 +154,8 @@ def _attention_html(
         )
     for case_id, updated, texts in escalated:
         rows.append(
-            f"""<li class="item"><div class="grow"><span class="badge escalated">Handed off</span><br>
+            f"""<li class="item"><div class="grow">
+<span class="badge escalated">Handed off</span><br>
 <b>A customer is waiting for your team</b>
 <div class="muted small ellipsis">“{esc(summary(texts or []) or "")}” · {local_time(updated)}</div>
 </div><a class="btn primary" href="/panel/casos/{case_id}">Reply</a></li>"""
