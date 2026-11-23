@@ -863,6 +863,11 @@ PHRASES: dict[str, str] = {
     # Voz de marca (Hito 12, decisión 081)
     "Voz de marca": "Brand voice",
     "Cálido y cercano, sin vueltas": "Warm and friendly, straight to the point",
+    "Trato": "Form of address",
+    "Según el idioma": "By language",
+    "Vos": "Informal (vos)",
+    "Tú": "Informal",
+    "Usted": "Formal",
     "Palabras a usar (separadas por coma)": "Words to use (comma-separated)",
     "Palabras a evitar (separadas por coma)": "Words to avoid (comma-separated)",
     "Usar emojis": "Use emojis",

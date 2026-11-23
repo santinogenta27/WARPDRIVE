@@ -1098,18 +1098,19 @@ def save_language(request: Request, form: Form, deps: Deps) -> Response:
 
 def _voice_html(ctx: Ctx, found: brand_voice.Voice, language: str) -> str:
     """Voz de marca (decisión 081): se aplica en el prompt y la controla el supervisor."""
-    treatment = ""
-    if language != "en":  # el trato es del español
-        options = "".join(
-            f'<option value="{code}"{" selected" if found.trato == code else ""}>{esc(label)}'
-            "</option>"
-            for code, label in (("", "Según el idioma"), ("vos", "Vos"), ("tu", "Tú"),
-                                ("usted", "Usted"))
-        )  # fmt: skip
-        treatment = (
-            '<label for="trato">Trato</label>'
-            f'<select id="trato" name="trato" style="max-width:260px">{options}</select>'
-        )
+    # El trato es del español: en una empresa en inglés queda oculto (el mismo HTML en los dos
+    # idiomas, decisión 037).
+    options = "".join(
+        f'<option value="{code}"{" selected" if found.trato == code else ""}>{esc(label)}'
+        "</option>"
+        for code, label in (("", "Según el idioma"), ("vos", "Vos"), ("tu", "Tú"),
+                            ("usted", "Usted"))
+    )  # fmt: skip
+    treatment = (
+        f"<div{' hidden' if language == 'en' else ''}>"
+        '<label for="trato">Trato</label>'
+        f'<select id="trato" name="trato" style="max-width:260px">{options}</select></div>'
+    )
     checked = " checked" if found.emojis else ""
     company = ctx.session.company
     signature = f"— The {company} team" if english.english() else f"— El equipo de {company}"
