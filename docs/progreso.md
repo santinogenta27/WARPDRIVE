@@ -842,6 +842,29 @@ Rama `h13-home`, PR #52.
   - Los primeros pasos tienen nombres más claros ("Add your knowledge", "Choose how your chat looks", "Add the chat to your website").
 - **Test de aceptación:** `test_panel_home.py`.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_panel_home.py`; en el panel, `/panel/home`.
+- **Ojo:** el PR #52 se mergeó con el lint en rojo (dos líneas largas): encadené el merge sin mirar el resultado del CI. Lo arreglé enseguida con el PR #53 (CI en verde). Desde ahí, el merge solo corre si el check pasa.
+
+### Tarea 4 — Deploy (decisión 086)
+
+Rama `h13-deploy`.
+
+- **Hecho:** `/panel/deploy` es una sola pantalla con cinco pasos y el estado de cada uno (`app/companies/deploy.py`, `app/panel/deploy_routes.py`):
+  1. **Connect your store:** Shopify (Install with Shopify si está la app de la plataforma; app del Dev Dashboard; token legacy), Tiendanube u otra con su OpenAPI. Conectar prueba la conexión en el momento. Si falla, dice **qué falta** (un permiso, una credencial, la tienda o el sistema) y **qué hacer**. Tiendanube tiene su propia prueba (`GET /store`).
+  2. **Choose what your agent can do:** las acciones con su estado y un link a Agent → Actions para los límites.
+  3. **Add the chat to your website:**
+     - los dominios de la tienda conectada se agregan solos a los permitidos (migración 0036);
+     - el código para copiar;
+     - guías completas para Shopify (`theme.liquid`), WordPress (sin plugin y con WPCode), Tiendanube (Google Tag Manager en Configuración → Códigos externos, o Editar el código de diseño) y cualquier sitio;
+     - **Check installation** confirma que el chat cargó desde el dominio, o dice si el código no está.
+  4. **Connect WhatsApp:** guía nueva en lenguaje simple (decisión 068).
+  5. **Go live:** el reporte de preparación, salir en vivo y pausar.
+- **Verificado en la documentación oficial** (23/11/2026): Dev Dashboard de Shopify, app embeds, Tiendanube y Meta. Lo que no se pudo verificar está en la decisión 086.
+- **Verificación contra Shopify real:** `python evals/shopify_e2e.py [--write]`. **No la pude correr:** en `.env` no están `SHOPIFY_TEST_STORE`, `SHOPIFY_TEST_CLIENT_ID` ni `SHOPIFY_TEST_CLIENT_SECRET`. El script dice exactamente qué crear en Shopify:
+  1. Una tienda de desarrollo creada desde **Dev stores** del Dev Dashboard, con un producto y un pedido pagado.
+  2. Una app del Dev Dashboard con los scopes `read_customers,write_orders,read_products,read_inventory,write_discounts`, publicada (Release) e instalada en esa tienda.
+  3. Su Client ID y Client secret en `.env`.
+- **Test de aceptación:** `test_panel_deploy.py`.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_deploy.py`; en el panel, `/panel/deploy`.
 
 ## Qué significa "simulado"
 

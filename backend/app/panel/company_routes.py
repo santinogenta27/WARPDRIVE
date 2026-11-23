@@ -25,7 +25,7 @@ from app.channels.web import widget
 from app.channels.whatsapp import selfservice as whatsapp
 from app.companies import connection as system
 from app.companies import delete as removal
-from app.companies import export, onboarding, review, rules
+from app.companies import deploy, export, onboarding, review, rules
 from app.companies.create import CompanyError, chat_slug, create_company
 from app.connectors import platforms, shopify, shopify_auth
 from app.demo import behind
@@ -33,7 +33,6 @@ from app.llm import spending, tenant_llm
 from app.onboarding import ingest as ingestion
 from app.onboarding.ingest import Upload
 from app.panel import auth, english, guides
-from app.panel.guides import guides_html
 from app.panel.html import esc, local_time, page
 from app.panel.labels import money, tool_label, type_label
 from app.panel.routes import Ctx, Deps, Form, PanelDeps, _forbidden, _not_found, _user_id, enter
@@ -109,7 +108,9 @@ def _notice(request: Request) -> str:
     """Mensaje del último cambio (`?ok=` o `?error=` en la URL del redirect)."""
     ok, error = request.query_params.get("ok"), request.query_params.get("error")
     if error:
-        return f'<div class="card alert">{esc(error[:400])}</div>'
+        # Una línea por renglón: cada una se traduce sola (qué pasó, qué hacer).
+        lines = "".join(f"<div>{esc(line)}</div>" for line in error[:600].split("\n") if line)
+        return f'<div class="card alert" role="alert">{lines}</div>'
     # `aviso`: algo que no se pudo hacer aunque el resto sí (un PDF escaneado en una carga).
     warning = request.query_params.get("aviso")
     shown = f'<div class="card okmsg">{esc(ok[:400])}</div>' if ok else ""
@@ -1005,7 +1006,6 @@ def _widget_html(ctx: Ctx, request: Request, slug: str, found: widget.WidgetSett
 donde quieras el chat. Aparece una burbuja abajo a la derecha.</p>
 <pre id="snippet">{esc(code)}</pre>
 <button type="button" id="copy-snippet" data-done="Copiado">Copiar código</button>
-{guides_html()}
 <form method="post" action="/panel/configuracion/widget" enctype="multipart/form-data"
  id="widget-form">{_csrf(ctx)}
 <h3>2. Dominios permitidos</h3>
@@ -1564,29 +1564,6 @@ def agent_language_page(request: Request, deps: Deps) -> Response:
     return _section(request, ctx, "agent/language", "Language", body)
 
 
-@router.get("/deploy", response_class=HTMLResponse)
-def deploy_page(request: Request, deps: Deps) -> Response:
-    ctx = enter(request, deps)
-    if isinstance(ctx, Response):
-        return ctx
-    with deps.connection() as conn:
-        found = system.load(conn, ctx.tenant_id)
-        mode = system.mode_for(conn, ctx.tenant_id)
-        slug = chat_slug(conn, ctx.tenant_id)
-        brand = widget.load(conn, ctx.tenant_id)
-        whatsapp_setup = whatsapp.load(conn, ctx.tenant_id)
-    site = (
-        _widget_html(ctx, request, slug, brand)
-        if slug
-        else '<div class="card empty">This company has no web chat.</div>'
-    )
-    body = f"""{head("Deploy", LEADS["Deploy"])}
-<h2>Connect your store</h2>{_system_html(ctx, found, mode)}
-<h2 id="widget">Add the chat to your website</h2>{site}
-<h2>WhatsApp</h2>{_whatsapp_html(ctx, request, whatsapp_setup)}"""
-    return _section(request, ctx, "deploy", "Deploy", body)
-
-
 @router.get("/settings/usage", response_class=HTMLResponse)
 def settings_usage_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
@@ -1791,12 +1768,22 @@ def test_system(request: Request, form: Form, deps: Deps) -> Response:
         return ctx
     try:
         with deps.connection() as conn:
-            result = system.test_connection(conn, ctx.tenant_id, client_factory=deps.client_factory)
+            return _tested(conn, ctx, deps)
     except system.ConnectionError_ as error:
         return _back("deploy", error=str(error))
-    if result["ok"]:
-        return _back("deploy", ok="La prueba de conexión pasó. Ya podés activar.")
-    return _back("deploy", error=f"La prueba de conexión falló: {result['detalle']}")
+
+
+def _tested(conn: Any, ctx: Ctx, deps: PanelDeps, connected: bool = False) -> Response:
+    """Prueba la conexión y vuelve a Deploy. Si pasó, los dominios de la tienda se suman a los
+    del chat; si no, la pantalla dice qué falta y qué hacer (decisión 086)."""
+    result = system.test_connection(conn, ctx.tenant_id, client_factory=deps.client_factory)
+    if not result["ok"]:
+        return _back("deploy")  # el diagnóstico se ve en el paso 1
+    added = deploy.add_store_domains(conn, ctx.tenant_id, result)
+    done = "Store connected." if connected else "Connection test passed."
+    if added:
+        done += f" We added {', '.join(added)} to your chat's allowed domains."
+    return _back("deploy", ok=f"{done} You can now use your real store.")
 
 
 @router.post("/configuracion/sistema/plataforma")
@@ -1820,13 +1807,17 @@ def connect_platform(request: Request, form: Form, deps: Deps) -> Response:
                 client_id=form.get("client_id", ""),
                 client_secret=form.get("client_secret", ""),
             )
-    except (ValueError, httpx.HTTPError) as error:
-        detail = str(error) if isinstance(error, ValueError) else "Shopify no respondió."
-        return _back("deploy", error=detail)
-    return _back(
-        "configuracion",
-        ok="Tienda conectada. Probá la conexión y aprobá sus acciones.",
-    )
+    except shopify_auth.TokenError as error:
+        found = deploy.explain({"ok": False, "codigo": error.code}, "shopify")
+        return _back("deploy", error=f"{found.what}\n{found.todo}" if found else str(error))
+    except httpx.HTTPError:
+        found = deploy.explain({"ok": False, "codigo": "shop_unreachable"}, "shopify")
+        return _back("deploy", error=f"{found.what}\n{found.todo}" if found else "")
+    except ValueError as error:
+        return _back("deploy", error=str(error))
+    # Conectar prueba la conexión en el momento (decisión 086).
+    with deps.connection() as conn:
+        return _tested(conn, ctx, deps, connected=True)
 
 
 OAUTH_COOKIE = "shopify_oauth"
@@ -1908,9 +1899,7 @@ def shopify_callback(request: Request, deps: Deps) -> Response:
     except (ValueError, httpx.HTTPError) as error:
         message = str(error) if isinstance(error, ValueError) else "Shopify no respondió."
         return fail(message, used=True)
-    response = _back(
-        "configuracion", ok="Tienda conectada. Probá la conexión y aprobá sus acciones."
-    )
+    response = _back("deploy", ok="Tienda conectada. Probá la conexión y aprobá sus acciones.")
     response.delete_cookie(OAUTH_COOKIE, path=OAUTH_PATH)
     return response
 

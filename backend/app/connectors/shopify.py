@@ -67,7 +67,10 @@ Q_TRANSACTIONS = (
     "query Cobros($id: ID!) { order(id: $id) { id transactions(first: 20) "
     "{ id kind status gateway } } }"
 )
-Q_SCOPES = "query Permisos { shop { name } currentAppInstallation { accessScopes { handle } } }"
+Q_SCOPES = (
+    "query Permisos { shop { name myshopifyDomain primaryDomain { host } }"
+    " currentAppInstallation { accessScopes { handle } } }"
+)
 M_REFUND = """mutation Reembolso($input: RefundInput!, $key: String!) {
 refundCreate(input: $input) @idempotent(key: $key) {
   refund { id createdAt totalRefundedSet { shopMoney { amount currencyCode } } }
@@ -372,8 +375,18 @@ class ShopifyTransport(httpx.BaseTransport):
                     "missing": missing,
                 },
             )
-        shop = (data.get("shop") or {}).get("name")
-        return _json(200, {"shop": shop, "scopes": granted, "method": self.creds.method})
+        shop = data.get("shop") or {}
+        # Los dominios de la tienda: se agregan solos a los del chat (decisión 086).
+        domains = [self.shop, (shop.get("primaryDomain") or {}).get("host")]
+        return _json(
+            200,
+            {
+                "shop": shop.get("name"),
+                "scopes": granted,
+                "method": self.creds.method,
+                "domains": [d for d in dict.fromkeys(domains) if d],
+            },
+        )
 
     def _customers(self, email: str) -> httpx.Response:
         data = self._gql(Q_CUSTOMERS, {"q": f"email:{_quote(email)}"})

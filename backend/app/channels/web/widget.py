@@ -189,7 +189,8 @@ def save(
             "insert into widget_settings (tenant_id, display_name, accent, domains, suggestions)"
             " values (%s, %s, %s, %s, %s) on conflict (tenant_id) do update set"
             " display_name = excluded.display_name, accent = excluded.accent,"
-            " domains = excluded.domains, suggestions = excluded.suggestions, updated_at = now()",
+            " domains = excluded.domains, suggestions = excluded.suggestions, auto = false,"
+            " updated_at = now()",
             (tenant_id, name, accent, list(hosts), lines),
         )
         if logo:
@@ -208,6 +209,46 @@ def save(
                 (Jsonb({"brand": {"assistant": brand[0], "greeting": brand[1]}}), tenant_id),
             )
     return load(conn, tenant_id)
+
+
+def save_domains(conn: psycopg.Connection, tenant_id: uuid.UUID, text: str) -> tuple[str, ...]:
+    """Solo los dominios permitidos (Deploy, decisión 086): la marca no cambia."""
+    hosts = clean_domains(text)
+    current = load(conn, tenant_id)
+    with tenant_scope(conn, tenant_id):
+        conn.execute(
+            "insert into widget_settings (tenant_id, display_name, accent, domains, suggestions,"
+            " auto) values (%s, %s, %s, %s, %s, true) on conflict (tenant_id) do update set"
+            " domains = excluded.domains, updated_at = now()",
+            (tenant_id, current.name, current.accent, list(hosts), list(current.suggestions)),
+        )
+    return hosts
+
+
+def covered(host: str, domains: tuple[str, ...] | list[str]) -> bool:
+    return any(host.endswith(d[1:]) if d.startswith("*.") else host == d for d in domains)
+
+
+def add_domains(conn: psycopg.Connection, tenant_id: uuid.UUID, hosts: list[str]) -> list[str]:
+    """Agrega dominios a los permitidos sin tocar el resto (los de la tienda conectada,
+    decisión 086). Si la empresa todavía no guardó su chat, la fila nace marcada como automática:
+    no cuenta como "marca configurada" en los primeros pasos."""
+    current = load(conn, tenant_id)
+    added = [
+        h
+        for h in dict.fromkeys(clean_domains(" ".join(hosts)))
+        if not covered(h, current.domains)
+    ][: max(0, MAX_DOMAINS - len(current.domains))]
+    if not added:
+        return []
+    with tenant_scope(conn, tenant_id):
+        conn.execute(
+            "insert into widget_settings (tenant_id, display_name, accent, domains, suggestions,"
+            " auto) values (%s, %s, %s, %s, %s, true) on conflict (tenant_id) do update set"
+            " domains = widget_settings.domains || excluded.domains, updated_at = now()",
+            (tenant_id, current.name, current.accent, added, list(current.suggestions)),
+        )
+    return added
 
 
 def origin_allowed(origin: str | None, host: str, domains: tuple[str, ...]) -> bool:

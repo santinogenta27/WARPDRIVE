@@ -79,7 +79,11 @@ def client(base_url: str, secret: str | None, upstream: httpx.BaseTransport | No
 
 def diagnose_path(base_url: str | None) -> str | None:
     """La consulta de la prueba de conexión propia de la plataforma, si tiene una."""
-    return shopify.DIAGNOSE_PATH if (base_url or "").startswith("shopify:") else None
+    if (base_url or "").startswith("shopify:"):
+        return shopify.DIAGNOSE_PATH
+    if (base_url or "").startswith("tiendanube:"):
+        return tiendanube.DIAGNOSE_PATH
+    return None
 
 
 def live_secret(
