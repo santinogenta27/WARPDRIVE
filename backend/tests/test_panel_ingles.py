@@ -39,7 +39,29 @@ condiciones:
   - If the order is late, apologize and give the new date.
 cierre: Ask if there's anything else.
 """
-PAGES = ["casos", "aprobaciones", "onboarding", "reporte", "configuracion", "metricas"]
+PAGES = [
+    "inbox",
+    "inbox/approvals",
+    "inbox/drafts",
+    "home",
+    "customers",
+    "knowledge",
+    "test",
+    "test/improve",
+    "test/simulations",
+    "agent",
+    "agent/actions",
+    "agent/topics",
+    "agent/voice",
+    "agent/sales",
+    "agent/language",
+    "deploy",
+    "insights",
+    "insights/results",
+    "settings",
+    "settings/usage",
+    "settings/data",
+]
 
 
 @dataclass
@@ -96,6 +118,8 @@ def world(conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch) -> Iterator
     stack = build_simulated_stack(conn)
     company = create_company(conn, "Harbor Supply", HARBOR, HARBOR_PASSWORD)
     i18n.set_language(conn, company.tenant_id, "en")
+    # El idioma del panel es el del usuario (decisión 085).
+    auth.save_preferences(conn, company.tenant_id, HARBOR, {"language": "en"})
     case_id = _harbor_data(conn, stack, company.tenant_id)
     app.dependency_overrides[panel_deps] = lambda: PanelDeps(
         connection=lambda: nullcontext(conn),
@@ -198,37 +222,40 @@ def test_el_detalle_del_caso_y_su_auditoria_en_ingles(world: World) -> None:
 
 def test_textos_comunes_en_ingles(world: World) -> None:
     client = login(HARBOR, HARBOR_PASSWORD)
-    inbox = client.get("/panel/casos").text
-    for text in ("Cases", "Approvals", "Settings", "Metrics", "Sign out", "Team dashboard"):
+    inbox = client.get("/panel/inbox").text
+    for text in ("Inbox", "Approvals", "Settings", "Insights", "Sign out"):
         assert f">{text}<" in inbox, text
     assert "Handed off to a person" in inbox and ">Handed off<" in inbox
     assert "· Channel" in inbox
-    settings = client.get("/panel/configuracion").text
-    for text in (
-        "Case types",
-        "Where is my order",
-        "Order lookup",
-        "Low risk · requires a verified identity · read only",
-        "Approved",
-        "Not approved",
-        "Save language",
-        "Widget for your site",
+    for url, text in (
+        ("/panel/agent/topics", "Where is my order"),
+        ("/panel/agent/actions", "Order lookup"),
+        ("/panel/agent/actions", "Low risk · requires a verified identity · read only"),
+        ("/panel/agent/actions", "Approved"),
+        ("/panel/agent/actions", "Not approved"),
+        ("/panel/agent/language", "Save language"),
     ):
-        assert text in settings, text
+        assert text in client.get(url).text, text
 
 
 def test_el_mismo_html_en_los_dos_idiomas(world: World) -> None:
-    """Mismo diseño: las etiquetas y clases son las mismas, solo cambia el texto."""
+    """Mismo diseño: las etiquetas y clases son las mismas, solo cambia el texto. El usuario
+    elige el idioma en el menú y queda guardado."""
     client = login(HARBOR, HARBOR_PASSWORD)
-    english_page = client.get("/panel/configuracion").text
-    i18n.set_language(world.conn, world.harbor, "es")
-    spanish_page = client.get("/panel/configuracion").text
+    english_page = client.get("/panel/agent/actions").text
+    token = re.search(r'name="csrf" value="([^"]+)"', english_page)
+    assert token is not None
+    client.post("/panel/preferences", data={"lang": "es", "csrf": token.group(1)})
+    spanish_page = client.get("/panel/agent/actions").text
 
     def skeleton(markup: str) -> list[str]:
         return re.findall(r"<([a-z0-9]+)(?:\s+class=\"([^\"]*)\")?", markup)
 
     assert skeleton(english_page) == skeleton(spanish_page)
-    assert "Tipos de caso" in spanish_page and "Case types" not in spanish_page
+    assert '<html lang="es">' in spanish_page
+    assert ">Acciones<" in spanish_page and ">Actions<" not in spanish_page
+    # La preferencia queda en el usuario: el próximo login también sale en español.
+    assert '<html lang="es">' in login(HARBOR, HARBOR_PASSWORD).get("/panel/home").text
 
 
 def test_acme_sigue_en_espanol(world: World) -> None:
@@ -236,15 +263,15 @@ def test_acme_sigue_en_espanol(world: World) -> None:
     for slug in PAGES:
         page = client.get(f"/panel/{slug}").text
         assert '<html lang="es">' in page, slug
-    assert ">Casos<" in client.get("/panel/casos").text
+    assert ">Bandeja<" in client.get("/panel/inbox").text
 
 
 def test_el_login_se_puede_ver_en_ingles() -> None:
     client = TestClient(app)
     spanish_login = client.get("/panel/login").text
-    assert "Ingresar al panel" in spanish_login and 'href="/panel/login?lang=en"' in spanish_login
+    assert "Ingresar" in spanish_login and 'href="/panel/login?lang=en"' in spanish_login
     english_login = client.get("/panel/login?lang=en").text
-    assert "Sign in to the dashboard" in english_login and ">Password<" in english_login
+    assert ">Sign in<" in english_login and ">Password<" in english_login
     assert '<html lang="en">' in english_login
     wrong = client.post(
         "/panel/login", data={"email": "nadie@example.com", "password": "x", "lang": "en"}

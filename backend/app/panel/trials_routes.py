@@ -27,7 +27,7 @@ def _asked(label: str, value: object) -> str:
     return f"{label} · {_when(value)}" if value else "—"
 
 
-@router.get("/pruebas", response_class=HTMLResponse)
+@router.get("/operator/trials", response_class=HTMLResponse)
 def trials_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -55,4 +55,4 @@ def trials_page(request: Request, deps: Deps) -> Response:
 <span class="mono">/probar</span>. Una prueba que no pasa a piloto se borra a los
 {service.TRIAL_DAYS} días; esta lista queda para el seguimiento.</p>
 <div class="card" style="overflow-x:auto">{table}</div>"""
-    return HTMLResponse(page("Pruebas", body, active="pruebas", session=ctx.session))
+    return HTMLResponse(page("Pruebas", body, active="operator/trials", session=ctx.session))

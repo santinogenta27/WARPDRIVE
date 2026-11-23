@@ -21,6 +21,8 @@ from collections.abc import Callable
 from contextvars import ContextVar
 
 LANGUAGE: ContextVar[str] = ContextVar("panel_language", default="es")
+# Tema del panel del usuario (decisión 085): claro por defecto, oscuro si lo eligió.
+THEME: ContextVar[str] = ContextVar("panel_theme", default="light")
 
 
 def set_language(language: str) -> None:
@@ -1349,22 +1351,24 @@ _SKIP = {"script", "style", "textarea", "pre"}
 _ATTRIBUTE = re.compile(r'\b(placeholder|aria-label|title|data-done)="([^"]*)"')
 
 
-def _attributes(tag: str) -> str:
-    def swap(match: re.Match[str]) -> str:
-        value = html.unescape(match.group(2))
-        done = translate_text(value)
-        return match.group(0) if done == value else f'{match.group(1)}="{html.escape(done)}"'
-
-    return _ATTRIBUTE.sub(swap, tag)
-
-
 _VOID = {"br", "input", "meta", "link", "img", "hr", "source", "wbr", "col", "area"}
-_MESSAGE = re.compile(r'\bclass="(?:[^"]*\s)?msg(?:\s[^"]*)?"')
+_MESSAGE = re.compile(r'\bclass="(?:[^"]*\s)?msg(?:\s[^"]*)?"|\btranslate="no"')
 
 
-def translate_html(markup: str) -> str:
-    """El HTML de una página con su texto en inglés (ver el docstring del módulo). El texto de
-    un mensaje del chat (`class="msg"`) es del cliente o del asistente: no se toca."""
+def translate_html(markup: str, translate_text: Callable[[str], str] = translate_text) -> str:
+    """El HTML de una página con su texto traducido (ver el docstring del módulo): al inglés por
+    defecto; `translate_text` elige otro catálogo (decisión 085). El texto de un mensaje del chat
+    (`class="msg"`) es del cliente o del asistente, y lo marcado con `translate="no"` queda tal
+    cual."""
+
+    def _attributes(tag: str) -> str:
+        def swap(match: re.Match[str]) -> str:
+            value = html.unescape(match.group(2))
+            done = translate_text(value)
+            return match.group(0) if done == value else f'{match.group(1)}="{html.escape(done)}"'
+
+        return _ATTRIBUTE.sub(swap, tag)
+
     out: list[str] = []
     skipping: str | None = None
     open_tags: list[tuple[str, bool]] = []  # (etiqueta, ¿es un mensaje?)
