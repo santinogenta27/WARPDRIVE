@@ -860,6 +860,43 @@ PHRASES: dict[str, str] = {
     "No se envió al cliente": "It wasn't sent to the customer",
     "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
+    # Resultados medibles (Hito 12, decisión 083)
+    "Resultados": "Results",
+    "Lo que resolvió el asistente, medido de forma auditable, y de qué hablan tus clientes.": (
+        "What the assistant resolved, measured in an auditable way, and what your customers talk "
+        "about."
+    ),
+    "Resolución autónoma": "Autonomous resolution",
+    "Ver": "View",
+    "Mes": "Month",
+    "Exportar CSV": "Export CSV",
+    "Un caso es una resolución autónoma si nunca se derivó, lo resolvió el asistente, no se "
+    "reabrió dentro de las 72 h y el cliente no dijo que no se resolvió. El CSV trae un renglón "
+    "por caso, sin datos del cliente: con el número de caso se audita en Casos.": (
+        "A case is an autonomous resolution if it was never handed off, the assistant resolved "
+        "it, it wasn't reopened within 72 h and the customer didn't say it wasn't resolved. The "
+        "CSV has one row per case, with no customer data: audit it in Cases with the case number."
+    ),
+    "resoluciones autónomas": "autonomous resolutions",
+    "casos resueltos": "resolved cases",
+    "tasa (sin los casos en ventana)": "rate (without the cases in the window)",
+    "Análisis de conversaciones (últimos 30 días)": "Conversation analysis (last 30 days)",
+    "Temas principales": "Main topics",
+    "Motivos de derivación": "Handoff reasons",
+    "Preguntas sin respuesta": "Unanswered questions",
+    "Lo que el asistente no pudo responder, agrupado por la palabra que más se repite. Sirve para "
+    "saber qué documento cargar. Los ejemplos no tienen datos personales.": (
+        "What the assistant couldn't answer, grouped by the most repeated word. It tells you "
+        "which document to upload. The examples have no personal data."
+    ),
+    "Otras": "Others",
+    "Sin datos en estos 30 días.": "No data in these 30 days.",
+    "Informe semanal": "Weekly report",
+    "Cada lunes, un email a los admins con la semana anterior: conversaciones, resoluciones "
+    "autónomas, derivaciones, CSAT, temas y preguntas sin respuesta.": (
+        "Every Monday, an email to the admins with the previous week: conversations, autonomous "
+        "resolutions, handoffs, CSAT, topics and unanswered questions."
+    ),
     # Asistente para el equipo (Hito 12, decisión 082)
     "Asistente para el equipo": "Team assistant",
     "Volver a sugerir": "Suggest again",

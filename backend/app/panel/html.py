@@ -101,6 +101,7 @@ NAV = [
     ("aprobaciones", "Aprobaciones"),
     ("onboarding", "Onboarding"),
     ("reporte", "Reporte"),
+    ("resultados", "Resultados"),
     ("configuracion", "Configuración"),
     ("metricas", "Métricas"),
     ("equipo", "Equipo"),

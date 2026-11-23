@@ -38,6 +38,20 @@ def _handlers() -> dict[str, Handler]:
     }
 
 
+def _weekly_reports() -> None:
+    """El informe semanal a los admins (decisión 083): en cada vuelta, el de la semana anterior a
+    las empresas que todavía no lo recibieron. Idempotente."""
+    from app.db.connection import connect
+    from app.mailer import mailer_from_env
+    from app.outcomes import weekly
+
+    try:
+        with connect() as conn:
+            weekly.send_due(conn, mailer_from_env())
+    except Exception:  # noqa: BLE001 — el hilo no se cae por el informe
+        logger.exception("El informe semanal falló")
+
+
 def _loop() -> None:
     while True:
         try:
@@ -51,6 +65,7 @@ def _loop() -> None:
                 worker.close()
         except Exception:  # noqa: BLE001 — el hilo no se cae: lo intenta en la próxima vuelta
             logger.exception("El worker del onboarding falló")
+        _weekly_reports()
         _wake.wait(IDLE_SECONDS)
         _wake.clear()
 
