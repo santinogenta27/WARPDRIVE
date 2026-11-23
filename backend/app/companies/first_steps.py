@@ -27,13 +27,13 @@ STEPS = [
     (
         "documentos",
         "Cargá tus documentos",
-        "Políticas, preguntas frecuentes o tu historial: el asistente responde con ellos.",
+        "Políticas, preguntas frecuentes o tu historial: el agente responde con ellos.",
         "/panel/knowledge",
     ),
     (
         "reglas",
         "Definí las reglas de atención",
-        "El horario del equipo y a quién avisar cuando el asistente deriva.",
+        "El horario del equipo y a quién avisar cuando el agente deriva.",
         "/panel/agent",
     ),
     (
@@ -44,7 +44,7 @@ STEPS = [
     ),
     (
         "playground",
-        "Probá el asistente en el playground",
+        "Probá el agente en el playground",
         "Escribile como un cliente y mirá cada paso que da.",
         "/panel/test/playground",
     ),
@@ -57,7 +57,7 @@ STEPS = [
     (
         "en_vivo",
         "Salí en vivo",
-        "Cuando el reporte de preparación da el visto bueno, el asistente atiende en tu sitio.",
+        "Cuando el reporte de preparación da el visto bueno, el agente atiende en tu sitio.",
         "/panel/test",
     ),
 ]

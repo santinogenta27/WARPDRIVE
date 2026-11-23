@@ -1,7 +1,7 @@
 """Simulaciones en el panel (Hito 12, tarea 3; decisión 080).
 
 - La tarjeta "Simulaciones" del Reporte: el botón, el estado de la última corrida y su resultado
-  pass^3 por tipo de caso, con las corridas que fallaron y el motivo del juez.
+  pass^3 por tema, con las corridas que fallaron y el motivo del juez.
 - `POST /panel/simulaciones`: pide una simulación de 20 conversaciones (solo admins). Corre en
   segundo plano, en el worker de la API.
 """
@@ -77,12 +77,12 @@ def simulation_card(ctx: Ctx, conn: psycopg.Connection) -> str:
 <span>pass^1:</span> {_percent(summary.get("pass1"))} ·
 {int(summary.get("clientes") or 0)} <span>clientes, 3 corridas cada uno</span> ·
 <span class="muted">{local_time(done.updated_at)}</span></p>
-<table class="small"><thead><tr><th>Tipo de caso</th><th>Clientes</th><th>pass^3</th>
+<table class="small"><thead><tr><th>Tema</th><th>Clientes</th><th>pass^3</th>
 <th>pass^1</th></tr></thead><tbody>{rows}</tbody></table>
 {f'<h3>Corridas que fallaron</h3><ul class="small">{failed}</ul>' if failed else ""}"""
     return f"""<div class="card"><h2>Simulaciones</h2>
 <p class="muted small">Clientes simulados (enojados, confundidos o apurados) creados desde tus
-documentos, tipos de caso y reglas conversan con el asistente. Cada conversación se repite 3
+documentos, temas y reglas conversan con el agente. Cada conversación se repite 3
 veces y un juez revisa si el cliente logró su objetivo, si se respetaron las reglas y la marca y si
 la respuesta fue correcta. pass^3: los clientes que pasaron las 3 veces. No toca tu sistema ni deja
 datos.</p>{state}{result}{button}</div>"""

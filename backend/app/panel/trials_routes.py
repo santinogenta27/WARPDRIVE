@@ -51,7 +51,7 @@ def trials_page(request: Request, deps: Deps) -> Response:
         if rows
         else '<p class="muted">Todavía nadie pidió una prueba.</p>'
     )
-    body = f"""<h1>Pruebas gratis</h1><p class="lead">Quién probó el asistente con su tienda en
+    body = f"""<h1>Pruebas gratis</h1><p class="lead">Quién probó el agente con su tienda en
 <span class="mono">/probar</span>. Una prueba que no pasa a piloto se borra a los
 {service.TRIAL_DAYS} días; esta lista queda para el seguimiento.</p>
 <div class="card" style="overflow-x:auto">{table}</div>"""

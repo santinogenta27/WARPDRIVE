@@ -63,7 +63,7 @@ def readiness_html(ctx: Ctx, found: go_live.Readiness) -> str:
     """La tarjeta del reporte: probar, el umbral y el botón para salir en vivo."""
     en = english.english()
     if found.live:
-        state = "En vivo: el asistente atiende en tu sitio." if not en else "Live on your site."
+        state = "En vivo: el agente atiende en tu sitio." if not en else "Live on your site."
         button = (
             f'<form method="post" action="/panel/salir-en-vivo"><input type="hidden" name="csrf"'
             f' value="{ctx.csrf}"><input type="hidden" name="activo" value="no">'
@@ -102,7 +102,7 @@ def readiness_html(ctx: Ctx, found: go_live.Readiness) -> str:
         else f"Para salir hace falta al menos {minimum} de resolución estimada y frenar todos "
         "los ataques."
     )
-    try_it = "Try the assistant" if en else "Probar el asistente"
+    try_it = "Try your agent" if en else "Probar el agente"
     missing = f'<ul class="small">{reasons}</ul>' if reasons else ""
     simulated = (  # la última simulación (decisión 080): informativa
         f'<div class="small">{"Simulation" if en else "Simulación"}: pass^3 '

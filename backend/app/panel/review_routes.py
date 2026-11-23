@@ -1,9 +1,9 @@
 """Revisión de conversaciones (Hito 11, decisión 073).
 
-- `POST /panel/casos/{caso}/revisar`: marca una respuesta del asistente como correcta o
+- `POST /panel/casos/{caso}/revisar`: marca una respuesta del agente como correcta o
   incorrecta, con motivo y comentario.
-- `GET /panel/mejorar`: las incorrectas que todavía no son un caso de eval.
-- `POST /panel/mejorar/{revisión}/eval`: la convierte en un caso de eval de la empresa con la
+- `GET /panel/mejorar`: las incorrectas que todavía no son un caso de prueba.
+- `POST /panel/mejorar/{revisión}/eval`: la convierte en un caso de prueba de la empresa con la
   respuesta esperada que escribe el equipo.
 
 Cualquier persona del equipo puede revisar (no es una sección solo para admins).
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/panel", include_in_schema=False)
 def review_form(
     ctx: Ctx, case_id: uuid.UUID, message_id: uuid.UUID, found: feedback.Mark | None
 ) -> str:
-    """Debajo de cada respuesta del asistente en el detalle del caso."""
+    """Debajo de cada respuesta del agente en el detalle del caso."""
     state = ""
     if found is not None:
         if found.verdict == "correct":
@@ -121,7 +121,7 @@ def improve_page(request: Request, deps: Deps) -> Response:
 <span class="muted small">{local_time(i.updated_at)}</span>
 <a class="small" href="/panel/casos/{i.case_id}">ver caso</a></div>
 <div class="msg customer"><div class="who">Cliente</div>{esc(mask_codes(i.question))}</div>
-<div class="msg agent"><div class="who">Asistente</div>{esc(mask_codes(i.reply))}</div>
+<div class="msg agent"><div class="who">Agente</div>{esc(mask_codes(i.reply))}</div>
 {f'<p class="muted">“{esc(i.comment)}”</p>' if i.comment else ""}{_suggestion(i)}
 <form method="post" action="/panel/mejorar/{i.id}/eval">
 <input type="hidden" name="csrf" value="{ctx.csrf}">
@@ -130,14 +130,14 @@ def improve_page(request: Request, deps: Deps) -> Response:
  required></textarea>
 <label for="palabras-{i.id}">Palabras clave que tiene que incluir (opcional, separadas por
 coma)</label><input id="palabras-{i.id}" name="palabras" maxlength="300">
-<p><button class="primary" type="submit">Convertir en caso de eval</button></p></form></div>"""
+<p><button class="primary" type="submit">Convertir en caso de prueba</button></p></form></div>"""
             for i in items
         )
         or '<div class="card empty">No hay respuestas marcadas como incorrectas.</div>'
     )
     body = f"""{toast(request.query_params.get("aviso"))}<h1>Para mejorar</h1>
 <p class="lead">Las respuestas que el equipo marcó como incorrectas. Escribí la respuesta esperada
-y convertila en un caso de eval: el reporte de preparación la prueba junto con los demás.</p>
+y convertila en un caso de prueba: el reporte de preparación la prueba junto con los demás.</p>
 {cards}"""
     return HTMLResponse(page("Para mejorar", body, active="test/improve", session=ctx.session))
 

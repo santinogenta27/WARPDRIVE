@@ -42,7 +42,7 @@ STATE_LABELS = {
     "reabierto": ("escalated", "Reabierto"),
 }
 BILLED = {"cobrable": "sí", "en_ventana": "todavía no", "con_persona": "no", "reabierto": "no"}
-RESOLVERS = {"agent": "asistente", "human": "persona"}
+RESOLVERS = {"agent": "agente", "human": "persona"}
 ONLY_OPERATOR = "Solo el operador de la plataforma ve la facturación."
 _MONTH = re.compile(r"^(\d{4})-(\d{2})$")
 
@@ -92,7 +92,7 @@ def _switcher(year: int, month: int, base: str) -> str:
 
 
 RULE = (
-    '<p class="muted small">Se cobra un caso que resolvió el asistente sin que intervenga una '
+    '<p class="muted small">Se cobra un caso que resolvió el agente sin que intervenga una '
     "persona y que el cliente no reabrió en 7 días. Aprobar un reembolso no cuenta como "
     "intervención. Un caso entra en el mes en que se resolvió; los que tienen menos de 7 días "
     "todavía pueden reabrirse, así que el mes queda cerrado el día 8 del mes siguiente.</p>"
@@ -138,7 +138,7 @@ def billing_page(request: Request, deps: Deps, mes: str = "") -> Response:
     body = f"""<div class="row"><h1 class="grow">Facturación</h1>
 <a class="btn" href="/panel/facturacion/exportar.csv?mes={key}">Exportar CSV</a></div>
 <p class="lead">Casos resueltos por empresa y por mes. La unidad de cobro es el caso que resolvió
-el asistente.</p>{_switcher(year, month, "/panel/operator/billing")}
+el agente.</p>{_switcher(year, month, "/panel/operator/billing")}
 <div class="kpis"><div class="kpi big"><div class="n">{total}</div>
 <div class="muted">casos a cobrar</div></div>
 <div class="kpi"><div class="n">{pending}</div>

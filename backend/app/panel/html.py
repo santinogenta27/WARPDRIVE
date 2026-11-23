@@ -318,7 +318,7 @@ NOTICES = {
     "fallo": "Aprobada, pero el sistema de la empresa no pudo completarla",
     "rechazado": "Solicitud rechazada",
     "revisada": "Revisión guardada",
-    "eval-creado": "Caso de eval creado · lo prueba el reporte de preparación",
+    "eval-creado": "Caso de prueba creado · lo prueba el reporte de preparación",
     "borrador-enviado": "Respuesta enviada al cliente",
     "borrador-rechazado": "Borrador rechazado · no se envió nada",
     # Memoria de los clientes (decisión 078).
@@ -403,7 +403,7 @@ def _sidebar(session: "Session", active: str) -> str:
     dark = english.THEME.get() == "dark"
     company = session.company or PRODUCT
     return f"""<aside class="side" id="side" aria-label="Main">
-<div class="product"><div class="logo">{icon("spark")}</div><div><b>{PRODUCT}</b>
+<div class="product" translate="no"><div class="logo">{icon("spark")}</div><div><b>{PRODUCT}</b>
 <small>{esc(TAGLINE)}</small></div></div>
 <div class="workspace" title="Company"><span class="ws" aria-hidden="true">{
         esc(company[:1].upper())
@@ -412,8 +412,8 @@ def _sidebar(session: "Session", active: str) -> str:
 <div class="side-foot"><div class="who">{esc(session.email)}</div>
 <div class="prefs">
 <form method="post" action="/panel/preferences"><input type="hidden" name="csrf" value="{csrf}">
-<input type="hidden" name="lang" value="{other[0]}"><button type="submit" lang="{other[0]}"
- translate="no">{other[1]}</button></form>
+<input type="hidden" name="lang" value="{other[0]}">
+<button type="submit" lang="{other[0]}" translate="no">{other[1]}</button></form>
 <form method="post" action="/panel/preferences"><input type="hidden" name="csrf" value="{csrf}">
 <input type="hidden" name="theme" value="{"light" if dark else "dark"}">
 <button type="submit">{"Light theme" if dark else "Dark theme"}</button></form>
@@ -476,7 +476,8 @@ def translate(markup: str) -> str:
 
 def auth_card(body: str) -> str:
     """Tarjeta centrada de las pantallas sin sesión (login, registro, invitación)."""
-    return f"""<div class="auth"><div class="product"><div class="logo">{icon("spark")}</div>
+    return f"""<div class="auth"><div class="product" translate="no">
+<div class="logo">{icon("spark")}</div>
 <div><b>{PRODUCT}</b><small>{esc(TAGLINE)}</small></div></div>
 <div class="card">{body}</div></div>"""
 
@@ -497,19 +498,19 @@ STATUS = {
 }
 
 
-RESOLVED_BY = {"agent": "por el asistente", "human": "con una persona"}
+RESOLVED_BY = {"agent": "por el agente", "human": "con una persona"}
 STATUS_EN = {
     "escalated": "Handed off",
     "waiting_approval": "Waiting for approval",
     "open": "Open",
     "resolved": "Resolved",
 }
-RESOLVED_BY_EN = {"agent": "by the assistant", "human": "with a person"}
+RESOLVED_BY_EN = {"agent": "by the agent", "human": "with a person"}
 
 
 def status_badge(status: str, resolved_by: str | None = None, reopened: bool = False) -> str:
     """Estado del caso. Un resuelto dice quién lo resolvió (la unidad de cobro es el caso
-    resuelto por el asistente)."""
+    resuelto por el agente)."""
     en = english.english()
     statuses, who = (STATUS_EN, RESOLVED_BY_EN) if en else (STATUS, RESOLVED_BY)
     label = statuses.get(status, status)
