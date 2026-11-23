@@ -19,6 +19,9 @@ from simulated import english
 from simulated.voyage import tokens
 
 INVENTED = "¡Sí, claro! Lo hacemos sin ningún problema y sin costo."
+# Lo que sugiere el asistente para el equipo simulado (decisión 082).
+ASSIST_SUMMARY = "La clienta consultó su pedido 1001 y pidió hablar con una persona."
+ASSIST_REPLY = "Hola Lucía, soy del equipo de Acme: ya estoy revisando tu pedido 1001."
 # Lo que pide el supervisor simulado cuando no aprueba (decisión 079).
 SUPERVISOR_REASON = "La respuesta no menciona la fecha estimada de entrega de la herramienta"
 _GENERIC = {"tiene", "quier", "puedo", "hacen", "pedid", "acme", "hola", "graci", "neces"}
@@ -68,6 +71,13 @@ class SimulatedClaude:
             blocks = [self._tool_use("calificar", _judge(body))]
         elif "supervisar" in tool_names:  # supervisor de respuestas (decisión 079)
             blocks = self._supervisor()
+        elif "asistir_equipo" in tool_names:  # asistente para el equipo (decisión 082)
+            data = {
+                "resumen": ASSIST_SUMMARY,
+                "paso_siguiente": "Confirmá la fecha de entrega con el correo y avisale.",
+                "respuesta_sugerida": ASSIST_REPLY,
+            }
+            blocks = [self._tool_use("asistir_equipo", data)]
         elif "crear_clientes" in tool_names:  # simulaciones (decisión 080)
             blocks = [self._tool_use("crear_clientes", _personas(body))]
         elif "hablar_como_cliente" in tool_names:

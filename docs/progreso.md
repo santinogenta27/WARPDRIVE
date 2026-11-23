@@ -748,6 +748,17 @@ Rama `h12-voz-de-marca`.
   - **Sin voz configurada no cambia nada:** ni el prompt ni las líneas base.
 - **Validado con Gemini real** (unas 16 llamadas). Con Acme configurada de usted, sin "lamentablemente" y con firma, respondió "Con gusto le informo…", con la firma al final. El supervisor aprobó citando el trato y el tono.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_voz_de_marca.py`.
+### Tarea 5 — Asistente para el equipo humano (decisión 082)
+
+Rama `h12-asistente-equipo`.
+
+- **Hecho:**
+  - **Dónde aparece.** En cada caso derivado o con un borrador del modo supervisado, el detalle del caso muestra la tarjeta **Asistente para el equipo** (`app/cases/assist.py`). Tiene el resumen, la memoria del cliente (si se verificó alguna vez), el paso siguiente sugerido y una respuesta sugerida. La respuesta viene ya cargada y editable en "Responder como persona del equipo".
+  - **Cómo se genera.** Con el modelo del agente, al abrir el caso. Queda guardada en `case_assists` (migración 0032) y se regenera si llegan mensajes nuevos o con "Volver a sugerir". Queda en `usage` y en la auditoría (`assist_generated`), y la respuesta enviada se marca `sugerida`.
+  - **Sin modelo.** Se arma en código desde el motivo de la derivación.
+  - **Fuera de producción.** Sin configuración de producción, el panel no llama a ningún modelo (como el embedder), así los tests no gastan cuota.
+- **Validado con Gemini real** (unas 6 llamadas). En un caso derivado con Lucía molesta, resumió la consulta y el enojo. Sugirió validar la frustración y ofrecer un reclamo al correo. Propuso una respuesta en voseo con su nombre y la fecha del pedido.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_asistente_equipo.py`.
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
