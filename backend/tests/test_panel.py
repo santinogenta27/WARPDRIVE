@@ -136,7 +136,8 @@ def test_la_bandeja_muestra_primero_las_derivadas_y_se_responde_como_humano(
                 (escalated.case_id,),
             ).fetchall()
         ]
-    assert kinds[-1] == "human_reply"
+    # La respuesta cumple el aviso programado al derivar (decisión 084).
+    assert kinds[-2:] == ["human_reply", "notice_sent"]
 
 
 def field(html: str, name: str) -> str:

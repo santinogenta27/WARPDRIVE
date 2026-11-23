@@ -81,7 +81,8 @@ def test_borrar_un_evento_rompe_la_cadena(stack: SimulatedStack) -> None:
 def test_una_derivacion_y_una_aprobacion_quedan_auditadas(stack: SimulatedStack) -> None:
     escalated = stack.send("lucia", "Quiero hablar con una persona")
     kinds = [e.kind for e in reconstruct_case(stack.conn, stack.seed.tenant_id, escalated.case_id)]
-    assert kinds[-3:] == ["escalated", "final_action", "turn_timing"]
+    # Al derivar se programa la respuesta del equipo (decisión 084).
+    assert kinds[-4:] == ["escalated", "notice_scheduled", "final_action", "turn_timing"]
     stack.close_open_cases()
 
     approval = stack.send("martin", "Quiero el reembolso del pedido 1005")

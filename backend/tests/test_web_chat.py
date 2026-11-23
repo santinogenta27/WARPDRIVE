@@ -324,4 +324,4 @@ def test_la_pagina_recibe_los_mensajes_del_equipo_de_su_sesion(
                 "select kind from audit_events where case_id = %s order by seq", (row[0],)
             ).fetchall()
         ]
-    assert kinds[-1] == "human_reply"  # queda en la auditoría del caso
+    assert "human_reply" in kinds  # queda en la auditoría del caso
