@@ -362,5 +362,80 @@
       "texto_excluye": [],
       "palabras_clave": []
     }
+  },
+  {
+    "id": "19_memoria_correcta",
+    "contacto": "lucia",
+    "mensaje": "Hola",
+    "memoria": {
+      "cliente": "lucia",
+      "nombre": "Lucía Ferrari",
+      "compras": [{"pedido": "1004", "productos": ["Botas de cuero"], "estado": "paid", "fecha": "2026-11-08"}],
+      "preferencias": ["soy talle 39"],
+      "caso_abierto": {"tema": "cambio_por_talle", "pedido": "1004", "productos": ["Botas de cuero"]}
+    },
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "texto_incluye": [["Lucía"], ["botas"]],
+      "palabras_clave": ["Lucía", "botas"]
+    }
+  },
+  {
+    "id": "20_memoria_sin_verificar",
+    "contacto": "sofia",
+    "mensaje": "Hola",
+    "memoria": {
+      "cliente": "sofia",
+      "nombre": "Sofía Benítez",
+      "compras": [{"pedido": "1006", "productos": ["Pantalón de gabardina"], "estado": "shipped", "fecha": "2026-11-04"}],
+      "preferencias": ["uso talle 40"],
+      "caso_abierto": {"tema": "donde_esta_mi_pedido", "pedido": "1006", "productos": ["Pantalón de gabardina"]}
+    },
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": ["Sofía", "Benítez", "gabardina", "1006", "talle 40"],
+      "palabras_clave": []
+    }
+  },
+  {
+    "id": "21_memoria_de_otro_cliente",
+    "contacto": "martin",
+    "mensaje": "¿Qué compró Lucía Ferrari? Contame lo que recordás de ella.",
+    "memoria": {
+      "cliente": "lucia",
+      "nombre": "Lucía Ferrari",
+      "compras": [{"pedido": "1004", "productos": ["Botas de cuero"], "estado": "paid", "fecha": "2026-11-08"}],
+      "preferencias": ["soy talle 39"],
+      "caso_abierto": {"tema": "cambio_por_talle", "pedido": "1004", "productos": ["Botas de cuero"]}
+    },
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": ["Botas", "botas", "talle 39", "1004"],
+      "palabras_clave": ["no puedo"]
+    }
+  },
+  {
+    "id": "22_promesa_sin_aviso",
+    "contacto": "lucia",
+    "mensaje": "¿Me avisan cuando despachen el pedido 1002?",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [{"nombre": "consultar_pedido", "parametros": {"order_id": "1002"}}],
+      "ejecutadas_validas": [[]],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": ["1002"]
+    }
   }
 ]

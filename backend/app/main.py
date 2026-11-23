@@ -10,11 +10,14 @@ from app.demo.behind_routes import router as behind_router
 from app.demo.cart import router as cart_router
 from app.panel.billing_routes import router as billing_router
 from app.panel.company_routes import router as company_router
+from app.panel.customers_routes import router as customers_router
 from app.panel.live_routes import router as live_router
 from app.panel.metrics_routes import router as metrics_router
+from app.panel.results_routes import router as results_router
 from app.panel.review_routes import router as review_router
 from app.panel.routes import router as panel_router
 from app.panel.signup_routes import router as signup_router
+from app.panel.simulation_routes import router as simulation_router
 from app.panel.team_routes import router as team_router
 from app.panel.trials_routes import router as trials_panel_router
 from app.trial.routes import router as trial_router
@@ -41,6 +44,9 @@ app.include_router(signup_router)  # registro self-service e invitaciones (decis
 app.include_router(team_router)
 app.include_router(metrics_router)
 app.include_router(review_router)  # revisión de conversaciones (decisión 073)
+app.include_router(customers_router)  # memoria de los clientes (decisión 078)
+app.include_router(simulation_router)  # simulaciones por empresa (decisión 080)
+app.include_router(results_router)  # resultados medibles (decisión 083)
 app.include_router(billing_router)
 app.include_router(behind_router)  # vista detrás de escena (decisión 041)
 app.include_router(cart_router)  # carrito de la demo de Northwind (decisión 065)

@@ -678,6 +678,127 @@ Rama `h9-conectores-y-registro`, [abrir PR](https://github.com/santinogenta27/WA
 
 Las diez tareas están en sus ramas, apiladas: conviene mergearlas en orden, de `h9-calidad` a `h9-conectores-y-registro`. Ninguna está mergeada. No se hizo ninguna llamada a Groq real.
 
+## Hito 12 — De conversaciones a relaciones (desde el 23 de noviembre de 2026)
+
+Rama de integración `hito-12`, que sale de `main`. Cada tarea va en su rama con su PR contra `hito-12`. Los tests y las migraciones corren contra `DATABASE_URL_STAGING`, una base de Neon aparte.
+
+- Se le aplicaron las 29 migraciones.
+- Se cargaron Acme y Northwind con `make demo-setup`.
+- Se probó la demo de Northwind en local: el chat respondió la política de devoluciones con el modelo real.
+
+### Tarea 1 — Memoria del cliente (decisión 078)
+
+Rama `h12-memoria-cliente`.
+
+- **Hecho:**
+  - **Perfil por empresa y cliente verificado** (`app/memory.py`, migración 0030 `customer_memories` con RLS). Guarda:
+    - el nombre y las compras: solo de pedidos que pasaron el control de dueño, con una lista blanca de campos (sin medio de pago, montos, dirección ni teléfono);
+    - las preferencias que dijo el cliente ("soy talle 39"), sin datos de pago;
+    - una línea por conversación anterior.
+
+    Los casos abiertos se calculan al leer. Se arma en código, sin modelo y sin costo.
+  - **Uso solo después de verificar:** el agente recibe `<memoria_cliente>` únicamente con el contacto verificado y solo la de su propia clave. Sin verificar no se lee ni se escribe. Con memoria, el prompt suma estas reglas:
+    - saludar por el nombre;
+    - retomar el caso abierto;
+    - recomendar según sus compras, dentro de las reglas de venta.
+
+    Sin memoria, el prompt no cambia.
+  - **Privacidad:** la retención es configurable (12 meses por defecto, de 1 a 36) y lo vencido se borra al leer. La página **Clientes** del panel permite ver, corregir y borrar la memoria, y cada cambio queda auditado. La memoria entra sola en exportar y borrar empresa.
+  - **Evals:** `19_memoria_correcta`, `20_memoria_sin_verificar` y `21_memoria_de_otro_cliente`. Una fuga de datos es la falla crítica `dato_de_otro_cliente`. Cada caso empieza sin memoria, salvo la que siembra.
+- **Validado con Gemini real:** pasan los 3 casos, con unas 7 llamadas. "¡Hola, Lucía! … ¿Seguimos con el cambio de las botas?"
+- **Cómo probarlo:**
+  - `python -m pytest backend/tests/test_memoria_cliente.py`
+  - `python evals/runner.py --simulated`
+### Tarea 2 — Supervisor de respuestas (decisión 079)
+
+Rama `h12-supervisor`.
+
+- **Hecho:**
+  - **Qué revisa.** Después de los controles fijos y antes de enviar, el modelo del clasificador revisa cada respuesta con datos, políticas o acciones: factual, con fuentes o con herramientas. Comprueba que coincida con los documentos y los resultados de las herramientas, con las reglas del tipo de caso y con el tono de la marca (`app/agent/supervisor.py`).
+  - **Qué puede hacer.** Aprueba, pide una reescritura con el motivo (una sola vez; la nueva respuesta vuelve a pasar todos los controles) o deriva con la causa `supervisor`. La charla, los mensajes fijos y las derivaciones no pasan por él. Si falla, aprueba y lo registra (`supervisor_unavailable`).
+  - **Medición.** `supervisor_review` en la auditoría, con el veredicto, el motivo, los ms, los tokens y el costo. La llamada queda con el papel `supervisor` en los pasos del turno.
+  - **Behind the scenes.** Muestra el veredicto con su latencia y su costo.
+  - **Configuración.** Tiene el interruptor por empresa (encendido por defecto) y los números de los últimos 30 días.
+- **Validado con Gemini real:** pasan 3 casos con datos, política y acción. El supervisor aprobó con un motivo concreto, agregó unos 6 s con Gemini gratis y su costo fue 0 en ese nivel.
+- **A tener en cuenta:** la latencia que agrega con el nivel gratis es alta. Con Haiku pago debería ser bastante menor. Se puede apagar por empresa.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_supervisor.py`.
+### Tarea 3 — Simulaciones por empresa (decisión 080)
+
+Rama `h12-simulaciones`.
+
+- **Hecho:**
+  - **Clientes simulados.** Opus genera los clientes desde los tipos de caso activos, un extracto de los documentos y las reglas. Cada uno tiene tipo, idioma, tono (enojado, confundido o apurado), objetivo y primer mensaje. Lo que falte se completa en código.
+  - **Conversación y juez.** Haiku hace de cliente: hasta 4 mensajes, o termina antes. Cada cliente conversa 3 veces. Un juez califica cada corrida: logró el objetivo, respetó las reglas y la marca, fue correcta. El resultado es pass^3 por tipo de caso y general, más pass^1 (`app/simulation/runner.py`).
+  - **Aislamiento.** Cada corrida va en un savepoint que se revierte. Las herramientas usan un sandbox desde el OpenAPI de la empresa, nunca el sistema real. El uso de los modelos se escribe en `usage` al final, así el costo de simular queda registrado.
+  - **Job y panel.** El job `simulation` corre en el worker de la API y es idempotente; si falla, la corrida queda `failed`. La migración 0031 crea `simulation_runs`. En el Reporte está la tarjeta **Simulaciones**, con "Simular 20 conversaciones" (20 clientes × 3 corridas), el pass^3 por tipo y las corridas que fallaron con el motivo del juez. La tarjeta de salir en vivo muestra el pass^3 de la última simulación, como dato informativo.
+- **Validado con Gemini real** (39 llamadas): la simulación encontró un problema real del sandbox. Rellenaba el nombre del cliente con "dato de prueba" y el agente saludaba "Hola, dato de prueba". Lo arreglé: el sandbox de la simulación no inventa nombres. Una corrida falló por un 429 de Gemini gratis y quedó marcada como fallida. Después del arreglo, la corrida pasa.
+- **A tener en cuenta:**
+  - 20 clientes × 3 corridas son cientos de llamadas: no entra en la cuota diaria de Gemini gratis. Con un proveedor pago, tarda varios minutos.
+  - El job corre en una sola transacción.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_simulaciones.py`.
+### Tarea 4 — Voz de marca (decisión 081)
+
+Rama `h12-voz-de-marca`.
+
+- **Hecho:**
+  - **Dónde se configura.** Configuración → Voz de marca (`app/agent/voice.py`): tono, trato (vos, tú o usted), palabras a usar y a evitar, emojis sí o no y firma.
+  - **En el prompt.** Va en `<voz_de_marca>`. El trato elige el tono del agente en español; "usted" es un tono nuevo, sin voseo.
+  - **En código.** La firma va al final de cada respuesta redactada por el agente; los mensajes fijos no la llevan. Sin emojis, se sacan antes de enviar.
+  - **Supervisor.** Recibe la voz de marca y frena sin llamar al modelo una respuesta con una palabra a evitar: pide reescribir y, si se repite, deriva.
+  - **Sin voz configurada no cambia nada:** ni el prompt ni las líneas base.
+- **Validado con Gemini real** (unas 16 llamadas). Con Acme configurada de usted, sin "lamentablemente" y con firma, respondió "Con gusto le informo…", con la firma al final. El supervisor aprobó citando el trato y el tono.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_voz_de_marca.py`.
+### Tarea 5 — Asistente para el equipo humano (decisión 082)
+
+Rama `h12-asistente-equipo`.
+
+- **Hecho:**
+  - **Dónde aparece.** En cada caso derivado o con un borrador del modo supervisado, el detalle del caso muestra la tarjeta **Asistente para el equipo** (`app/cases/assist.py`). Tiene el resumen, la memoria del cliente (si se verificó alguna vez), el paso siguiente sugerido y una respuesta sugerida. La respuesta viene ya cargada y editable en "Responder como persona del equipo".
+  - **Cómo se genera.** Con el modelo del agente, al abrir el caso. Queda guardada en `case_assists` (migración 0032) y se regenera si llegan mensajes nuevos o con "Volver a sugerir". Queda en `usage` y en la auditoría (`assist_generated`), y la respuesta enviada se marca `sugerida`.
+  - **Sin modelo.** Se arma en código desde el motivo de la derivación.
+  - **Fuera de producción.** Sin configuración de producción, el panel no llama a ningún modelo (como el embedder), así los tests no gastan cuota.
+- **Validado con Gemini real** (unas 6 llamadas). En un caso derivado con Lucía molesta, resumió la consulta y el enojo. Sugirió validar la frustración y ofrecer un reclamo al correo. Propuso una respuesta en voseo con su nombre y la fecha del pedido.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_asistente_equipo.py`.
+### Tarea 6 — Resultados medibles (decisión 083)
+
+Rama `h12-resultados`.
+
+- **Hecho:**
+  - **Resolución autónoma auditable** (`app/outcomes/autonomy.py`). Un caso lo es si:
+    - nunca se derivó;
+    - lo resolvió el asistente;
+    - no se reabrió en 72 h (la reapertura ahora guarda las horas desde el cierre);
+    - no tuvo CSAT negativo.
+
+    Cada caso tiene un estado: autónoma, en ventana, derivada, con persona, reabierta en 72 h o CSAT negativo. La página **Resultados** muestra el informe del mes, con la tasa sin contar los casos en ventana, y lo exporta en CSV: un renglón por caso, sin datos del cliente.
+  - **Análisis de conversaciones** de los últimos 30 días (`analysis.py`), sin modelo:
+    - temas principales;
+    - motivos de derivación;
+    - preguntas sin respuesta, agrupadas por la palabra que más comparten.
+
+    Los ejemplos pasan por el anonimizador del onboarding y se les tapan los números.
+  - **Informe semanal por email a los admins** (`weekly.py`): sale cada lunes con la semana anterior. Es idempotente: `weekly_reports` (migración 0033) se inserta en la misma transacción que el envío, y si falla se reintenta. Lo dispara el worker de la API en cada vuelta. Se desactiva desde Resultados. No lo reciben las empresas de demo ni las pruebas gratis.
+- **Sin modelo:** no hizo falta validar con Gemini.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_resultados.py`.
+### Tarea 7 — Promesas cumplidas (decisión 084)
+
+Rama `h12-promesas`.
+
+- **Hecho:**
+  - **Avisos programados.** `scheduled_notices` (migración 0034) registra lo que el sistema se compromete a avisar:
+    - la decisión de una aprobación, programada al pedirla y cumplida al decidirla;
+    - la respuesta del equipo a un caso derivado, cumplida con la primera respuesta.
+
+    Programar es idempotente. Un aviso de una aprobación cancelada queda cancelado. El detalle del caso los muestra con su estado.
+  - **Control fijo de promesas** (`app/agent/promises.py`), que extiende el de acciones prometidas. Una respuesta que promete avisar más adelante ("te avisamos cuando…", "we'll let you know") necesita una de tres cosas:
+    - una aprobación pedida en el turno;
+    - un aviso pendiente en el caso;
+    - citar un documento que describa ese aviso de la tienda ("te enviamos por email el número de seguimiento").
+
+    Si no, se corrige una vez y, si insiste, se deriva con la causa `promesa_sin_aviso`.
+  - **Evals.** Caso nuevo `22_promesa_sin_aviso` y falla crítica `promesa_sin_aviso` en el runner, con la misma regla.
+- **Validado con Gemini real** (unas 15 llamadas). Gemini prometió "ni bien despachemos te vamos a enviar un email con el seguimiento". El control lo frenó, pero era un falso positivo: lo dice el documento de seguimiento de pedidos y lo manda la tienda. Ahora, si cita ese documento, la promesa vale. Además, la reescritura mostró una forma que no se detectaba ("cuando eso pase, te enviamos un email") y la agregué.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_promesas.py`.
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

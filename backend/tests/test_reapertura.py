@@ -61,8 +61,9 @@ def test_si_el_cliente_vuelve_por_el_mismo_tema_el_caso_se_reabre(stack: Simulat
     events = audit_log.reconstruct_case(stack.conn, stack.seed.tenant_id, case_id)
     assert "case_reopened" in [e.kind for e in events]
     assert audit_log.verify_chain(stack.conn, stack.seed.tenant_id, case_id).ok
-    # Se clasifica una sola vez: 1 del clasificador + 2 del agente (herramienta y respuesta).
-    assert len(stack.claude_requests) - calls_before == 3
+    # Se clasifica una sola vez: 1 del clasificador + 2 del agente (herramienta y respuesta)
+    # + 1 del supervisor (decisión 079).
+    assert len(stack.claude_requests) - calls_before == 4
 
     # Aunque vuelva a resolverse sin una persona, ya no cuenta como resuelto por el asistente.
     stack.send("lucia", "Listo, gracias")

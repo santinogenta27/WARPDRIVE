@@ -38,7 +38,7 @@ def test_reglas_de_bloqueo() -> None:
 
 def test_el_runner_simulado_resuelve_los_14_casos(conn: psycopg.Connection) -> None:
     report = runner.run_evals(build_simulated_stack(conn))
-    assert len(report.cases) == 18
+    assert len(report.cases) == 22
     unresolved = [c.id for c in report.cases if not c.resolved]
     assert unresolved == []
     assert report.critical_failures == []
@@ -103,10 +103,10 @@ def test_si_se_agota_la_cuota_guarda_el_avance_y_retoma(
 
     monkeypatch.setattr(stack, "send", send_counting)
     report = runner.run_evals(stack, progress)
-    # 3 en la primera corrida; en la segunda, los 14 casos de un mensaje que faltan y los 3
+    # 3 en la primera corrida; en la segunda, los 18 casos de un mensaje que faltan y los 3
     # turnos del reembolso de un cliente nuevo.
-    assert len(sent) == 20
-    assert len(report.cases) == 18 and report.resolution_rate == 1.0
+    assert len(sent) == 24
+    assert len(report.cases) == 22 and report.resolution_rate == 1.0
 
 
 def test_un_caso_de_varios_turnos_se_califica_por_el_final_de_la_conversacion(

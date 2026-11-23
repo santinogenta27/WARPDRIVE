@@ -47,13 +47,14 @@ def hybrid_search(
     query_vector = embedder.embed([query], tenant_id=tenant_id, input_type="query")[0]
     with tenant_scope(conn, tenant_id):
         # Un solo viaje a la base (decisión 044): las dos listas de candidatos, en orden, y los
+        # (los empates, por el texto: el mismo orden en cada base, decisión 083)
         # fragmentos de todos. La fusión se hace acá.
         rows = conn.execute(
             "with ranked as (select"
             " array(select id from chunks where embedding is not null"
-            "  order by embedding <=> %s::vector limit %s) as by_vector,"
+            "  order by embedding <=> %s::vector, text limit %s) as by_vector,"
             f" array(select id from chunks, {_FTS_QUERY} as q where tsv @@ q"
-            "  order by ts_rank_cd(tsv, q) desc limit %s) as by_text)"
+            "  order by ts_rank_cd(tsv, q) desc, text limit %s) as by_text)"
             " select r.by_vector, r.by_text, c.id, c.document_id, d.title, c.source, c.text"
             " from ranked r left join chunks c on c.id = any(r.by_vector || r.by_text)"
             " left join documents d on d.tenant_id = c.tenant_id and d.id = c.document_id",

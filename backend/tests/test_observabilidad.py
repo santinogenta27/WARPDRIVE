@@ -94,7 +94,9 @@ def test_cada_caso_es_una_traza_con_un_span_por_paso(
     lucia = by_trace[tracing.trace_id_for(first.case_id)]
     assert lucia.count("agent.turn") == 2
     assert lucia.count("busqueda") == 2 and lucia.count("herramienta") >= 1
-    assert sum(name.startswith("llm ") for name in lucia) == 5  # 3 del primer turno y 2 del otro
+    assert (
+        sum(name.startswith("llm ") for name in lucia) == 7
+    )  # 4 del primer turno y 3 del otro, con el supervisor (decisión 079)
 
     turn = next(s for s in finished if s.name == "agent.turn")
     assert turn.parent is None and turn.attributes is not None
@@ -218,7 +220,7 @@ def test_el_respaldo_entre_proveedores_queda_en_el_uso(conn: psycopg.Connection)
     stack = build_simulated_stack(conn, primary_out_of_quota=True)
     stack.send("lucia", "¿Abren los domingos?")
     data = metrics.collect(conn, stack.seed.tenant_id)
-    assert data["modelo"]["llamadas"] == 2 and data["modelo"]["respaldos"] >= 1
+    assert data["modelo"]["llamadas"] == 3 and data["modelo"]["respaldos"] >= 1
     assert data["modelo"]["rechazos"] == 0
 
 

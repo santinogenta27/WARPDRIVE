@@ -58,7 +58,13 @@ VERIFICATION_STEPS = {
     "verification_code_sent": "code_sent",
     "verification_code_failed": "code_failed",
 }
-CHECKS = {"grounding_rejected", "format_rejected", "tone_rejected", "handoff_rejected"}
+CHECKS = {
+    "grounding_rejected",
+    "format_rejected",
+    "tone_rejected",
+    "handoff_rejected",
+    "promise_rejected",  # decisión 084
+}
 
 # Por qué derivó (decisión 045): una línea por causa, armada solo con textos fijos. El motivo que
 # escribe el modelo no se muestra: puede traer cualquier dato del cliente.
@@ -90,6 +96,10 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
         "agente_reconsiderada": (
             "The agent chose to hand off, even after being asked to answer with the tool's data"
         ),
+        "supervisor": "The supervisor stopped the answer before it was sent",
+        "promesa_sin_aviso": (
+            "Answer blocked: it promised to notify the customer and no notice was scheduled"
+        ),
     },
     "es": {
         "pidio_persona": "El cliente pidió hablar con una persona",
@@ -109,6 +119,10 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
         "agente_reconsiderada": (
             "El agente eligió derivar, aun después de que se le pidió responder con los datos de "
             "la herramienta"
+        ),
+        "supervisor": "El supervisor frenó la respuesta antes de enviarla",
+        "promesa_sin_aviso": (
+            "Respuesta frenada: prometió avisarle al cliente sin un aviso programado"
         ),
     },
 }
@@ -346,7 +360,7 @@ def _tool(manifests: dict[str, dict[str, Any]], payload: dict[str, Any]) -> dict
     return found
 
 
-ROLES = {"clasificador": "classifier", "agente": "agent"}
+ROLES = {"clasificador": "classifier", "agente": "agent", "supervisor": "supervisor"}
 
 
 def _timing(payload: dict[str, Any]) -> dict[str, Any]:
@@ -403,6 +417,7 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
                     "cost_usd": 0.0,
                     "tokens": 0,
                     "model_calls": 0,
+                    "supervisor": None,
                 }
             )
             continue
@@ -446,6 +461,14 @@ def steps(conn: psycopg.Connection, tenant_id: uuid.UUID, session: str) -> dict[
         elif kind == "escalated":
             turn["action"] = "derivar"
             turn["handoff"] = handoff_line(p.get("causa"), english=english.english())
+        elif kind == "supervisor_review":  # decisión 079: veredicto, latencia y costo
+            before = turn["supervisor"] or {}  # una reescritura: se suman las dos revisiones
+            turn["supervisor"] = {
+                "verdict": str(p.get("veredicto") or ""),
+                "ms": int(before.get("ms", 0)) + int(p.get("ms") or 0),
+                "cost_usd": float(before.get("cost_usd", 0.0)) + float(_number(p.get("cost_usd"))),
+                "reviews": int(before.get("reviews", 0)) + 1,
+            }
         elif kind == "model_call":
             turn["cost_usd"] = float(_number(turn["cost_usd"]) + _number(p.get("cost_usd")))
             turn["tokens"] += int(p.get("input_tokens") or 0) + int(p.get("output_tokens") or 0)

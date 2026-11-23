@@ -860,6 +860,186 @@ PHRASES: dict[str, str] = {
     "No se envió al cliente": "It wasn't sent to the customer",
     "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
+    # Promesas cumplidas (Hito 12, decisión 084)
+    "Avisos programados": "Scheduled notices",
+    "El asistente solo puede prometerle un aviso al cliente si hay uno de estos pendiente.": (
+        "The assistant can only promise the customer a notice if one of these is pending."
+    ),
+    "Avisarle al cliente cuando se decida la aprobación": (
+        "Let the customer know when the approval is decided"
+    ),
+    "Responderle al cliente desde el equipo": "Reply to the customer from the team",
+    "Cumplido": "Done",
+    "Cancelado": "Cancelled",
+    "promete un aviso a futuro sin un aviso programado que lo cumpla": (
+        "it promised a future notice with no scheduled notice to keep it"
+    ),
+    "Respuesta frenada: prometió avisarle al cliente sin un aviso programado": (
+        "Answer blocked: it promised to notify the customer and no notice was scheduled"
+    ),
+    # Resultados medibles (Hito 12, decisión 083)
+    "Resultados": "Results",
+    "Lo que resolvió el asistente, medido de forma auditable, y de qué hablan tus clientes.": (
+        "What the assistant resolved, measured in an auditable way, and what your customers talk "
+        "about."
+    ),
+    "Resolución autónoma": "Autonomous resolution",
+    "Ver": "View",
+    "Mes": "Month",
+    "Exportar CSV": "Export CSV",
+    "Un caso es una resolución autónoma si nunca se derivó, lo resolvió el asistente, no se "
+    "reabrió dentro de las 72 h y el cliente no dijo que no se resolvió. El CSV trae un renglón "
+    "por caso, sin datos del cliente: con el número de caso se audita en Casos.": (
+        "A case is an autonomous resolution if it was never handed off, the assistant resolved "
+        "it, it wasn't reopened within 72 h and the customer didn't say it wasn't resolved. The "
+        "CSV has one row per case, with no customer data: audit it in Cases with the case number."
+    ),
+    "resoluciones autónomas": "autonomous resolutions",
+    "casos resueltos": "resolved cases",
+    "tasa (sin los casos en ventana)": "rate (without the cases in the window)",
+    "Análisis de conversaciones (últimos 30 días)": "Conversation analysis (last 30 days)",
+    "Temas principales": "Main topics",
+    "Motivos de derivación": "Handoff reasons",
+    "Preguntas sin respuesta": "Unanswered questions",
+    "Lo que el asistente no pudo responder, agrupado por la palabra que más se repite. Sirve para "
+    "saber qué documento cargar. Los ejemplos no tienen datos personales.": (
+        "What the assistant couldn't answer, grouped by the most repeated word. It tells you "
+        "which document to upload. The examples have no personal data."
+    ),
+    "Otras": "Others",
+    "Sin datos en estos 30 días.": "No data in these 30 days.",
+    "Informe semanal": "Weekly report",
+    "Cada lunes, un email a los admins con la semana anterior: conversaciones, resoluciones "
+    "autónomas, derivaciones, CSAT, temas y preguntas sin respuesta.": (
+        "Every Monday, an email to the admins with the previous week: conversations, autonomous "
+        "resolutions, handoffs, CSAT, topics and unanswered questions."
+    ),
+    # Asistente para el equipo (Hito 12, decisión 082)
+    "Asistente para el equipo": "Team assistant",
+    "Volver a sugerir": "Suggest again",
+    "Resumen": "Summary",
+    "Paso siguiente": "Next step",
+    "Memoria del cliente": "Customer memory",
+    "ver cliente": "view customer",
+    "Preferencias": "Preferences",
+    "La respuesta sugerida está abajo, en “Responder como persona del equipo”: revisala y "
+    "editala antes de enviarla.": (
+        "The suggested reply is below, in “Reply as a team member”: check it and edit it before "
+        "sending it."
+    ),
+    "Sin respuesta sugerida: el asistente no está disponible ahora.": (
+        "No suggested reply: the assistant isn't available right now."
+    ),
+    "Revisá el motivo de la derivación y la conversación, y respondé al cliente.": (
+        "Check the reason for the handoff and the conversation, and reply to the customer."
+    ),
+    # Voz de marca (Hito 12, decisión 081)
+    "Voz de marca": "Brand voice",
+    "Cálido y cercano, sin vueltas": "Warm and friendly, straight to the point",
+    "Trato": "Form of address",
+    "Según el idioma": "By language",
+    "Vos": "Informal (vos)",
+    "Tú": "Informal",
+    "Usted": "Formal",
+    "Palabras a usar (separadas por coma)": "Words to use (comma-separated)",
+    "Palabras a evitar (separadas por coma)": "Words to avoid (comma-separated)",
+    "Usar emojis": "Use emojis",
+    "Firma": "Signature",
+    "Va en el prompt del asistente y la controla el supervisor de respuestas: una palabra a evitar "
+    "hace que la respuesta se reescriba. La firma se agrega al final de cada respuesta y, sin "
+    "emojis, se sacan antes de enviar.": (
+        "It goes into the assistant's prompt and the answer supervisor checks it: a word to "
+        "avoid makes the answer be rewritten. The signature is added at the end of every answer "
+        "and, without emojis, they're removed before sending."
+    ),
+    "Guardar voz de marca": "Save brand voice",
+    "Voz de marca guardada.": "Brand voice saved.",
+    "Elegí un trato de la lista.": "Pick an option from the list.",
+    # Simulaciones (Hito 12, decisión 080)
+    "Simulaciones": "Simulations",
+    "Las conversaciones simuladas corren en segundo plano. Volvé a abrir el Reporte en unos "
+    "minutos.": "The simulated conversations run in the background. Open the Report again in a "
+    "few minutes.",
+    "La última simulación falló.": "The last simulation failed.",
+    "Simular 20 conversaciones": "Simulate 20 conversations",
+    "clientes, 3 corridas cada uno": "customers, 3 runs each",
+    "Tipo de caso": "Type of request",
+    "Corridas que fallaron": "Runs that failed",
+    "corrida": "run",
+    "Clientes simulados (enojados, confundidos o apurados) creados desde tus documentos, tipos de "
+    "caso y reglas conversan con el asistente. Cada conversación se repite 3 veces y un juez "
+    "revisa si el cliente logró su objetivo, si se respetaron las reglas y la marca y si la "
+    "respuesta fue correcta. pass^3: los clientes que pasaron las 3 veces. No toca tu sistema ni "
+    "deja datos.": (
+        "Simulated customers (angry, confused or in a hurry), built from your documents, types "
+        "of request and rules, talk with the assistant. Each conversation is repeated 3 times "
+        "and a judge checks whether the customer reached their goal, whether the rules and the "
+        "brand were respected and whether the answer was correct. pass^3: the customers who "
+        "passed all 3 times. It doesn't touch your system or leave any data."
+    ),
+    # Supervisor de respuestas (Hito 12, decisión 079)
+    "Supervisor de respuestas": "Answer supervisor",
+    "Un modelo barato revisa cada respuesta con datos, políticas o acciones antes de enviarla: "
+    "que coincida con las fuentes y las herramientas, con las reglas y con el tono de la marca. "
+    "Puede aprobarla, pedir que se reescriba una vez o derivar a una persona.": (
+        "A low-cost model reviews every answer with data, policies or actions before it's sent: "
+        "that it matches the sources and the tools, the rules and the brand's tone. It can "
+        "approve it, ask for one rewrite or hand off to a person."
+    ),
+    "Últimos 30 días": "Last 30 days",
+    "Revisiones": "Reviews",
+    "Pidió reescribir": "Asked for a rewrite",
+    "Derivó": "Handed off",
+    "Latencia media que agrega": "Average latency it adds",
+    "Costo total": "Total cost",
+    "Supervisor de respuestas activado.": "Answer supervisor turned on.",
+    "Supervisor de respuestas desactivado.": "Answer supervisor turned off.",
+    "El supervisor frenó la respuesta antes de enviarla": (
+        "The supervisor stopped the answer before it was sent"
+    ),
+    # Memoria de los clientes (Hito 12, decisión 078)
+    "Clientes": "Customers",
+    "Sin nombre": "No name",
+    "Compras": "Purchases",
+    "Conversaciones": "Conversations",
+    "Última vez": "Last seen",
+    "Última vez:": "Last seen:",
+    "Todavía no hay clientes verificados con memoria.": (
+        "There are no verified customers with memory yet."
+    ),
+    "Guardar la memoria sin actividad durante": "Keep inactive memory for",
+    "meses": "months",
+    "Meses de retención:": "Months of retention:",
+    "Retención": "Retention",
+    "Lo que el asistente recuerda de cada cliente verificado: nombre, conversaciones anteriores, "
+    "preferencias y compras. Solo lo usa después de verificar la identidad y nunca guarda datos "
+    "de pago.": (
+        "What the assistant remembers about each verified customer: name, earlier "
+        "conversations, preferences and purchases. It only uses it after verifying their "
+        "identity and never stores payment data."
+    ),
+    "Esta acción es solo para los admins de la empresa.": "Only the company's admins can do this.",
+    "← Clientes": "← Customers",
+    "Pedido": "Order",
+    "Sin compras registradas.": "No purchases recorded.",
+    "Conversaciones anteriores": "Earlier conversations",
+    "Corregir": "Correct",
+    "Nombre": "Name",
+    "Preferencias (una por línea)": "Preferences (one per line)",
+    "Una preferencia con datos de pago no se guarda.": (
+        "A preference with payment data isn't saved."
+    ),
+    "Guardar cambios": "Save changes",
+    "Borrar la memoria": "Delete the memory",
+    "El asistente deja de recordar a este cliente. Sus conversaciones siguen en Casos.": (
+        "The assistant stops remembering this customer. Their conversations stay in Cases."
+    ),
+    "Borrar la memoria de este cliente": "Delete this customer's memory",
+    "Ese cliente no existe.": "That customer doesn't exist.",
+    "Memoria del cliente corregida": "Customer memory corrected",
+    "Memoria del cliente borrada": "Customer memory deleted",
+    "Retención guardada": "Retention saved",
+    "La retención va de 1 a 36 meses": "Retention goes from 1 to 36 months",
     ".": ".",
 }
 

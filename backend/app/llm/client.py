@@ -110,6 +110,11 @@ class LLMClient:
         self._provider = provider
         self._recorder = recorder
 
+    def with_recorder(self, recorder: UsageRecorder) -> "LLMClient":
+        """El mismo proveedor con otro registro de uso (las simulaciones guardan el uso aparte y
+        lo escriben después de revertir lo simulado, decisión 080)."""
+        return LLMClient(provider=self._provider, recorder=recorder)
+
     def complete(
         self,
         *,
@@ -119,11 +124,16 @@ class LLMClient:
         max_tokens: int,
         system: str | None = None,
         case_id: uuid.UUID | None = None,
+        role: str | None = None,
         **options: Any,
     ) -> LLMResponse:
+        """`role`: el papel de la llamada en los pasos del turno cuando el modelo pedido no
+        alcanza para nombrarla (el supervisor usa el modelo del clasificador, decisión 079)."""
         if model not in PRICES:  # sin precio no hay costo: no se llama
             raise ValueError(f"Modelo sin precio configurado: {model}")
         with timing.step(timing.MODEL, "modelo") as span:
+            if role:
+                span["llm.role"] = role
             response = self._provider.create(
                 model=model, messages=messages, max_tokens=max_tokens, system=system, **options
             )

@@ -17,8 +17,16 @@ from typing import Any, Literal
 import psycopg
 import yaml
 
-from app import i18n
-from app.agent import conduct, manipulation, presentable, prompt
+from app import i18n, memory
+from app.agent import (
+    conduct,
+    manipulation,
+    presentable,
+    promises,
+    prompt,
+    supervisor,
+    voice,
+)
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
     CHAT,
@@ -268,6 +276,8 @@ HANDOFF_CAUSES = (
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
     "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
+    "supervisor",  # detalle: `derivar` o `reescribir` (lo pidió dos veces), decisión 079
+    "promesa_sin_aviso",  # prometió avisar sin un aviso programado (decisión 084)
 )
 _FIXED_VERIFICATION = (
     "Para darte datos de tu pedido necesito verificar",
@@ -356,6 +366,10 @@ class _Turn:
     classification: Classification | None = None
     tone: str = "rioplatense"
     lang: str = "es"  # idioma de la empresa (decisión 036)
+    memory: str = ""  # memoria del cliente verificado (decisión 078), para el prompt
+    rules: str = ""  # instrucciones del tipo de caso, para el supervisor (decisión 079)
+    supervisor_retries: int = 0  # el supervisor ya pidió una reescritura (decisión 079)
+    promise_retries: int = 0  # ya se corrigió una promesa sin aviso (decisión 084)
 
     def say(self, key: str, **values: Any) -> str:
         return i18n.text(self.lang, key, **values)
@@ -416,6 +430,8 @@ class Agent:
         self._max_steps = max_steps
         self._mailer = mailer or mailer_from_env()
         self._assistant = ""  # nombre del asistente de la empresa del turno (decisión 052)
+        self._supervisor_on = True  # supervisor de respuestas de la empresa (decisión 079)
+        self._voice = voice.Voice()  # voz de marca de la empresa del turno (decisión 081)
 
     # -- entrada ---------------------------------------------------------------------------
     def handle_message(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
@@ -769,14 +785,71 @@ class Agent:
                 "chunk_ids": [str(d.chunk_id) for d in turn.documents],
             },
         )
-        system = prompt.system_prompt(company, tone, instructions, self._assistant)
+        self._load_memory(turn)
+        turn.rules = instructions
+        system = prompt.system_prompt(
+            company,
+            tone,
+            instructions,
+            self._assistant,
+            memory=bool(turn.memory),
+            brand=voice.prompt_block(self._voice, turn.lang == "en"),
+        )
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
-                "content": prompt.user_turn(turn.documents, contact.verified, history, text),
+                "content": prompt.user_turn(
+                    turn.documents, contact.verified, history, text, memory=turn.memory
+                ),
             }
         ]
         return self._run_loop(turn, system, messages, manifests)
+
+    def _load_memory(self, turn: _Turn) -> None:
+        """La memoria del cliente (decisión 078), solo con el contacto verificado: la del
+        cliente que demostró su identidad, nunca otra."""
+        turn.memory = ""
+        if not turn.contact.verified:
+            return
+        found = memory.load(
+            self._conn, turn.tenant_id, turn.contact.phone_hash, exclude_case=turn.case_id
+        )
+        if found is None:
+            return
+        turn.memory = memory.render(found, turn.lang)
+        if turn.memory:
+            self._audit(
+                turn,
+                "memory_used",
+                {
+                    "compras": len(found.purchases),
+                    "casos_abiertos": len(found.open_cases),
+                    "preferencias": len(found.preferences),
+                },
+            )
+
+    def _remember(self, turn: _Turn, action: Action) -> None:
+        """Suma el turno a la memoria del cliente verificado (decisión 078). Compras y nombre,
+        solo de pedidos que pasaron el control de dueño del guardián."""
+        if not turn.contact.verified:
+            return
+        orders = [
+            resource
+            for decision in turn.decisions
+            for resource in decision.resources.values()
+            if isinstance(resource, dict)
+        ]
+        memory.remember(
+            self._conn,
+            turn.tenant_id,
+            turn.contact.phone_hash,
+            case_id=turn.case_id,
+            case_type=turn.case_type,
+            text=turn.text,
+            orders=orders,
+            order_ids=[str(o["id"]) for o in orders if o.get("id")],
+            outcome=memory.OUTCOMES[action],
+        )
 
     def _chat(
         self,
@@ -789,11 +862,21 @@ class Agent:
         goals = "; ".join(goal for goal, _ in case_types.values()) or turn.say("store_questions")
         template = CHAT_INSTRUCTIONS_EN if turn.lang == "en" else CHAT_INSTRUCTIONS
         instructions = template.format(empresa=company, capacidades=goals)
-        system = prompt.system_prompt(company, tone, instructions, self._assistant)
+        self._load_memory(turn)
+        system = prompt.system_prompt(
+            company,
+            tone,
+            instructions,
+            self._assistant,
+            memory=bool(turn.memory),
+            brand=voice.prompt_block(self._voice, turn.lang == "en"),
+        )
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
-                "content": prompt.user_turn([], turn.contact.verified, history, turn.text),
+                "content": prompt.user_turn(
+                    [], turn.contact.verified, history, turn.text, memory=turn.memory
+                ),
             }
         ]
         return self._run_loop(
@@ -983,6 +1066,27 @@ class Agent:
                             _correction(final_id, conduct.ACTION_CORRECTIONS[turn.lang])
                         )
                         continue
+                    listed: Any = final_input.get("fuentes") or []
+                    cited = [str(s) for s in listed]
+                    if _check(self._promises_without_notice, turn, said, cited):
+                        # Promesas cumplidas (decisión 084): prometer un aviso a futuro
+                        # necesita un aviso programado que lo cumpla.
+                        self._audit(
+                            turn,
+                            "promise_rejected",
+                            {"reason": promises.REASON, "rejected_message": final_input},
+                        )
+                        if turn.promise_retries >= 1:
+                            return self._give_up(
+                                turn,
+                                f"Control de promesas: {promises.REASON}.",
+                                chat,
+                                {"tipo": "promesa_sin_aviso"},
+                            )
+                        turn.promise_retries += 1
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append(_correction(final_id, promises.CORRECTIONS[turn.lang]))
+                        continue
                     given = _check(conduct.asks_given_order, said, turn.text)
                     if given and not turn.asked_given_order:
                         # Pide el número de pedido que el cliente ya dio (decisión 066): se le
@@ -1050,6 +1154,35 @@ class Agent:
                         messages.append({"role": "assistant", "content": response.content})
                         messages.append(_grounding_correction(final_id, verdict.reason, turn.lang))
                         continue
+                    # Supervisor (decisión 079): después de los controles fijos, un modelo barato
+                    # revisa la respuesta con datos, políticas o acciones antes de enviarla.
+                    if (
+                        chat is None
+                        and self._supervisor_on
+                        and supervisor.needs_review(final_input, bool(turn.decisions))
+                    ):
+                        review = self._supervise(turn, said)
+                        if review.verdict == supervisor.REWRITE and turn.supervisor_retries == 0:
+                            self._audit(
+                                turn,
+                                "supervisor_rejected",
+                                {"motivo": review.reason, "rejected_message": final_input},
+                            )
+                            turn.supervisor_retries += 1
+                            messages.append({"role": "assistant", "content": response.content})
+                            messages.append(
+                                _correction(
+                                    final_id, supervisor.correction(review.reason, turn.lang)
+                                )
+                            )
+                            continue
+                        if review.verdict != supervisor.APPROVE:
+                            return self._give_up(
+                                turn,
+                                f"Supervisor: {review.reason or review.verdict}.",
+                                chat,
+                                {"tipo": "supervisor", "detalle": review.verdict},
+                            )
                 if final_name == "derivar" and chat is not None:
                     raise _ChatFallback  # en la charla no se deriva
                 if (
@@ -1335,6 +1468,56 @@ class Agent:
             language=turn.lang,
         )
 
+    def _promises_without_notice(self, turn: _Turn, said: str, cited: list[str]) -> bool:
+        """Promete avisar más adelante sin una aprobación creada en este turno, sin un aviso
+        programado pendiente en el caso y sin citar un documento que describa ese aviso de la
+        tienda (decisión 084)."""
+        if not promises.promised(said):
+            return False
+        if any(promises.documented(d.text) for d in turn.documents if d.source in cited):
+            return False
+        if any(d.status == "approval_required" for d in turn.decisions):
+            return False
+        return not promises.pending(self._conn, turn.tenant_id, turn.case_id)
+
+    def _supervise(self, turn: _Turn, answer: str) -> supervisor.Review:
+        """Revisión del supervisor (decisión 079), con su costo y su latencia en la auditoría."""
+        documents: dict[str, str] = {}
+        for doc in turn.documents:
+            documents[doc.source] = f"{documents.get(doc.source, '')}\n{doc.text}".strip()
+        results = [
+            {"herramienta": call.name, "estado": decision.status, "resultado": decision.result}
+            for call, decision in zip(turn.tool_calls, turn.decisions, strict=False)
+        ]
+        found = supervisor.review(
+            self._llm,
+            tenant_id=turn.tenant_id,
+            case_id=turn.case_id,
+            language=turn.lang,
+            message=turn.text,
+            answer=answer,
+            documents=documents,
+            tool_results=results,
+            rules=turn.rules,
+            tone=" ".join(
+                part
+                for part in (
+                    prompt.TONES.get(turn.tone, prompt.TONES["rioplatense"]),
+                    voice.describe(self._voice, turn.lang == "en")
+                    if self._voice.configured
+                    else "",
+                )
+                if part
+            ),
+            avoid=list(self._voice.evitar),
+        )
+        if found.response is not None:
+            self._audit_model_call(turn, supervisor.ROLE, found.response)
+        self._audit(turn, "supervisor_review", found.audit())
+        if found.error:
+            self._audit(turn, "supervisor_unavailable", {"error": found.error})
+        return found
+
     def _check_grounding(self, turn: _Turn, data: dict[str, Any]) -> GroundingVerdict:
         documents: dict[str, str] = {}
         for doc in turn.documents:
@@ -1345,7 +1528,8 @@ class Agent:
             sold = check_sales(str(data.get("mensaje") or ""), results, documents, turn.lang)
             if not sold.ok:
                 return sold
-        evidence = [turn.text, *results]
+        # La memoria del cliente (decisión 078) respalda lo que dice, como su propio mensaje.
+        evidence = [turn.text, *([turn.memory] if turn.memory else []), *results]
         return check_grounding(
             str(data.get("mensaje") or ""),
             [str(s) for s in data.get("fuentes") or []],
@@ -1369,14 +1553,19 @@ class Agent:
         pending = next((d for d in turn.decisions if d.status == "approval_required"), None)
         if pending is not None:
             return self._finish(
-                turn, "pedir_aprobacion", message, sources=sources, approval_id=pending.approval_id
+                turn,
+                "pedir_aprobacion",
+                message,
+                sources=sources,
+                approval_id=pending.approval_id,
+                drafted=True,
             )
         action: Action = (
             "ejecutar"
             if any(d.status == "executed" and d.side_effect for d in turn.decisions)
             else "responder"
         )
-        return self._finish(turn, action, message, sources=sources)
+        return self._finish(turn, action, message, sources=sources, drafted=True)
 
     # -- cierre ----------------------------------------------------------------------------
     def _escalate(self, turn: _Turn, reason: str, cause: dict[str, Any]) -> AgentResult:
@@ -1415,12 +1604,25 @@ class Agent:
         verification: bool = False,
         summary: dict[str, Any] | None = None,
         approval_id: uuid.UUID | None = None,
+        drafted: bool = False,
     ) -> AgentResult:
+        """`drafted`: la respuesta la redactó el agente (no es un mensaje fijo): lleva la
+        firma de la marca y, si la marca no usa emojis, se le sacan (decisión 081)."""
         # Se guarda y se envía tal como lo ve el cliente.
         if turn.tone == "rioplatense":
             message = to_voseo(message)  # por si el modelo se escapa al tuteo
+        if drafted:
+            message = voice.apply(message, self._voice)
         message = to_whatsapp(turn.prefix + message)
         self._save_message(turn.tenant_id, turn.case_id, "agent", message)
+        self._remember(turn, action)
+        # Los avisos que el sistema se compromete a dar (decisión 084).
+        if action == "pedir_aprobacion" and approval_id is not None:
+            promises.schedule(
+                self._conn, turn.tenant_id, turn.case_id, promises.APPROVAL, str(approval_id)
+            )
+        elif action == "derivar":
+            promises.schedule(self._conn, turn.tenant_id, turn.case_id, promises.TEAM)
         self._audit(
             turn,
             "final_action",
@@ -1481,6 +1683,11 @@ class Agent:
             tone = "english"
         # El nombre que eligió la empresa para el asistente (decisión 052), para el prompt.
         self._assistant = str((settings.get("brand") or {}).get("assistant") or "")
+        self._supervisor_on = settings.get(supervisor.SETTING) is not False
+        # Voz de marca (decisión 081): en español, el trato elegido manda sobre el tono.
+        self._voice = voice.from_settings(settings)
+        if lang == "es":
+            tone = voice.tone_for(self._voice, tone)
         return row[0], tone, lang
 
     def _contact(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> ContactContext:

@@ -41,7 +41,7 @@ def _canonical(value: Any) -> str:
 
 def _event_hash(
     tenant_id: uuid.UUID,
-    case_id: uuid.UUID,
+    case_id: uuid.UUID | None,
     seq: int,
     kind: str,
     payload: dict[str, Any],
@@ -65,11 +65,12 @@ def _event_hash(
 def record(
     conn: psycopg.Connection,
     tenant_id: uuid.UUID,
-    case_id: uuid.UUID,
+    case_id: uuid.UUID | None,
     kind: str,
     payload: dict[str, Any],
 ) -> AuditEvent:
-    """Agrega un evento al final de la cadena del caso."""
+    """Agrega un evento al final de la cadena del caso. Sin caso (`None`): un cambio de la
+    empresa hecho desde el panel, como corregir o borrar la memoria de un cliente."""
     normalized: dict[str, Any] = json.loads(_canonical(payload))  # tal como lo devuelve jsonb
     created_at = datetime.now(UTC).isoformat()
     with tenant_scope(conn, tenant_id):

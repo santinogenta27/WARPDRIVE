@@ -125,7 +125,7 @@ class Timer:
             name = str(record["name"])
             if kind == MODEL:
                 requested = str(attrs.get("llm.requested_model") or "")
-                name = roles.get(requested, requested or name)
+                name = str(attrs.get("llm.role") or roles.get(requested, requested or name))
             elif kind == TOOLS and attrs.get("http.route"):
                 name = f"{attrs.get('http.method', '')} {attrs['http.route']}".strip()
             elif kind == SEARCH:

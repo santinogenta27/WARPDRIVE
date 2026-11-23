@@ -26,13 +26,30 @@ IDLE_SECONDS = 600.0
 
 def _handlers() -> dict[str, Handler]:
     """El onboarding y la prueba gratis: su armado y su borrado a los 7 días (decisión 075)."""
+    from app.simulation import runner as simulation
     from app.trial import service as trial
 
     return {
         JOB_KIND: run_onboarding_job,
+        # Simulaciones por empresa (decisión 080).
+        simulation.JOB_KIND: lambda conn, job: simulation.run_simulation_job(conn, job),
         trial.JOB_KIND: trial.run_build_job,
         trial.EXPIRE_JOB: trial.run_expire_job,
     }
+
+
+def _weekly_reports() -> None:
+    """El informe semanal a los admins (decisión 083): en cada vuelta, el de la semana anterior a
+    las empresas que todavía no lo recibieron. Idempotente."""
+    from app.db.connection import connect
+    from app.mailer import mailer_from_env
+    from app.outcomes import weekly
+
+    try:
+        with connect() as conn:
+            weekly.send_due(conn, mailer_from_env())
+    except Exception:  # noqa: BLE001 — el hilo no se cae por el informe
+        logger.exception("El informe semanal falló")
 
 
 def _loop() -> None:
@@ -48,6 +65,7 @@ def _loop() -> None:
                 worker.close()
         except Exception:  # noqa: BLE001 — el hilo no se cae: lo intenta en la próxima vuelta
             logger.exception("El worker del onboarding falló")
+        _weekly_reports()
         _wake.wait(IDLE_SECONDS)
         _wake.clear()
 

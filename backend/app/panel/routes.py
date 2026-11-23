@@ -21,13 +21,15 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
+from app.agent import promises
 from app.audit import log as audit_log
-from app.cases import feedback, refund_confirmation, supervision
+from app.cases import assist, feedback, refund_confirmation, supervision
 from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
 from app.companies import first_steps
 from app.companies.connection import ClientFactory, http_client
 from app.db.connection import connect, tenant_scope
+from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
 from app.mailer import Mailer, mailer_from_env
 from app.panel import auth, english
@@ -65,6 +67,22 @@ def _no_embedder(conn: psycopg.Connection) -> Embedder:
     raise RuntimeError("Falta configurar los embeddings")
 
 
+def _team_llm(conn: psycopg.Connection, tenant_id: uuid.UUID) -> LLMClient | None:
+    """El modelo del asistente para el equipo (decisión 082): la key propia de la empresa o la
+    de la plataforma. None sin ninguna: la tarjeta se arma en código."""
+    from app.companies.agent import shared_provider
+    from app.llm.client import PostgresUsageRecorder
+    from app.llm.factory import llm_backend
+    from app.llm.tenant_llm import own_provider, provider_for
+
+    if llm_backend() is None and own_provider(conn, tenant_id) is None:
+        return None
+    return LLMClient(
+        provider=provider_for(conn, tenant_id, shared_provider),
+        recorder=PostgresUsageRecorder(conn),
+    )
+
+
 @dataclass
 class PanelDeps:
     connection: Callable[[], AbstractContextManager[psycopg.Connection]]
@@ -83,6 +101,9 @@ class PanelDeps:
     mailer: Callable[[], Mailer] = mailer_from_env
     # La entrega de un borrador aprobado del modo supervisado por su canal (decisión 072).
     deliver: supervision.Deliver = supervision.deliver
+    # El modelo del asistente para el equipo en los casos derivados (decisión 082).
+    # Por defecto sin modelo (como el embedder): la configuración de producción le pasa el suyo.
+    team_llm: Callable[[psycopg.Connection, uuid.UUID], LLMClient | None] = lambda c, t: None
 
 
 @contextmanager
@@ -127,6 +148,7 @@ def _production_deps() -> PanelDeps:
         reset_sandbox=reset_sandboxes,
         embedder=lambda conn: embedder_from_env(PostgresUsageRecorder(conn)),
         kick_worker=kick,
+        team_llm=_team_llm,
     )
 
 
@@ -803,6 +825,13 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         drafts = _draft_cards(
             conn, tenant_id, ctx.csrf, back=f"/panel/casos/{case_id}", case_id=case_id
         )
+        # Asistente para el equipo (decisión 082): en un caso derivado o con borrador.
+        helper = (
+            assist.for_case(conn, tenant_id, case_id, deps.team_llm(conn, tenant_id))
+            if assist.needed(str(case[0]), bool(drafts))
+            else None
+        )
+        notices = promises.for_case(conn, tenant_id, case_id)  # decisión 084
     status, escalation, type_name, created, resolved_by, reopened = case
     csrf = ctx.csrf
     roles = {**ROLES, "human": f"Equipo de {company}"}
@@ -827,6 +856,9 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
             f'<div class="muted">Motivo: {esc(handoff.get("motivo"))}</div></div>'
         )
     approvals = _approval_cards(pending, csrf, back=f"/panel/casos/{case_id}")
+    # La respuesta sugerida (decisión 082) va editable en el formulario de siempre.
+    suggested = esc(helper.reply) if helper is not None else ""
+    suggested_origin = '<input type="hidden" name="origen" value="sugerida">' if suggested else ""
 
     cost = sum(
         (Decimal(str(e.payload.get("cost_usd") or 0)) for e in events if e.kind == "model_call"),
@@ -854,7 +886,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
 <div class="row"><h1 class="grow">Caso {esc(type_label(type_name))}</h1>
 {status_badge(status, resolved_by, reopened)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
-{escalated}{approvals}{drafts}
+{escalated}{_assist_card(helper, case_id, csrf)}{_notices_card(notices)}{approvals}{drafts}
 <div class="kpis"><div class="kpi"><div class="n">USD {cost:.4f}</div><div class="muted">Costo
 del modelo{" (modelo gratuito)" if calls and not cost else ""}</div></div>
 <div class="kpi"><div class="n">{calls}</div><div class="muted">llamadas al
@@ -863,10 +895,10 @@ modelo · {tokens} tokens</div></div><div class="kpi"><div class="n">{len(events
 <div class="card"><h2 style="margin-top:0">Conversación</h2><div class="msgs">{chat}</div>
 <form method="post" action="/panel/casos/{case_id}/responder" style="margin-top:14px">
 <input type="hidden" name="csrf" value="{csrf}">
-<input type="hidden" name="envio" value="{uuid.uuid4().hex}">
+<input type="hidden" name="envio" value="{uuid.uuid4().hex}">{suggested_origin}
 <label for="texto">Responder como persona del equipo</label>
 <textarea id="texto" name="texto" maxlength="{MAX_REPLY}" required
- placeholder="Hola, soy del equipo de {esc(company)}…"></textarea>
+ placeholder="Hola, soy del equipo de {esc(company)}…">{suggested}</textarea>
 <p class="muted small">En el chat web el cliente lo ve en unos segundos.</p>
 <button class="primary" type="submit">Enviar</button></form></div>
 <div class="card"><div class="row"><h2 class="grow" style="margin:0">Auditoría paso a paso</h2>
@@ -906,8 +938,88 @@ def reply(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Respo
                     ctx.tenant_id,
                     case_id,
                     text,
-                    detail={"by": str(user_id), "envio": sending},
+                    detail={
+                        "by": str(user_id),
+                        "envio": sending,
+                        # Salió de la respuesta sugerida por el asistente (decisión 082).
+                        **({"sugerida": True} if form.get("origen") == "sugerida" else {}),
+                    },
                 )
+    return RedirectResponse(f"/panel/casos/{case_id}", status_code=303)
+
+
+# -- avisos programados (decisión 084) -------------------------------------------------------
+NOTICE_KINDS = {
+    promises.APPROVAL: "Avisarle al cliente cuando se decida la aprobación",
+    promises.TEAM: "Responderle al cliente desde el equipo",
+}
+NOTICE_STATES = {"pending": "Pendiente", "sent": "Cumplido", "cancelled": "Cancelado"}
+
+
+def _notices_card(notices: list[promises.Notice]) -> str:
+    """Lo que el sistema se comprometió a avisarle al cliente y si ya lo cumplió."""
+    if not notices:
+        return ""
+    badge = {"pending": "waiting_approval", "sent": "resolved", "cancelled": ""}
+    items = "".join(
+        f'<li><span class="badge {badge[n.status]}">{esc(NOTICE_STATES[n.status])}</span> '
+        f"<span>{esc(NOTICE_KINDS.get(n.kind, n.kind))}</span> "
+        f'<span class="muted small">{local_time(n.created_at)}</span></li>'
+        for n in notices
+    )
+    return (
+        '<div class="card"><h2 style="margin-top:0">Avisos programados</h2>'
+        '<p class="muted small">El asistente solo puede prometerle un aviso al cliente si '
+        "hay uno de estos pendiente.</p>"
+        f'<ul class="small">{items}</ul></div>'
+    )
+
+
+# -- asistente para el equipo (decisión 082) ------------------------------------------------
+def _assist_card(helper: assist.Assist | None, case_id: uuid.UUID, csrf: str) -> str:
+    if helper is None:
+        return ""
+    remembered = ""
+    found = helper.memory
+    if found is not None:
+        bought = "".join(
+            f"<li><span>Pedido</span> {esc(p['pedido'])}: {esc(', '.join(p['productos']))}</li>"
+            for p in found.purchases[-5:]
+        )
+        likes = "".join(f"<li>{esc(p)}</li>" for p in found.preferences)
+        remembered = f"""<h3>Memoria del cliente</h3>
+<p><b>{esc(found.name) or "<span>Sin nombre</span>"}</b> ·
+<a href="/panel/clientes/{found.id}">ver cliente</a></p>
+{f'<ul class="small">{bought}</ul>' if bought else ""}
+{f'<p class="muted small">Preferencias</p><ul class="small">{likes}</ul>' if likes else ""}"""
+    note = (
+        '<p class="muted small">La respuesta sugerida está abajo, en “Responder como persona '
+        "del equipo”: revisala y editala antes de enviarla.</p>"
+        if helper.reply
+        else '<p class="muted small">Sin respuesta sugerida: el asistente no está '
+        "disponible ahora.</p>"
+    )
+    return f"""<div class="card attention"><div class="row">
+<h2 class="grow" style="margin:0">Asistente para el equipo</h2>
+<form method="post" action="/panel/casos/{case_id}/asistente" style="margin:0">
+<input type="hidden" name="csrf" value="{csrf}">
+<button type="submit">Volver a sugerir</button></form></div>
+<h3>Resumen</h3><p>{esc(helper.summary)}</p>
+<h3>Paso siguiente</h3><p>{esc(helper.next_step)}</p>{remembered}{note}</div>"""
+
+
+@router.post("/casos/{case_id}/asistente")
+def regenerate_assist(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        try:
+            assist.for_case(
+                conn, ctx.tenant_id, case_id, deps.team_llm(conn, ctx.tenant_id), force=True
+            )
+        except LookupError:
+            return _not_found("Ese caso", ctx.session)
     return RedirectResponse(f"/panel/casos/{case_id}", status_code=303)
 
 
@@ -998,10 +1110,13 @@ def report_page(request: Request, deps: Deps) -> Response:
     finished = None
     from app.companies import go_live
     from app.panel.live_routes import readiness_html
+    from app.panel.simulation_routes import simulation_card
 
     with deps.connection() as conn:
-        # Probar y salir en vivo (decisión 056): arriba de todo.
+        # Probar y salir en vivo (decisión 056): arriba de todo. Después, las simulaciones
+        # (decisión 080).
         live = readiness_html(ctx, go_live.readiness(conn, ctx.tenant_id))
+        live += simulation_card(ctx, conn)
         for source in sources:
             with tenant_scope(conn, source):
                 row = conn.execute(

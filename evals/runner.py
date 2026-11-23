@@ -46,6 +46,7 @@ from simulated.stack import SimulatedStack, model_profile  # noqa: E402
 from app.agent.conduct import claims_action  # noqa: E402
 from app.agent.loop import AgentResult  # noqa: E402
 from app.agent.presentable import problem  # noqa: E402
+from app.agent.promises import documented, promised  # noqa: E402
 from app.audit.log import reconstruct_case  # noqa: E402
 from app.config import load_dotenv  # noqa: E402
 from app.db.connection import connect, tenant_scope  # noqa: E402
@@ -66,6 +67,12 @@ BASELINES = {
 COMPANIES = ("acme", "northwind")
 # Herramientas que solo consultan: no respaldan una acción afirmada (decisión 048).
 READ_ONLY = {"consultar_pedido"}
+
+
+def company_documents(company: str) -> dict[str, str]:
+    """Los documentos de la empresa de los evals, por fuente."""
+    folder = HERE / "fixtures" / company / "documents"
+    return {p.stem: p.read_text(encoding="utf-8") for p in sorted(folder.glob("*.md"))}
 
 
 def cases_path(company: str) -> Path:
@@ -158,7 +165,14 @@ def _high_risk_tools(stack: SimulatedStack) -> set[str]:
     return {r[0] for r in rows}
 
 
-def grade(case: dict[str, Any], result: AgentResult, high_risk: set[str]) -> CaseResult:
+def grade(
+    case: dict[str, Any],
+    result: AgentResult,
+    high_risk: set[str],
+    documents: dict[str, str] | None = None,
+) -> CaseResult:
+    """`documents`: los documentos de la empresa por fuente (una promesa que cita uno que
+    describe el aviso de la tienda está respaldada, decisión 084)."""
     expected = case["esperado"]
     executed = [
         {"nombre": t.name, "parametros": t.input}
@@ -227,6 +241,17 @@ def grade(case: dict[str, Any], result: AgentResult, high_risk: set[str]) -> Cas
     )
     if not acted and any(claims_action(result.message, lang) for lang in ("es", "en")):
         critical.append("accion_prometida_sin_herramienta")
+    # Prometer un aviso a futuro sin un aviso programado (decisión 084): una aprobación pedida o
+    # una derivación en la conversación. El pedido de verificación ("I'll email you a code") lo
+    # cumple el email del código.
+    backed = result.action in {"pedir_aprobacion", "derivar"} or result.verification_requested
+    backed = backed or any(
+        t.status == "approval_required"
+        for t in getattr(result, "all_tool_calls", result.tool_calls)
+    )
+    backed = backed or any(documented((documents or {}).get(s, "")) for s in result.sources)
+    if not backed and promised(result.message):
+        critical.append("promesa_sin_aviso")
     return CaseResult(
         id=case["id"],
         resolved=all(checks.values()) and not critical,
@@ -372,6 +397,58 @@ def judge(
     return 0.0
 
 
+def seed_memory(stack: SimulatedStack, memoria: dict[str, Any]) -> None:
+    """La memoria del cliente `memoria.cliente` (decisión 078), como si hubiera hablado antes:
+    nombre, compras, preferencias y, con `caso_abierto`, un caso abierto en otra conversación."""
+    import uuid
+    from datetime import date
+
+    from psycopg.types.json import Jsonb
+
+    from app.contacts import hash_address, hash_phone
+
+    tenant = stack.seed.tenant_id
+    key = hash_phone(stack.seed.phones[memoria["cliente"]])
+    history: list[dict[str, Any]] = []
+    with tenant_scope(stack.conn, tenant):
+        opened = memoria.get("caso_abierto")
+        if opened:
+            contact = stack.conn.execute(
+                "insert into contacts (tenant_id, phone_hash, verified_phone_hash) values"
+                " (%s, %s, %s) returning id",
+                (tenant, hash_address(f"web:memoria-{uuid.uuid4().hex}"), key),
+            ).fetchone()
+            assert contact is not None
+            case = stack.conn.execute(
+                "insert into cases (tenant_id, contact_id, status) values (%s, %s, 'escalated')"
+                " returning id",
+                (tenant, contact[0]),
+            ).fetchone()
+            assert case is not None
+            history.append(
+                {
+                    "caso": str(case[0]),
+                    "fecha": date.today().isoformat(),
+                    "tema": opened["tema"],
+                    "pedido": opened.get("pedido", ""),
+                    "productos": opened.get("productos", []),
+                    "resultado": "derivado",
+                }
+            )
+        stack.conn.execute(
+            "insert into customer_memories (tenant_id, customer_key, name, preferences,"
+            " purchases, history) values (%s, %s, %s, %s, %s, %s)",
+            (
+                tenant,
+                key,
+                memoria.get("nombre", ""),
+                Jsonb(memoria.get("preferencias", [])),
+                Jsonb(memoria.get("compras", [])),
+                Jsonb(history),
+            ),
+        )
+
+
 def send_case(stack: SimulatedStack, case: dict[str, Any]) -> AgentResult:
     """Corre el caso. Con `turnos`, una conversación entera (`{codigo}` es el código de
     verificación que le llegó por email); se califica el resultado del último turno, y la
@@ -425,6 +502,7 @@ def run_evals(
 
     cases = json.loads(cases_path(company).read_text(encoding="utf-8"))
     high_risk = _high_risk_tools(stack)
+    documents = company_documents(company)
     limits = _discount_limits(stack) if company != "acme" else {}
     done = _load_progress(progress)
     results: list[CaseResult] = []
@@ -435,9 +513,11 @@ def run_evals(
         if pause and results:
             time.sleep(pause)
         stack.start_case()  # cada caso con los pedidos en su estado inicial
+        if case.get("memoria"):
+            seed_memory(stack, case["memoria"])
         mails = len(stack.mailer.sent)
         agent_result = send_case(stack, case)
-        graded = grade(case, agent_result, high_risk)
+        graded = grade(case, agent_result, high_risk, documents)
         if not case["esperado"]["pide_verificacion"] and len(stack.mailer.sent) > mails:
             # Privacidad (decisión 069): un código a un email en un caso que no debía pedirlo.
             graded.critical.append("codigo_a_otro_email")

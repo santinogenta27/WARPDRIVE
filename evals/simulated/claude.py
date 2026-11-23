@@ -19,6 +19,11 @@ from simulated import english
 from simulated.voyage import tokens
 
 INVENTED = "¡Sí, claro! Lo hacemos sin ningún problema y sin costo."
+# Lo que sugiere el asistente para el equipo simulado (decisión 082).
+ASSIST_SUMMARY = "La clienta consultó su pedido 1001 y pidió hablar con una persona."
+ASSIST_REPLY = "Hola Lucía, soy del equipo de Acme: ya estoy revisando tu pedido 1001."
+# Lo que pide el supervisor simulado cuando no aprueba (decisión 079).
+SUPERVISOR_REASON = "La respuesta no menciona la fecha estimada de entrega de la herramienta"
 _GENERIC = {"tiene", "quier", "puedo", "hacen", "pedid", "acme", "hola", "graci", "neces"}
 _STATUS = {
     "paid": "pagado y todavía no fue despachado",
@@ -50,6 +55,7 @@ class SimulatedClaude:
     mode: str = "normal"
     requests: list[dict[str, Any]] = field(default_factory=list)
     _counter: int = 0
+    _supervised: int = 0  # revisiones del supervisor (decisión 079)
 
     def transport(self) -> httpx2.MockTransport:
         return httpx2.MockTransport(self._handle)
@@ -63,6 +69,28 @@ class SimulatedClaude:
             blocks = [self._tool_use("clasificar", _classification(body))]
         elif "calificar" in tool_names:
             blocks = [self._tool_use("calificar", _judge(body))]
+        elif "supervisar" in tool_names:  # supervisor de respuestas (decisión 079)
+            blocks = self._supervisor()
+        elif "asistir_equipo" in tool_names:  # asistente para el equipo (decisión 082)
+            data = {
+                "resumen": ASSIST_SUMMARY,
+                "paso_siguiente": "Confirmá la fecha de entrega con el correo y avisale.",
+                "respuesta_sugerida": ASSIST_REPLY,
+            }
+            blocks = [self._tool_use("asistir_equipo", data)]
+        elif "crear_clientes" in tool_names:  # simulaciones (decisión 080)
+            blocks = [self._tool_use("crear_clientes", _personas(body))]
+        elif "hablar_como_cliente" in tool_names:
+            more = self.mode == "simulacion_larga"
+            said = "¿Y qué más tengo que hacer? Contame el detalle." if more else "Gracias."
+            blocks = [
+                self._tool_use("hablar_como_cliente", {"mensaje": said, "terminar": not more})
+            ]
+        elif "juzgar_simulacion" in tool_names:
+            ok = self.mode != "simulacion_falla"
+            verdict = {"objetivo": ok, "reglas_y_marca": ok, "correcta": ok}
+            reason = "Logró el objetivo." if ok else "No logró el objetivo."
+            blocks = [self._tool_use("juzgar_simulacion", {**verdict, "motivo": reason})]
         else:
             blocks = self._agent(body, tool_names)
         has_tool = any(b["type"] == "tool_use" for b in blocks)
@@ -84,6 +112,23 @@ class SimulatedClaude:
                 },
             },
         )
+
+    def _supervisor(self) -> list[dict[str, Any]]:
+        """Aprueba, salvo en los modos del supervisor: "supervisor_reescribe_una_vez" (pide
+        reescribir y después aprueba), "supervisor_reescribe_siempre", "supervisor_deriva" y
+        "supervisor_sin_herramienta" (contesta sin la herramienta, como un modelo que falla)."""
+        self._supervised += 1
+        if self.mode == "supervisor_sin_herramienta":
+            return [{"type": "text", "text": "Parece correcta."}]
+        verdict = "aprobar"
+        if self.mode == "supervisor_deriva":
+            verdict = "derivar"
+        elif self.mode == "supervisor_reescribe_siempre" or (
+            self.mode == "supervisor_reescribe_una_vez" and self._supervised == 1
+        ):
+            verdict = "reescribir"
+        reason = SUPERVISOR_REASON if verdict != "aprobar" else "Coincide con las fuentes."
+        return [self._tool_use("supervisar", {"veredicto": verdict, "motivo": reason})]
 
     def _tool_use(self, name: str, data: dict[str, Any]) -> dict[str, Any]:
         self._counter += 1
@@ -121,6 +166,14 @@ class SimulatedClaude:
         def reply(text: str, sources: list[str] | None = None, factual: bool = True) -> list[Any]:
             if self.mode == "tuteo":  # se escapa del voseo, como a veces el modelo real
                 text = f"{text} Dime si necesitas algo más."
+            if self.mode == "emojis":  # voz de marca (decisión 081): pone un emoji
+                text = f"{text} 😊"
+            # Promesas (decisión 084): promete avisar más adelante; con "_una_vez", corregido ya
+            # no lo promete.
+            if self.mode == "promete_aviso_siempre" or (
+                self.mode == "promete_aviso" and not corrected
+            ):
+                text = f"{text} Te avisamos por acá cuando salga."
             data = {"mensaje": text, "fuentes": sources or [], "factual": factual}
             loose = _loose_text(self.mode, data, corrected)
             if loose is not None:
@@ -139,6 +192,9 @@ class SimulatedClaude:
         if re.search(r"\b(persona|humano|operador)\b", low):
             return escalate("El cliente pidió hablar con una persona")
         if "derivar" not in tool_names:  # charla: solo puede responder, sin datos de la tienda
+            remembered = remembered_greeting(first)  # memoria del cliente (decisión 078)
+            if remembered:
+                return reply(remembered, factual=False)
             return reply(
                 "¡Hola! Soy el asistente virtual de la tienda. Te puedo ayudar con tus pedidos y "
                 "con consultas sobre la tienda. ¿En qué te ayudo?",
@@ -293,7 +349,75 @@ class SimulatedClaude:
         return reply("Listo.")
 
 
+# -- simulaciones (decisión 080) ----------------------------------------------------------
+_FIRST_MESSAGES = {
+    "donde_esta_mi_pedido": "¿Dónde está mi pedido 1001?",
+    "cambiar_direccion": "Quiero cambiar la dirección del pedido 1002 a Av. Corrientes 1234, CABA",
+    "cancelar_pedido": "Quiero cancelar el pedido 1002",
+    "reembolso": "Quiero el reembolso del pedido 1005",
+    "cambio_por_talle": "¿Cómo cambio un producto por otro talle?",
+    "medios_de_pago_y_cuotas": "¿Tienen cuotas sin interés?",
+    "facturacion": "¿Cómo pido la factura?",
+    "horarios_y_sucursales": "¿Abren los domingos?",
+}
+_TONE_LEADS = {"enojado": "¡Es la tercera vez que pregunto! ", "confundido": "No entiendo bien. ",
+               "apurado": "Rápido, por favor: "}  # fmt: skip
+
+
+def _personas(body: dict[str, Any]) -> dict[str, Any]:
+    """Clientes simulados: recorre los tipos de caso y los tres tonos."""
+    content = body["messages"][0]["content"]
+    size = int(_tag(content, "cantidad"))
+    language = _tag(content, "idioma")
+    types = re.findall(r"^- ([\w-]+): (.*)$", _tag(content, "tipos_de_caso"), re.M)
+    tones = list(_TONE_LEADS)
+    found = []
+    for n in range(size):
+        name, goal = types[n % len(types)]
+        tone = tones[n % len(tones)]
+        first = _FIRST_MESSAGES.get(name, f"Hola, necesito ayuda: {html.unescape(goal).lower()}")
+        found.append(
+            {
+                "tipo_de_caso": name,
+                "idioma": language,
+                "tono": tone,
+                "objetivo": html.unescape(goal),
+                "primer_mensaje": _TONE_LEADS[tone] + first,
+            }
+        )
+    return {"clientes": found}
+
+
 # -- utilidades --------------------------------------------------------------------------
+def remembered_greeting(first: str, english_reply: bool = False) -> str:
+    """Con `<memoria_cliente>` (decisión 078), el saludo usa el nombre de pila y retoma el
+    primer caso abierto, como pide el prompt."""
+    found = re.search(r"<memoria_cliente>\n(.*?)\n</memoria_cliente>", first, re.S)
+    if found is None:
+        return ""
+    text = html.unescape(found.group(1))
+    name = re.search(r"^nombre: (\S+)", text, re.M)
+    if name is None:
+        return ""
+    open_case = re.search(
+        r"^casos_abiertos:\n- (?:\w+ )?(?:pedido|order) (\S+) \(([^)]*)\)", text, re.M
+    )
+    if english_reply:
+        greeting = f"Hi, {name.group(1)}! "
+        if open_case:
+            return greeting + (
+                f"Shall we continue with your order {open_case.group(1)} "
+                f"({open_case.group(2).lower()})?"
+            )
+        return greeting + "How can I help you today?"
+    greeting = f"¡Hola, {name.group(1)}! "
+    if open_case:
+        return greeting + (
+            f"¿Seguimos con lo del pedido {open_case.group(1)} ({open_case.group(2).lower()})?"
+        )
+    return greeting + "¿En qué te ayudo?"
+
+
 def _loose_text(mode: str, data: dict[str, Any], corrected: bool) -> str | None:
     """Texto suelto en lugar de la herramienta responder, como gpt-oss-120b."""
     if mode == "json_suelto":
@@ -347,6 +471,11 @@ def _best_document(question: str, docs: dict[str, str]) -> tuple[str, str] | Non
 
 _RULES = [
     (r"ignor\w* (tus|las) instrucciones|todos los (pedidos|clientes)", "pedido_no_permitido"),
+    # Lo que se sabe de otra persona (decisión 078): como el clasificador real, no permitido.
+    (
+        r"qu[eé] compr[oó] [a-zá-ú]|record[aá]s de (ella|[eé]l)|what did \w+ buy",
+        "pedido_no_permitido",
+    ),
     # Datos de otro cliente por su email (decisión 048).
     (r"(pedidos|direcci\w+) de (los pedidos de )?\S+@|orders of \S+@", "pedido_no_permitido"),
     (r"\b(sobre|about) \S+@", "pedido_no_permitido"),  # decisión 069

@@ -18,6 +18,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
+from app.agent import supervisor as answer_supervisor
+from app.agent import voice as brand_voice
 from app.cases import supervision
 from app.channels.web import widget
 from app.channels.whatsapp import selfservice as whatsapp
@@ -1094,6 +1096,65 @@ def save_language(request: Request, form: Form, deps: Deps) -> Response:
     return _back("configuracion", ok=f"Idioma guardado: {i18n.NAMES[choice]}.")
 
 
+def _voice_html(ctx: Ctx, found: brand_voice.Voice, language: str) -> str:
+    """Voz de marca (decisión 081): se aplica en el prompt y la controla el supervisor."""
+    # El trato es del español: en una empresa en inglés queda oculto (el mismo HTML en los dos
+    # idiomas, decisión 037).
+    options = "".join(
+        f'<option value="{code}"{" selected" if found.trato == code else ""}>{esc(label)}'
+        "</option>"
+        for code, label in (("", "Según el idioma"), ("vos", "Vos"), ("tu", "Tú"),
+                            ("usted", "Usted"))
+    )  # fmt: skip
+    treatment = (
+        f"<div{' hidden' if language == 'en' else ''}>"
+        '<label for="trato">Trato</label>'
+        f'<select id="trato" name="trato" style="max-width:260px">{options}</select></div>'
+    )
+    checked = " checked" if found.emojis else ""
+    company = ctx.session.company
+    signature = f"— The {company} team" if english.english() else f"— El equipo de {company}"
+    return f"""<div class="card"><form method="post" action="/panel/configuracion/voz">{_csrf(ctx)}
+<label for="tono">Tono</label>
+<input id="tono" name="tono" maxlength="{brand_voice.MAX_TONE}" value="{esc(found.tono)}"
+ placeholder="Cálido y cercano, sin vueltas">{treatment}
+<label for="usar">Palabras a usar (separadas por coma)</label>
+<input id="usar" name="usar" value="{esc(", ".join(found.usar))}">
+<label for="evitar">Palabras a evitar (separadas por coma)</label>
+<input id="evitar" name="evitar" value="{esc(", ".join(found.evitar))}">
+<label class="row" style="gap:8px"><input type="checkbox" name="emojis" value="si"{checked}
+ style="width:auto"> <span>Usar emojis</span></label>
+<label for="firma">Firma</label>
+<input id="firma" name="firma" maxlength="{brand_voice.MAX_SIGNATURE}" value="{esc(found.firma)}"
+ placeholder="{esc(signature)}">
+<p class="muted small">Va en el prompt del asistente y la controla el supervisor de respuestas: una
+palabra a evitar hace que la respuesta se reescriba. La firma se agrega al final de cada
+respuesta y, sin emojis, se sacan antes de enviar.</p>
+<button type="submit">Guardar voz de marca</button></form></div>"""
+
+
+@router.post("/configuracion/voz")
+def save_voice(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    try:
+        with deps.connection() as conn:
+            brand_voice.save(
+                conn,
+                ctx.tenant_id,
+                tono=form.get("tono", ""),
+                trato=form.get("trato", ""),
+                usar=form.get("usar", ""),
+                evitar=form.get("evitar", ""),
+                emojis=form.get("emojis") == "si",
+                firma=form.get("firma", ""),
+            )
+    except brand_voice.VoiceError as error:
+        return _back("configuracion", error=str(error))
+    return _back("configuracion", ok="Voz de marca guardada.")
+
+
 def _supervised_html(ctx: Ctx, on: bool) -> str:
     """Modo supervisado (decisión 072): apagado por defecto."""
     state = "Activado" if on else "Desactivado"
@@ -1106,6 +1167,38 @@ aprobaciones.</p></div>
 <form method="post" action="/panel/configuracion/supervisado">{_csrf(ctx)}
 <button name="activo" value="{"no" if on else "si"}" class="{"" if on else "primary"}">
 {"Desactivar" if on else "Activar"}</button></form></div></div>"""
+
+
+def _answer_supervisor_html(ctx: Ctx, on: bool, found: dict[str, Any]) -> str:
+    """Supervisor de respuestas (decisión 079): encendido por defecto, con lo que agregó."""
+    state = "Activado" if on else "Desactivado"
+    seconds = f"{found['avg_ms'] / 1000:.1f} s"
+    return f"""<div class="card"><div class="row"><div class="grow">
+<span class="badge {"resolved" if on else ""}">{state}</span>
+<p class="muted small">Un modelo barato revisa cada respuesta con datos, políticas o acciones
+antes de enviarla: que coincida con las fuentes y las herramientas, con las reglas y con el tono
+de la marca. Puede aprobarla, pedir que se reescriba una vez o derivar a una persona.</p>
+<table class="small"><thead><tr><th>Últimos 30 días</th><th></th></tr></thead><tbody>
+<tr><td>Revisiones</td><td>{found["reviews"]}</td></tr>
+<tr><td>Pidió reescribir</td><td>{found["rewrites"]}</td></tr>
+<tr><td>Derivó</td><td>{found["escalations"]}</td></tr>
+<tr><td>Latencia media que agrega</td><td>{seconds}</td></tr>
+<tr><td>Costo total</td><td>US$ {found["cost_usd"]:.4f}</td></tr></tbody></table></div>
+<form method="post" action="/panel/configuracion/supervisor">{_csrf(ctx)}
+<button name="activo" value="{"no" if on else "si"}" class="{"" if on else "primary"}">
+{"Desactivar" if on else "Activar"}</button></form></div></div>"""
+
+
+@router.post("/configuracion/supervisor")
+def save_answer_supervisor(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    on = form.get("activo") == "si"
+    with deps.connection() as conn:
+        answer_supervisor.set_enabled(conn, ctx.tenant_id, on)
+    state = "activado" if on else "desactivado"
+    return _back("configuracion", ok=f"Supervisor de respuestas {state}.")
 
 
 @router.post("/configuracion/supervisado")
@@ -1358,6 +1451,12 @@ def settings_page(request: Request, deps: Deps) -> Response:
         language = i18n.tenant_language(conn, ctx.tenant_id)
         behind_on = behind.enabled(conn, ctx.tenant_id)
         supervised = supervision.enabled(conn, ctx.tenant_id)
+        voice_found = brand_voice.load(conn, ctx.tenant_id)
+        reviewer = _answer_supervisor_html(
+            ctx,
+            answer_supervisor.enabled(conn, ctx.tenant_id),
+            answer_supervisor.stats(conn, ctx.tenant_id),
+        )
         whatsapp_setup = whatsapp.load(conn, ctx.tenant_id)
         model = _model_html(ctx, conn)
         attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
@@ -1380,7 +1479,9 @@ def settings_page(request: Request, deps: Deps) -> Response:
 qué usa el asistente. Lo que activás o aprobás acá pasa al asistente en vivo en el momento; nada
 queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Idioma</h2>{_language_html(ctx, language)}
+<h2>Voz de marca</h2>{_voice_html(ctx, voice_found, language)}
 <h2>Modo supervisado</h2>{_supervised_html(ctx, supervised)}
+<h2>Supervisor de respuestas</h2>{reviewer}
 <h2>Modelo y gasto</h2>{model}
 <h2 id="reglas">Reglas de atención</h2>{attention}
 <h2>Ventas cruzadas</h2>{offers}

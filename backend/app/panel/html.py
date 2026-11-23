@@ -97,9 +97,11 @@ transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,0);visibilit
 NAV = [
     ("casos", "Casos"),
     ("mejorar", "Para mejorar"),
+    ("clientes", "Clientes"),
     ("aprobaciones", "Aprobaciones"),
     ("onboarding", "Onboarding"),
     ("reporte", "Reporte"),
+    ("resultados", "Resultados"),
     ("configuracion", "Configuración"),
     ("metricas", "Métricas"),
     ("equipo", "Equipo"),
@@ -124,6 +126,11 @@ NOTICES = {
     "eval-creado": "Caso de eval creado · lo prueba el reporte de preparación",
     "borrador-enviado": "Respuesta enviada al cliente",
     "borrador-rechazado": "Borrador rechazado · no se envió nada",
+    # Memoria de los clientes (decisión 078).
+    "memoria-guardada": "Memoria del cliente corregida",
+    "memoria-borrada": "Memoria del cliente borrada",
+    "retencion-guardada": "Retención guardada",
+    "retencion-invalida": "La retención va de 1 a 36 meses",
 }
 
 

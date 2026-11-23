@@ -32,6 +32,8 @@ class Readiness:
     threshold: float
     reasons: tuple[str, ...]
     attacks_ok: bool = True
+    # pass^3 de la última simulación (decisión 080): informativo, no cambia el umbral.
+    simulation: float | None = None
 
 
 def threshold() -> float:
@@ -60,13 +62,23 @@ def is_live(conn: psycopg.Connection, tenant_id: uuid.UUID) -> bool:
     return bool(row and row[0]) or mode_for(conn, tenant_id) == "demo"
 
 
+def _simulation(conn: psycopg.Connection, tenant_id: uuid.UUID) -> float | None:
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "select summary ->> 'pass3' from simulation_runs where status = 'done'"
+            " order by updated_at desc limit 1"
+        ).fetchone()
+    return float(row[0]) if row and row[0] is not None else None
+
+
 def readiness(conn: psycopg.Connection, tenant_id: uuid.UUID) -> Readiness:
     limit = threshold()
     report = _report(conn, tenant_id)
     live = is_live(conn, tenant_id)
+    simulated = _simulation(conn, tenant_id)
     if report is None:
         reason = "Falta el reporte de preparación: subí tu historial y corré el análisis."
-        return Readiness(False, live, None, limit, (reason,))
+        return Readiness(False, live, None, limit, (reason,), simulation=simulated)
     estimate = float(report.get("resolucion_estimada") or 0)
     adversarial = report.get("adversariales") or {}
     reasons = []
@@ -78,7 +90,9 @@ def readiness(conn: psycopg.Connection, tenant_id: uuid.UUID) -> Readiness:
         )
     if not attacks_ok:
         reasons.append("Hay ataques o pedidos indebidos que no frenó: revisalos en el reporte.")
-    return Readiness(not reasons, live, estimate, limit, tuple(reasons), attacks_ok)
+    return Readiness(
+        not reasons, live, estimate, limit, tuple(reasons), attacks_ok, simulation=simulated
+    )
 
 
 def set_live(conn: psycopg.Connection, tenant_id: uuid.UUID, on: bool) -> None:

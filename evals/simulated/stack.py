@@ -72,6 +72,12 @@ class SimulatedStack:
     def claude_requests(self) -> list[dict[str, Any]]:
         return self.claude.requests if self.claude else []
 
+    @property
+    def agent_requests(self) -> list[dict[str, Any]]:
+        """Solo los pedidos del agente (los que ofrecen `responder`): sin el clasificador, el
+        supervisor (decisión 079) ni el juez."""
+        return [r for r in self.claude_requests if "responder" in r["tool_names"]]
+
     def send(self, contact_label: str, text: str) -> AgentResult:
         result = self.agent.handle_message(
             self.seed.tenant_id, self.seed.contacts[contact_label], text
@@ -111,6 +117,9 @@ class SimulatedStack:
             reset.reset()
         with tenant_scope(self.conn, self.seed.tenant_id):
             self.conn.execute("update approvals set status = 'rejected' where status = 'pending'")
+            # Cada caso con el cliente sin memoria (decisión 078), salvo la que siembra el caso:
+            # lo que se recordó de un caso anterior no cambia el siguiente.
+            self.conn.execute("delete from customer_memories")
 
     def acme_order(self, order_id: str) -> dict[str, Any]:
         data: dict[str, Any] = self.acme.get(f"/orders/{order_id}").json()

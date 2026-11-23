@@ -16,8 +16,10 @@ from app.rag.search import hybrid_search
 # Viajes a Postgres por turno, medidos con evals/latency.py. Antes de la decisión 025 eran 115
 # (consulta simple) y 144 (con herramienta); ahora son 28 y 35. El tope deja margen, pero frena
 # una regresión grande.
-MAX_QUERIES_SIMPLE = 40
-MAX_QUERIES_WITH_TOOL = 50
+# El supervisor de respuestas (decisión 079) suma 5: su uso, su llamada y su revisión en
+# la auditoría.
+MAX_QUERIES_SIMPLE = 45
+MAX_QUERIES_WITH_TOOL = 55
 
 
 class FakeClock:
@@ -82,8 +84,9 @@ def test_cada_turno_registra_cuanto_tardo_cada_paso(stack: SimulatedStack) -> No
         assert isinstance(measured[key], int) and measured[key] >= 0, key
     calls = measured["llamadas"]
     assert isinstance(calls, dict)
-    # Clasificador + agente (pide la herramienta y después responde), una búsqueda y la API.
-    assert calls["modelo"] == 3 and calls["busqueda"] == 1 and calls["herramientas"] >= 1
+    # Clasificador + agente (pide la herramienta y después responde) + supervisor (decisión
+    # 079), una búsqueda y la API.
+    assert calls["modelo"] == 4 and calls["busqueda"] == 1 and calls["herramientas"] >= 1
     assert 0 < calls["base"] <= MAX_QUERIES_WITH_TOOL
     parts = sum(int(measured[f"{k}_ms"]) for k in (*timing.STEPS, "otros"))  # type: ignore[call-overload]
     assert abs(parts - int(measured["total_ms"])) <= 5  # type: ignore[call-overload]
@@ -108,7 +111,12 @@ def test_cada_llamada_y_cada_paso_quedan_en_el_detalle(
         assert isinstance(step["ms"], int) and step["ms"] >= 0, step
     names = [(s["paso"], s["nombre"]) for s in steps]
     # Cada llamada al modelo, con su papel: el clasificador y las dos del agente.
-    assert [n for p, n in names if p == "modelo"] == ["clasificador", "agente", "agente"]
+    assert [n for p, n in names if p == "modelo"] == [
+        "clasificador",
+        "agente",
+        "agente",
+        "supervisor",
+    ]
     assert names[0] == ("modelo", "clasificador")
     assert ("busqueda", "rag") in names
     assert ("herramientas", "GET /orders/{order_id}") in names
