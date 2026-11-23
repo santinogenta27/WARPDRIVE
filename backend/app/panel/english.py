@@ -1272,6 +1272,10 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
         lambda m: f"OpenAPI saved: {m[1]} operations.",
     ),
     (
+        re.compile(r"Quién usa el panel de (.+)\."),
+        lambda m: f"Who uses {m[1]}'s dashboard.",
+    ),
+    (
         re.compile(r"Probá el asistente de (.+) en su propio chat:"),
         lambda m: f"Try {m[1]}'s assistant in its own chat:",
     ),

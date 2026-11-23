@@ -198,7 +198,7 @@ def _companies_page(ctx: Ctx, deps: PanelDeps, notice: str, created: str = "") -
 agente, aislados de las demás. Nace vacía: todo lo que su agente sabe sale de su propio
 onboarding.</p>{notice}{created}
 <div class="card"><h2 style="margin-top:0">Crear una empresa</h2>
-<form method="post" action="/panel/empresas">{_csrf(ctx)}
+<form method="post" action="/panel/operator/companies">{_csrf(ctx)}
 <label for="nombre">Nombre de la empresa</label>
 <input id="nombre" name="nombre" required maxlength="80">
 <label for="email">Email del usuario</label>
@@ -224,6 +224,7 @@ def companies_page(request: Request, deps: Deps) -> Response:
 
 
 @router.post("/empresas")
+@router.post("/operator/companies")
 def create_company_route(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
     if isinstance(ctx, Response):

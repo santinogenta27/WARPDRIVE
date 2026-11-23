@@ -322,4 +322,4 @@ def test_la_bandeja_con_borradores_en_ingles(world: World) -> None:
     assert "Drafts to review" in inbox and _new_spanish(inbox) == []
     detail = client.get(f"/panel/casos/{draft.case_id}").text
     assert _new_spanish(detail) == []
-    assert "Supervised mode" in client.get("/panel/agent").text
+    assert "Review before sending" in client.get("/panel/agent").text

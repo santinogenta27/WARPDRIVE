@@ -227,7 +227,7 @@ def test_el_boton_simula_y_el_resultado_entra_en_el_reporte(
     assert done is not None and done.status == "done"
     first = done.personas[0]["tipo_de_caso"]
     assert esc(type_label(first)) in page  # el resultado por tipo de caso
-    assert "Simulación: pass^3 100%" in page  # en la tarjeta de salir en vivo
+    assert "Simulación: pass^3 100%" in panel.get("/panel/test").text  # tarjeta de salir en vivo
 
 
 def test_el_sandbox_no_inventa_el_nombre_del_cliente() -> None:
