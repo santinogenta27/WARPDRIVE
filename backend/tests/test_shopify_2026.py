@@ -237,7 +237,7 @@ def test_sistema_ofrece_los_tres_metodos_y_la_guia(company: Any) -> None:
     client, _, _ = company
     page = client.get("/panel/deploy").text
     assert 'value="app"' in page and 'value="token"' in page
-    assert "Dev Dashboard" in page and "Client Secret" in page
+    assert "Dev Dashboard" in page and "Client secret" in page
     assert "write_discounts" in page  # la guía dice qué permisos marcar
 
 

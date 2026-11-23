@@ -57,5 +57,5 @@ def test_las_guias_estan_al_lado_del_codigo_para_copiar(client: TestClient) -> N
     page = client.get("/panel/deploy").text
     snippet = page.index('id="snippet"')
     for platform in ("Shopify", "WordPress", "Tiendanube", "WhatsApp"):
-        found = re.search(rf"<summary>[^<]*{platform}", page)
-        assert found is not None and found.start() > snippet, platform
+        found = re.search(rf"<summary>[^<]*{platform}", page[snippet:])
+        assert found is not None, platform

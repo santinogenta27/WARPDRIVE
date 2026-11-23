@@ -40,6 +40,8 @@ PHRASES: dict[str, str] = {
     "Actions": "Acciones",
     "Topics": "Temas",
     "Brand & voice": "Marca y voz",
+    "How your chat looks": "Cómo se ve tu chat",
+    "How your agent writes": "Cómo escribe tu agente",
     "Sales": "Ventas",
     "Language": "Idioma",
     "Readiness": "Preparación",

@@ -41,7 +41,7 @@ STEPS = [
         "marca",
         "Elegí cómo se ve tu chat",
         "El nombre, el color y el logo del chat.",
-        "/panel/deploy#widget",
+        "/panel/agent/voice",
     ),
     (
         "playground",

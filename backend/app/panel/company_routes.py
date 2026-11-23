@@ -991,31 +991,19 @@ r.selectNodeContents(document.getElementById("snippet"));var s=getSelection();s.
 s.addRange(r)})})})();"""
 
 
-def _widget_html(ctx: Ctx, request: Request, slug: str, found: widget.WidgetSettings) -> str:
-    """Tarjeta "Widget para tu sitio": el código para copiar, los dominios, la marca y la
-    vista previa (el widget real, dentro de la página)."""
-    code = widget.snippet(_public_url(request), slug)
+def _brand_html(ctx: Ctx, slug: str, found: widget.WidgetSettings) -> str:
+    """La marca del chat (nombre, color, logo, nombre del agente, saludo y preguntas sugeridas)
+    con la vista previa: el widget real, dentro de la página. El código y los dominios están en
+    Deploy (decisión 086)."""
     logo_note = (
         '<label style="font-weight:400"><input type="checkbox" name="quitar_logo" value="si"> '
         "Quitar el logo actual</label>"
         if found.has_logo
         else ""
     )
-    return f"""<div class="card"><h3 style="margin-top:0">1. Pegá este código en tu sitio</h3>
-<p class="muted small">Va antes de <span class="mono">&lt;/body&gt;</span>, en todas las páginas
-donde quieras el chat. Aparece una burbuja abajo a la derecha.</p>
-<pre id="snippet">{esc(code)}</pre>
-<button type="button" id="copy-snippet" data-done="Copiado">Copiar código</button>
-<form method="post" action="/panel/configuracion/widget" enctype="multipart/form-data"
- id="widget-form">{_csrf(ctx)}
-<h3>2. Dominios permitidos</h3>
-<label for="dominios">Sitios donde se puede usar el chat (uno por línea)</label>
-<textarea id="dominios" name="dominios" class="mono" style="min-height:70px"
- placeholder="www.tutienda.com&#10;*.tutienda.com">{esc(chr(10).join(found.domains))}</textarea>
-<p class="muted small">El chat solo funciona en estos sitios. Sin ninguno, el widget no se
-muestra en sitios ajenos. Usá <span class="mono">*.tutienda.com</span> para todos los
-subdominios y <span class="mono">localhost</span> para probar en tu computadora.</p>
-<h3>3. Marca</h3>
+    return f"""<div class="card"><form method="post" action="/panel/configuracion/widget"
+ enctype="multipart/form-data" id="widget-form">{_csrf(ctx)}
+<input type="hidden" name="volver" value="agent/voice">
 <div class="row" style="align-items:flex-start"><div class="grow" style="min-width:260px">
 <label for="nombre">Nombre que ve el cliente</label>
 <input id="nombre" name="nombre" maxlength="60" required value="{esc(found.name)}">
@@ -1053,6 +1041,7 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
     if isinstance(ctx, Response):
         return ctx
     fields = data.fields
+    back = "agent/voice" if fields.get("volver") == "agent/voice" else "deploy"
     try:
         with deps.connection() as conn:
             widget.save(
@@ -1060,7 +1049,9 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
                 ctx.tenant_id,
                 name=fields.get("nombre", ""),
                 accent=fields.get("color", ""),
-                domains=fields.get("dominios", ""),
+                domains=fields["dominios"]
+                if "dominios" in fields
+                else "\n".join(widget.load(conn, ctx.tenant_id).domains),
                 suggestions=fields.get("sugerencias", ""),
                 logo=data.files[0].data if data.files else None,
                 remove_logo=fields.get("quitar_logo") == "si",
@@ -1068,8 +1059,8 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
                 greeting=fields.get("saludo", ""),
             )
     except widget.WidgetError as error:
-        return _back("deploy", error=str(error))
-    return _back("deploy", ok="Widget guardado.")
+        return _back(back, error=str(error))
+    return _back(back, ok="Widget guardado.")
 
 
 def _language_html(ctx: Ctx, language: str) -> str:
@@ -1533,8 +1524,12 @@ def agent_voice_page(request: Request, deps: Deps) -> Response:
     with deps.connection() as conn:
         language = i18n.tenant_language(conn, ctx.tenant_id)
         voice_found = brand_voice.load(conn, ctx.tenant_id)
+        slug = chat_slug(conn, ctx.tenant_id)
+        brand = widget.load(conn, ctx.tenant_id)
+    chat = _brand_html(ctx, slug, brand) if slug else ""
     body = f"""{head("Brand & voice", LEADS["Brand & voice"])}
-{_voice_html(ctx, voice_found, language)}"""
+<h2>How your chat looks</h2>{chat}
+<h2>How your agent writes</h2>{_voice_html(ctx, voice_found, language)}"""
     return _section(request, ctx, "agent/voice", "Brand & voice", body)
 
 
@@ -1778,7 +1773,9 @@ def _tested(conn: Any, ctx: Ctx, deps: PanelDeps, connected: bool = False) -> Re
     del chat; si no, la pantalla dice qué falta y qué hacer (decisión 086)."""
     result = system.test_connection(conn, ctx.tenant_id, client_factory=deps.client_factory)
     if not result["ok"]:
-        return _back("deploy")  # el diagnóstico se ve en el paso 1
+        # El diagnóstico completo se ve en el paso 1; acá, el aviso.
+        found = deploy.explain(result, deploy.platform_of(system.load(conn, ctx.tenant_id)))
+        return _back("deploy", error=f"{found.what}\n{found.todo}" if found else "")
     added = deploy.add_store_domains(conn, ctx.tenant_id, result)
     done = "Store connected." if connected else "Connection test passed."
     if added:
