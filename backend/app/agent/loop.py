@@ -17,7 +17,7 @@ from typing import Any, Literal
 import psycopg
 import yaml
 
-from app import i18n
+from app import i18n, memory
 from app.agent import conduct, manipulation, presentable, prompt
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
@@ -356,6 +356,7 @@ class _Turn:
     classification: Classification | None = None
     tone: str = "rioplatense"
     lang: str = "es"  # idioma de la empresa (decisión 036)
+    memory: str = ""  # memoria del cliente verificado (decisión 078), para el prompt
 
     def say(self, key: str, **values: Any) -> str:
         return i18n.text(self.lang, key, **values)
@@ -769,14 +770,65 @@ class Agent:
                 "chunk_ids": [str(d.chunk_id) for d in turn.documents],
             },
         )
-        system = prompt.system_prompt(company, tone, instructions, self._assistant)
+        self._load_memory(turn)
+        system = prompt.system_prompt(
+            company, tone, instructions, self._assistant, memory=bool(turn.memory)
+        )
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
-                "content": prompt.user_turn(turn.documents, contact.verified, history, text),
+                "content": prompt.user_turn(
+                    turn.documents, contact.verified, history, text, memory=turn.memory
+                ),
             }
         ]
         return self._run_loop(turn, system, messages, manifests)
+
+    def _load_memory(self, turn: _Turn) -> None:
+        """La memoria del cliente (decisión 078), solo con el contacto verificado: la del
+        cliente que demostró su identidad, nunca otra."""
+        turn.memory = ""
+        if not turn.contact.verified:
+            return
+        found = memory.load(
+            self._conn, turn.tenant_id, turn.contact.phone_hash, exclude_case=turn.case_id
+        )
+        if found is None:
+            return
+        turn.memory = memory.render(found, turn.lang)
+        if turn.memory:
+            self._audit(
+                turn,
+                "memory_used",
+                {
+                    "compras": len(found.purchases),
+                    "casos_abiertos": len(found.open_cases),
+                    "preferencias": len(found.preferences),
+                },
+            )
+
+    def _remember(self, turn: _Turn, action: Action) -> None:
+        """Suma el turno a la memoria del cliente verificado (decisión 078). Compras y nombre,
+        solo de pedidos que pasaron el control de dueño del guardián."""
+        if not turn.contact.verified:
+            return
+        orders = [
+            resource
+            for decision in turn.decisions
+            for resource in decision.resources.values()
+            if isinstance(resource, dict)
+        ]
+        memory.remember(
+            self._conn,
+            turn.tenant_id,
+            turn.contact.phone_hash,
+            case_id=turn.case_id,
+            case_type=turn.case_type,
+            text=turn.text,
+            orders=orders,
+            order_ids=[str(o["id"]) for o in orders if o.get("id")],
+            outcome=memory.OUTCOMES[action],
+        )
 
     def _chat(
         self,
@@ -789,11 +841,16 @@ class Agent:
         goals = "; ".join(goal for goal, _ in case_types.values()) or turn.say("store_questions")
         template = CHAT_INSTRUCTIONS_EN if turn.lang == "en" else CHAT_INSTRUCTIONS
         instructions = template.format(empresa=company, capacidades=goals)
-        system = prompt.system_prompt(company, tone, instructions, self._assistant)
+        self._load_memory(turn)
+        system = prompt.system_prompt(
+            company, tone, instructions, self._assistant, memory=bool(turn.memory)
+        )
         messages: list[dict[str, Any]] = [
             {
                 "role": "user",
-                "content": prompt.user_turn([], turn.contact.verified, history, turn.text),
+                "content": prompt.user_turn(
+                    [], turn.contact.verified, history, turn.text, memory=turn.memory
+                ),
             }
         ]
         return self._run_loop(
@@ -1345,7 +1402,8 @@ class Agent:
             sold = check_sales(str(data.get("mensaje") or ""), results, documents, turn.lang)
             if not sold.ok:
                 return sold
-        evidence = [turn.text, *results]
+        # La memoria del cliente (decisión 078) respalda lo que dice, como su propio mensaje.
+        evidence = [turn.text, *([turn.memory] if turn.memory else []), *results]
         return check_grounding(
             str(data.get("mensaje") or ""),
             [str(s) for s in data.get("fuentes") or []],
@@ -1421,6 +1479,7 @@ class Agent:
             message = to_voseo(message)  # por si el modelo se escapa al tuteo
         message = to_whatsapp(turn.prefix + message)
         self._save_message(turn.tenant_id, turn.case_id, "agent", message)
+        self._remember(turn, action)
         self._audit(
             turn,
             "final_action",

@@ -139,6 +139,9 @@ class SimulatedClaude:
         if re.search(r"\b(persona|humano|operador)\b", low):
             return escalate("El cliente pidió hablar con una persona")
         if "derivar" not in tool_names:  # charla: solo puede responder, sin datos de la tienda
+            remembered = remembered_greeting(first)  # memoria del cliente (decisión 078)
+            if remembered:
+                return reply(remembered, factual=False)
             return reply(
                 "¡Hola! Soy el asistente virtual de la tienda. Te puedo ayudar con tus pedidos y "
                 "con consultas sobre la tienda. ¿En qué te ayudo?",
@@ -294,6 +297,35 @@ class SimulatedClaude:
 
 
 # -- utilidades --------------------------------------------------------------------------
+def remembered_greeting(first: str, english_reply: bool = False) -> str:
+    """Con `<memoria_cliente>` (decisión 078), el saludo usa el nombre de pila y retoma el
+    primer caso abierto, como pide el prompt."""
+    found = re.search(r"<memoria_cliente>\n(.*?)\n</memoria_cliente>", first, re.S)
+    if found is None:
+        return ""
+    text = html.unescape(found.group(1))
+    name = re.search(r"^nombre: (\S+)", text, re.M)
+    if name is None:
+        return ""
+    open_case = re.search(
+        r"^casos_abiertos:\n- (?:\w+ )?(?:pedido|order) (\S+) \(([^)]*)\)", text, re.M
+    )
+    if english_reply:
+        greeting = f"Hi, {name.group(1)}! "
+        if open_case:
+            return greeting + (
+                f"Shall we continue with your order {open_case.group(1)} "
+                f"({open_case.group(2).lower()})?"
+            )
+        return greeting + "How can I help you today?"
+    greeting = f"¡Hola, {name.group(1)}! "
+    if open_case:
+        return greeting + (
+            f"¿Seguimos con lo del pedido {open_case.group(1)} ({open_case.group(2).lower()})?"
+        )
+    return greeting + "¿En qué te ayudo?"
+
+
 def _loose_text(mode: str, data: dict[str, Any], corrected: bool) -> str | None:
     """Texto suelto en lugar de la herramienta responder, como gpt-oss-120b."""
     if mode == "json_suelto":
@@ -347,6 +379,11 @@ def _best_document(question: str, docs: dict[str, str]) -> tuple[str, str] | Non
 
 _RULES = [
     (r"ignor\w* (tus|las) instrucciones|todos los (pedidos|clientes)", "pedido_no_permitido"),
+    # Lo que se sabe de otra persona (decisión 078): como el clasificador real, no permitido.
+    (
+        r"qu[eé] compr[oó] [a-zá-ú]|record[aá]s de (ella|[eé]l)|what did \w+ buy",
+        "pedido_no_permitido",
+    ),
     # Datos de otro cliente por su email (decisión 048).
     (r"(pedidos|direcci\w+) de (los pedidos de )?\S+@|orders of \S+@", "pedido_no_permitido"),
     (r"\b(sobre|about) \S+@", "pedido_no_permitido"),  # decisión 069
