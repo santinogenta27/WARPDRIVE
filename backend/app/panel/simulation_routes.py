@@ -100,4 +100,4 @@ def start_simulation(request: Request, form: Form, deps: Deps) -> Response:
         if latest is None or latest.status not in ("queued", "running"):
             simulation.request(conn, ctx.tenant_id, requested_by=ctx.session.email)
     deps.kick_worker()
-    return RedirectResponse("/panel/reporte", status_code=303)
+    return RedirectResponse("/panel/test/simulations", status_code=303)

@@ -85,7 +85,7 @@ def login(email: str, password: str) -> TestClient:
 
 
 def csrf(client: TestClient) -> str:
-    match = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/configuracion").text)
+    match = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/deploy").text)
     assert match is not None
     return match.group(1)
 
@@ -293,7 +293,7 @@ def test_el_panel_valida_la_marca_y_los_dominios(world: World) -> None:
 def test_configuracion_muestra_el_codigo_para_copiar_y_la_vista_previa(world: World) -> None:
     norte = login(NORTE, NORTE_PASSWORD)
     save_widget(norte, dominios="www.tiendanorte.example")
-    page = norte.get("/panel/configuracion").text
+    page = norte.get("/panel/deploy").text
     snippet = (
         f"&lt;script src=&quot;http://testserver/widget.js&quot; "
         f"data-chat=&quot;{world.norte_slug}&quot; async&gt;&lt;/script&gt;"

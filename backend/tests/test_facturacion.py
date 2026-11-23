@@ -201,16 +201,16 @@ def test_el_operador_ve_la_facturacion_por_empresa_y_por_mes(
     ids = seed(conn, acme, norte)
     admin = login(ADMIN, ADMIN_PASSWORD)
 
-    assert "Facturación" in admin.get("/panel/casos").text  # está en el menú del operador
-    page = admin.get("/panel/facturacion", params={"mes": "2026-11"})
+    assert "Facturación" in admin.get("/panel/inbox").text  # está en el menú del operador
+    page = admin.get("/panel/operator/billing", params={"mes": "2026-11"})
     assert page.status_code == 200
     assert "Noviembre de 2026" in page.text
     assert "Acme Store" in page.text and "Tienda Norte" in page.text
     assert f"/panel/facturacion/{acme}?mes=2026-11" in page.text
     assert "mes=2026-10" in page.text and "mes=2026-12" in page.text  # mes anterior y siguiente
     # Sin mes, el actual. Un mes mal escrito no rompe: muestra el actual.
-    assert "Noviembre de 2026" in admin.get("/panel/facturacion").text
-    assert admin.get("/panel/facturacion", params={"mes": "2026-13"}).status_code == 200
+    assert "Noviembre de 2026" in admin.get("/panel/operator/billing").text
+    assert admin.get("/panel/operator/billing", params={"mes": "2026-13"}).status_code == 200
 
     detail = admin.get(f"/panel/facturacion/{acme}", params={"mes": "2026-11"})
     assert detail.status_code == 200 and "Acme Store" in detail.text
@@ -274,9 +274,9 @@ def test_solo_el_operador_ve_la_facturacion(
     conn, stack, norte = world
     seed(conn, stack.seed.tenant_id, norte)
     user = login(NORTE, NORTE_PASSWORD)
-    assert "Facturación" not in user.get("/panel/casos").text
+    assert "Facturación" not in user.get("/panel/inbox").text
     for path in (
-        "/panel/facturacion",
+        "/panel/operator/billing",
         "/panel/facturacion/exportar.csv",
         f"/panel/facturacion/{stack.seed.tenant_id}",
         f"/panel/facturacion/{norte}",
@@ -285,5 +285,5 @@ def test_solo_el_operador_ve_la_facturacion(
         response = user.get(path)
         assert response.status_code == 403, path
         assert "Acme Store" not in response.text
-    anonymous = TestClient(app).get("/panel/facturacion", follow_redirects=False)
+    anonymous = TestClient(app).get("/panel/operator/billing", follow_redirects=False)
     assert anonymous.status_code == 303 and "/panel/login" in anonymous.headers["location"]

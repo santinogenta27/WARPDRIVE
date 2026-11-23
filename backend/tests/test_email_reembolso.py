@@ -91,7 +91,7 @@ def _refund_waiting(stack: SimulatedStack, ask: str, email: str) -> AgentResult:
 
 def _decide(world: World, approval_id: uuid.UUID, decision: str) -> str:
     # Configuración tiene formularios aunque no haya aprobaciones pendientes.
-    page = world.panel.get("/panel/configuracion").text
+    page = world.panel.get("/panel/deploy").text
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None
     response = world.panel.post(

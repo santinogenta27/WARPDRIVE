@@ -149,7 +149,7 @@ def test_metricas_muestra_las_ventas_atribuidas(conn: psycopg.Connection, acme: 
         )
     client = TestClient(app)
     client.post("/panel/login", data={"email": ACME_EMAIL, "password": ACME_PASSWORD})
-    page = client.get("/panel/metricas").text
+    page = client.get("/panel/insights").text
     assert "Ventas atribuidas al agente" in page
     assert "ARS 45,000.00" in page and "Actualizar ventas" in page
     token = re.search(r'name="csrf" value="([^"]+)"', page)

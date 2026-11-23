@@ -133,12 +133,12 @@ def create_norte(world: World) -> TestClient:
     """El operador crea Tienda Norte y su usuario entra a su panel."""
     admin = login(ADMIN, ADMIN_PASSWORD)
     page = admin.post(
-        "/panel/empresas",
+        "/panel/operator/companies",
         data={
             "nombre": "Tienda Norte",
             "email": NORTE,
             "clave": NORTE_PASSWORD,
-            "csrf": csrf(admin, "/panel/empresas"),
+            "csrf": csrf(admin, "/panel/operator/companies"),
         },
     )
     assert page.status_code == 200 and "Tienda Norte quedó creada" in page.text
@@ -159,7 +159,7 @@ def upload_history(norte: TestClient) -> httpx.Response:
     ]
     return norte.post(
         "/panel/onboarding/fuentes",
-        data={"csrf": csrf(norte, "/panel/onboarding")},
+        data={"csrf": csrf(norte, "/panel/knowledge")},
         files=files,
         follow_redirects=False,
     )
@@ -168,12 +168,12 @@ def upload_history(norte: TestClient) -> httpx.Response:
 def test_la_empresa_sube_un_pdf_y_un_escaneado_se_avisa_en_la_pantalla(world: World) -> None:
     norte = create_norte(world)
     tenant_id = world.tenant("Tienda Norte")
-    assert ".pdf" in norte.get("/panel/onboarding").text  # el selector de archivos lo acepta
+    assert ".pdf" in norte.get("/panel/knowledge").text  # el selector de archivos lo acepta
 
     def upload(*names: str) -> httpx.Response:
         return norte.post(
             "/panel/onboarding/fuentes",
-            data={"csrf": csrf(norte, "/panel/onboarding")},
+            data={"csrf": csrf(norte, "/panel/knowledge")},
             files=[
                 ("archivos", (name, (ACME / "onboarding" / name).read_bytes(), "application/pdf"))
                 for name in names
@@ -225,7 +225,7 @@ def test_el_operador_crea_una_empresa_con_su_propio_usuario(world: World) -> Non
     assert counts == (0, 0, 0, 0)  # nace vacía: nada de Acme
     assert chat_slug(world.conn, tenant_id) is not None
 
-    home = norte.get("/panel/casos").text
+    home = norte.get("/panel/inbox").text
     assert "Tienda Norte" in home and "Acme Store" not in home
     assert "Todavía no hay conversaciones" in home
     assert "Reiniciar demo" not in home and ">Empresas<" not in home
@@ -234,20 +234,24 @@ def test_el_operador_crea_una_empresa_con_su_propio_usuario(world: World) -> Non
 def test_el_alta_valida_los_datos_y_solo_la_hace_el_operador(world: World) -> None:
     norte = create_norte(world)
     admin = login(ADMIN, ADMIN_PASSWORD)
-    token = csrf(admin, "/panel/empresas")
+    token = csrf(admin, "/panel/operator/companies")
     for data, error in (
         ({"nombre": "Tienda Norte", "email": "otra@x.example", "clave": "clave-larga-1"}, "nombre"),
         ({"nombre": "Otra", "email": NORTE, "clave": "clave-larga-1"}, "email"),
         ({"nombre": "Otra", "email": ADMIN, "clave": "clave-larga-1"}, "email"),
         ({"nombre": "Otra", "email": "otra@x.example", "clave": "corta"}, "clave"),
     ):
-        response = admin.post("/panel/empresas", data={**data, "csrf": token})
+        response = admin.post("/panel/operator/companies", data={**data, "csrf": token})
         assert error in response.text.lower(), data
     assert world.conn.execute("select count(*) from tenants where name = 'Otra'").fetchone() == (0,)
     # Un usuario de una empresa no crea empresas ni ve la lista.
-    assert norte.get("/panel/empresas").status_code == 403
+    assert norte.get("/panel/operator/companies").status_code == 403
     denied = post(
-        norte, "/panel/empresas", nombre="Intrusa", email="x@x.example", clave="1234567890"
+        norte,
+        "/panel/operator/companies",
+        nombre="Intrusa",
+        email="x@x.example",
+        clave="1234567890",
     )
     assert denied.status_code == 403
     assert world.conn.execute("select 1 from tenants where name = 'Intrusa'").fetchone() is None
@@ -265,7 +269,7 @@ def test_el_login_no_acepta_otra_clave_ni_una_sesion_adulterada(world: World) ->
     )
     mixed = forged.rsplit(".", 1)[0] + "." + good.rsplit(".", 1)[1]
     client.cookies.set(auth.COOKIE, mixed, path="/panel")
-    assert client.get("/panel/casos", follow_redirects=False).headers["location"] == "/panel/login"
+    assert client.get("/panel/inbox", follow_redirects=False).headers["location"] == "/panel/login"
     # Después de varios intentos fallidos, el login se frena aunque la clave sea la correcta.
     for _ in range(auth.MAX_FAILURES):
         TestClient(app).post("/panel/login", data={"email": NORTE, "password": "mala-clave-1"})
@@ -295,11 +299,12 @@ def test_un_usuario_no_ve_ni_toca_datos_de_otra_empresa(world: World) -> None:
     norte = create_norte(world)
     # Cada pantalla muestra solo lo de Tienda Norte.
     for path in (
-        "/panel/casos",
-        "/panel/aprobaciones",
-        "/panel/onboarding",
-        "/panel/reporte",
-        "/panel/configuracion",
+        "/panel/inbox",
+        "/panel/inbox/approvals",
+        "/panel/knowledge",
+        "/panel/test",
+        "/panel/agent/topics",
+        "/panel/deploy",
     ):
         page = norte.get(path)
         assert page.status_code == 200, path
@@ -353,11 +358,11 @@ def test_un_usuario_no_ve_ni_toca_datos_de_otra_empresa(world: World) -> None:
     chat = TestClient(app)
     session = chat.post("/chat/session", params={"canal": slug}).json()["session"]
     chat.post("/chat/messages", json={"session": session, "text": "quiero hablar con una persona"})
-    inbox = norte.get("/panel/casos").text
+    inbox = norte.get("/panel/inbox").text
     norte_case = re.findall(r'href="/panel/casos/([0-9a-f-]{36})"', inbox)
     assert len(norte_case) == 1
     admin = login(ADMIN, ADMIN_PASSWORD)
-    assert norte_case[0] not in admin.get("/panel/casos").text
+    assert norte_case[0] not in admin.get("/panel/inbox").text
     assert admin.get(f"/panel/casos/{norte_case[0]}").status_code == 404
     assert post(admin, f"/panel/casos/{norte_case[0]}/responder", texto="Hola").status_code == 404
 
@@ -385,7 +390,7 @@ def test_el_chat_de_cada_empresa_es_propio(world: World) -> None:
         mine = world.conn.execute("select count(*) from cases").fetchone()
     assert mine == (1,)  # cada conversación quedó en su empresa
     # El equipo de Norte responde: lo ve la sesión de Norte y no la de Acme.
-    case_id = re.findall(r'href="/panel/casos/([0-9a-f-]{36})"', norte.get("/panel/casos").text)[0]
+    case_id = re.findall(r'href="/panel/casos/([0-9a-f-]{36})"', norte.get("/panel/inbox").text)[0]
     post(norte, f"/panel/casos/{case_id}/responder", texto="Hola, soy Ana de Tienda Norte.")
     seen = client.get("/chat/updates", params={"session": norte_session}).json()["messages"]
     assert [m["text"] for m in seen] == ["Hola, soy Ana de Tienda Norte."]
@@ -419,7 +424,7 @@ def test_la_empresa_sube_su_historial_corre_el_analisis_y_aprueba_desde_el_panel
 
     uploaded = upload_history(norte)
     assert "ok=" in uploaded.headers["location"], uploaded.headers["location"]
-    page = norte.get("/panel/onboarding").text
+    page = norte.get("/panel/knowledge").text
     assert "whatsapp_export.zip" in page and "tickets.csv" in page
     with tenant_scope(conn, tenant_id):
         mine = conn.execute(
@@ -441,7 +446,7 @@ def test_la_empresa_sube_su_historial_corre_el_analisis_y_aprueba_desde_el_panel
         (onboarding.JOB_KIND, str(tenant_id)),
     ).fetchall()
     assert len(jobs) == 1
-    assert "El análisis está corriendo" in norte.get("/panel/onboarding").text
+    assert "El análisis está corriendo" in norte.get("/panel/knowledge").text
 
     # El worker corre el job (acá, en la transacción del test y con el modelo determinístico).
     model = FakeOnboardingModel()
@@ -458,9 +463,9 @@ def test_la_empresa_sube_su_historial_corre_el_analisis_y_aprueba_desde_el_panel
     onboarding.run_onboarding_job(conn, job, deps_factory, commit=False)
     conn.execute("update jobs set status = 'done' where id = %s", (job.id,))
 
-    done = norte.get("/panel/onboarding").text
+    done = norte.get("/panel/knowledge").text
     assert done.count(">Hecha<") == 6 and "El análisis terminó" in done
-    report = norte.get("/panel/reporte").text
+    report = norte.get("/panel/test").text
     assert "100" in report and "conversaciones analizadas" in report and "Tienda Norte" in report
 
     # Lo descubierto queda sin activar ni aprobar hasta que la empresa lo revisa.
@@ -471,7 +476,7 @@ def test_la_empresa_sube_su_historial_corre_el_analisis_y_aprueba_desde_el_panel
         tools = conn.execute("select id, name, approved from tools").fetchall()
     assert len(types) >= 7 and not any(active for _, _, active in types)
     assert [(name, approved) for _, name, approved in tools] == [("consultar_pedido", False)]
-    settings = norte.get("/panel/configuracion").text
+    settings = norte.get("/panel/agent/actions").text + norte.get("/panel/agent/topics").text
     assert "Consulta de pedido" in settings and "Sin aprobar" in settings
     assert "Usa herramientas sin aprobar" in settings
 
@@ -562,7 +567,7 @@ def test_la_empresa_conecta_su_sistema_con_credenciales_cifradas_y_prueba_antes_
     assert SECRET not in row[1] and decrypt_for(tenant_id, row[1]) == SECRET
     with pytest.raises(InvalidToken):
         decrypt_for(world.stack.seed.tenant_id, row[1])
-    assert SECRET not in norte.get("/panel/configuracion").text
+    assert SECRET not in norte.get("/panel/deploy").text
 
     # Sin la prueba aprobada no se activa.
     early = post(norte, "/panel/configuracion/sistema/activar")
@@ -579,7 +584,7 @@ def test_la_empresa_conecta_su_sistema_con_credenciales_cifradas_y_prueba_antes_
     probe = world.upstream[-1]
     assert probe.method == "GET" and probe.url.path == "/v1/customers"  # solo lectura
     assert probe.headers["authorization"] == f"Bearer {SECRET}"
-    assert "La prueba pasó" in norte.get("/panel/configuracion").text
+    assert "La prueba pasó" in norte.get("/panel/deploy").text
 
     activated = post(norte, "/panel/configuracion/sistema/activar")
     assert "ok=" in activated.headers["location"]

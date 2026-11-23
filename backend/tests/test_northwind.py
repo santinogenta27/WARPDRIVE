@@ -377,7 +377,10 @@ def test_el_panel_de_northwind_en_ingles(web: TestClient) -> None:
         follow_redirects=False,
     )
     assert response.status_code == 303
-    settings = web.get("/panel/configuracion").text
+    settings = "".join(
+        web.get(url).text
+        for url in ("/panel/agent/topics", "/panel/agent/actions", "/panel/deploy")
+    )
     assert '<html lang="en">' in settings
     for text in ("Where is my order", "Refund", "Demo system (simulated API)", "Exchange"):
         assert text in settings, text

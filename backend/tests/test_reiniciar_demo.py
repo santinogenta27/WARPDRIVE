@@ -70,7 +70,7 @@ def test_reiniciar_la_demo_deja_el_panel_limpio_sin_tocar_la_auditoria(
     pending = stack.send("martin", "Quiero el reembolso del pedido 1005")
     stack.close_open_cases()
     escalated = stack.send("lucia", "quiero hablar con una persona")
-    assert "Reiniciar demo" in client.get("/panel/casos").text
+    assert "Reiniciar demo" in client.get("/panel/inbox").text
 
     confirm = client.get("/panel/reiniciar").text  # pide confirmar antes
     assert "no se puede deshacer" not in confirm and "archiv" in confirm
@@ -79,8 +79,8 @@ def test_reiniciar_la_demo_deja_el_panel_limpio_sin_tocar_la_auditoria(
     done = client.post("/panel/reiniciar", data={"csrf": csrf(confirm)}, follow_redirects=False)
     assert done.status_code == 303 and resets == ["acme"]
 
-    assert "Todavía no hay conversaciones" in client.get("/panel/casos").text
-    assert "No hay pedidos esperando aprobación" in client.get("/panel/aprobaciones").text
+    assert "Todavía no hay conversaciones" in client.get("/panel/inbox").text
+    assert "No hay pedidos esperando aprobación" in client.get("/panel/inbox/approvals").text
     assert client.get(f"/panel/casos/{escalated.case_id}").status_code == 404
     for case_id in (pending.case_id, escalated.case_id):
         assert verify_chain(conn, stack.seed.tenant_id, case_id).ok  # la auditoría sigue entera

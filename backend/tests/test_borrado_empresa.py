@@ -95,7 +95,7 @@ def test_borrar_una_empresa_no_deja_ninguna_fila_de_ese_tenant(world: World) -> 
     assert jobs == (1,)
 
     admin = login(ADMIN, ADMIN_PASSWORD)
-    listing = admin.get("/panel/empresas").text
+    listing = admin.get("/panel/operator/companies").text
     assert f"/panel/empresas/{tenant_id}/borrar" in listing
     form = confirm_form(admin, tenant_id)
     assert "Tienda Norte" in form and "no se puede deshacer" in form
@@ -103,7 +103,7 @@ def test_borrar_una_empresa_no_deja_ninguna_fila_de_ese_tenant(world: World) -> 
 
     done = admin.post(
         f"/panel/empresas/{tenant_id}/borrar",
-        data={"csrf": csrf(admin, "/panel/empresas"), "nombre": "Tienda Norte"},
+        data={"csrf": csrf(admin, "/panel/operator/companies"), "nombre": "Tienda Norte"},
         follow_redirects=False,
     )
     assert done.status_code == 303 and "ok=" in done.headers["location"]
@@ -129,7 +129,7 @@ def test_borrar_una_empresa_no_deja_ninguna_fila_de_ese_tenant(world: World) -> 
 
     # Acme queda exactamente como estaba.
     assert rows_of(conn, acme) == acme_before
-    assert "Tienda Norte" not in admin.get("/panel/empresas").text.split("Registro")[0]
+    assert "Tienda Norte" not in admin.get("/panel/operator/companies").text.split("Registro")[0]
 
 
 def test_el_borrado_queda_en_la_auditoria_del_operador(world: World) -> None:  # noqa: F811
@@ -139,7 +139,7 @@ def test_el_borrado_queda_en_la_auditoria_del_operador(world: World) -> None:  #
     admin = login(ADMIN, ADMIN_PASSWORD)
     admin.post(
         f"/panel/empresas/{tenant_id}/borrar",
-        data={"csrf": csrf(admin, "/panel/empresas"), "nombre": "Tienda Norte"},
+        data={"csrf": csrf(admin, "/panel/operator/companies"), "nombre": "Tienda Norte"},
     )
     rows = conn.execute(
         "select operator, action, company_id, company_name, detail from operator_audit"
@@ -152,7 +152,7 @@ def test_el_borrado_queda_en_la_auditoria_del_operador(world: World) -> None:  #
     assert detail["filas"]["cases"] == cases and detail["filas"]["tenants"] == 1
     # Solo cantidades: ni mensajes, ni emails de clientes, ni credenciales.
     assert "token-secreto" not in str(detail) and "@" not in str(detail)
-    page = admin.get("/panel/empresas").text
+    page = admin.get("/panel/operator/companies").text
     assert "Registro del operador" in page and "Borró la empresa Tienda Norte" in page
 
     # El registro es de solo inserción, también para el dueño de la base.
@@ -175,7 +175,7 @@ def test_el_borrado_pide_confirmacion_y_solo_lo_hace_el_operador(world: World) -
     before = rows_of(conn, tenant_id)
     admin = login(ADMIN, ADMIN_PASSWORD)
     url = f"/panel/empresas/{tenant_id}/borrar"
-    token = csrf(admin, "/panel/empresas")
+    token = csrf(admin, "/panel/operator/companies")
 
     # Sin escribir el nombre exacto, no se borra.
     for name in ("", "tienda", "Acme Store"):
@@ -211,10 +211,10 @@ def test_el_borrado_pide_confirmacion_y_solo_lo_hace_el_operador(world: World) -
 def test_la_sesion_de_una_empresa_borrada_deja_de_servir(world: World) -> None:  # noqa: F811
     norte, tenant_id = fill_norte(world)
     slug = chat_slug(world.conn, tenant_id)
-    assert norte.get("/panel/casos").status_code == 200
+    assert norte.get("/panel/inbox").status_code == 200
     delete.delete_company(world.conn, tenant_id, operator=ADMIN, confirm_name="Tienda Norte")
 
-    gone = norte.get("/panel/casos", follow_redirects=False)
+    gone = norte.get("/panel/inbox", follow_redirects=False)
     assert gone.status_code == 303 and "/panel/login" in gone.headers["location"]
     again = TestClient(app).post(
         "/panel/login", data={"email": NORTE, "password": NORTE_PASSWORD}, follow_redirects=False

@@ -33,7 +33,7 @@ def playground(request: Request, deps: Deps) -> Response:
         slug = chat_slug(conn, ctx.tenant_id)
         found = widget.load(conn, ctx.tenant_id)
     if slug is None:
-        return RedirectResponse("/panel/reporte", status_code=303)
+        return RedirectResponse("/panel/test", status_code=303)
     page = render(
         name=found.name,
         slug=slug,
@@ -126,5 +126,5 @@ def toggle_live(request: Request, form: Form, deps: Deps) -> Response:
         with deps.connection() as conn:
             go_live.set_live(conn, ctx.tenant_id, on)
     except go_live.GoLiveError:
-        return RedirectResponse("/panel/reporte", status_code=303)
-    return RedirectResponse("/panel/reporte", status_code=303)
+        return RedirectResponse("/panel/test", status_code=303)
+    return RedirectResponse("/panel/test", status_code=303)

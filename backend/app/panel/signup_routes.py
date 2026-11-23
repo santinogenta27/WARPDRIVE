@@ -111,7 +111,7 @@ def signup_confirm(request: Request, token: str, deps: Deps) -> Response:
     session = auth.new_session(
         str(email[0]), tenant_id=company.tenant_id, company=company.name, admin=False
     )
-    return _login(request, session, "/panel/configuracion")
+    return _login(request, session, "/panel/home")
 
 
 def _invite_page(token: str, error: str = "") -> str:
@@ -146,4 +146,4 @@ def invitation_accept(request: Request, form: Form, deps: Deps) -> Response:
         admin=False,
         role=member.role,
     )
-    return _login(request, session, "/panel/casos")
+    return _login(request, session, "/panel/home")

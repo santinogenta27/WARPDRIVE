@@ -140,7 +140,7 @@ def company(conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch) -> Iterat
 
 
 def _csrf(client: TestClient) -> str:
-    found = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/configuracion").text)
+    found = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/deploy").text)
     assert found
     return found.group(1)
 
@@ -162,7 +162,7 @@ def _save(client: TestClient) -> str:
 
 
 def _webhook(client: TestClient) -> tuple[str, str]:
-    page = client.get("/panel/configuracion").text
+    page = client.get("/panel/deploy").text
     url = re.search(r'id="wa-webhook"[^>]*>([^<]+)<', page)
     verify = re.search(r'id="wa-verify"[^>]*>([^<]+)<', page)
     assert url and verify, "el panel muestra la URL del webhook y el verify token"
@@ -175,7 +175,7 @@ def test_el_formulario_guarda_todo_cifrado_y_no_lo_vuelve_a_mostrar(
 ) -> None:
     client, tenant, _ = company
     assert "ok=" in _save(client)
-    page = client.get("/panel/configuracion").text
+    page = client.get("/panel/deploy").text
     assert TOKEN not in page and APP_SECRET not in page
     assert PHONE_ID in page and WABA_ID in page
     row = conn.execute(
@@ -372,7 +372,7 @@ def test_la_guia_es_un_paso_a_paso_y_ya_no_dice_que_lo_conecta_el_operador(compa
     from app.panel import guides
 
     client, _, _ = company
-    page = client.get("/panel/configuracion").text
+    page = client.get("/panel/deploy").text
     assert "Lo conecta el operador" not in page
     for text in (guides.whatsapp_guide(english=False), guides.whatsapp_guide(english=True)):
         for needed in ("whatsapp_business_messaging", "whatsapp_business_management", "App Secret"):

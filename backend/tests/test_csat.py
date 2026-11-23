@@ -200,7 +200,7 @@ def test_metricas_muestra_el_csat(stack: SimulatedStack, monkeypatch: pytest.Mon
     try:
         client = TestClient(app)
         client.post("/panel/login", data={"email": ADMIN, "password": ADMIN_PASSWORD})
-        page = client.get("/panel/metricas").text
+        page = client.get("/panel/insights").text
     finally:
         app.dependency_overrides.clear()
     assert "Satisfacción" in page and "50%" in page

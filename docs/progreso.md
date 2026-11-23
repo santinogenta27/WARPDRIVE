@@ -799,6 +799,26 @@ Rama `h12-promesas`.
   - **Evals.** Caso nuevo `22_promesa_sin_aviso` y falla crítica `promesa_sin_aviso` en el runner, con la misma regla.
 - **Validado con Gemini real** (unas 15 llamadas). Gemini prometió "ni bien despachemos te vamos a enviar un email con el seguimiento". El control lo frenó, pero era un falso positivo: lo dice el documento de seguimiento de pedidos y lo manda la tienda. Ahora, si cita ese documento, la promesa vale. Además, la reescritura mostró una forma que no se detectaba ("cuando eso pase, te enviamos un email") y la agregué.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_promesas.py`.
+
+## Hito 13 — El panel desde los ojos del cliente (desde el 23 de noviembre de 2026)
+
+Rama de integración `hito-13` (sale de `main`). Una rama y un PR por tarea contra `hito-13`, mergeados con el CI en verde. Las pruebas locales corren contra `DATABASE_URL_STAGING`; la suite completa la corre el CI (unos 2 minutos).
+
+### Tarea 1 — Identidad y navegación (decisión 085)
+
+Rama `h13-navegacion`, PR #50.
+
+- **Hecho:**
+  - **Identidad:** "Enterprise Data AI · AI Support & Sales Agent" arriba de la barra lateral; la empresa del cliente es una etiqueta. Fuera "Panel del equipo" y los avisos de demo.
+  - **Barra lateral con 9 secciones** (Home, Inbox, Customers, Agent, Knowledge, Deploy, Test & Improve, Insights, Settings), con pestañas donde hace falta. La página de Configuración de ~7000 px se repartió en Agent (Rules, Actions, Topics, Brand & voice, Sales, Language), Deploy y Settings (Team, Usage & model, Your data).
+  - **Zona de operador** aparte (Companies, Trials, Billing, Behind the scenes), solo para el operador; una empresa de demo nuestra ve "Behind the scenes". Un cliente recibe 403.
+  - **Direcciones de antes** (`/panel/casos`, `/panel/configuracion`…) redirigen a la nueva con sus parámetros; sin sesión, al login.
+  - **Idioma y tema por usuario** (`users.preferences`, migración 0035): inglés por defecto, selector English/Español y tema oscuro en el pie de la barra lateral. Lo nuevo se escribe en inglés y `spanish.py` lo traduce; lo de antes sigue en español con `english.py`.
+  - **Tus datos:** el admin de una empresa exporta sus datos y borra su empresa escribiendo el nombre.
+- **Tests:** `test_panel_navegacion.py` (aceptación). Los de antes corren con el idioma de la empresa como idioma por defecto (`conftest.py`) y miran las direcciones nuevas.
+- **Ojo:** una corrida local de este test usó por error `DATABASE_URL` (la base de la demo) en vez de la de staging, así que la migración 0035 ya está aplicada ahí. Es aditiva (`add column if not exists`) y no cambia nada para la demo.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_navegacion.py`; `make api` y entrar a `/panel`.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

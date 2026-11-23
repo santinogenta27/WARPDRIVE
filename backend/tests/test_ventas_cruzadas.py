@@ -202,8 +202,8 @@ def test_el_panel_agrega_y_quita_productos_para_ofrecer(
 ) -> None:
     client = TestClient(app)
     client.post("/panel/login", data={"email": ACME_EMAIL, "password": ACME_PASSWORD})
-    page = client.get("/panel/configuracion").text
-    assert "Ventas cruzadas" in page
+    page = client.get("/panel/agent/sales").text
+    assert ">Ventas<" in page
     assert 'name="tipo_reembolso"' not in page  # un reclamo no se puede elegir
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None

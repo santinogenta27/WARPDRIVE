@@ -77,7 +77,7 @@ repite. Sirve para saber qué documento cargar. Los ejemplos no tienen datos per
     }</div>"""
 
 
-@router.get("/resultados", response_class=HTMLResponse)
+@router.get("/insights/results", response_class=HTMLResponse)
 def results_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -107,7 +107,7 @@ def results_page(request: Request, deps: Deps) -> Response:
 <p class="lead">Lo que resolvió el asistente, medido de forma auditable, y de qué hablan tus
 clientes.</p>
 <div class="card"><div class="row"><h2 class="grow" style="margin:0">Resolución autónoma</h2>
-<form method="get" action="/panel/resultados" class="row" style="gap:6px;margin:0">
+<form method="get" action="/panel/insights/results" class="row" style="gap:6px;margin:0">
 <input type="month" name="mes" value="{period}" aria-label="Mes" style="max-width:170px">
 <button type="submit">Ver</button></form>
 <a class="button" href="/panel/resultados/export?mes={period}">Exportar CSV</a></div>
@@ -126,7 +126,7 @@ ventana)</div></div></div>
 </span><p class="muted small">Cada lunes, un email a los admins con la semana anterior:
 conversaciones, resoluciones autónomas, derivaciones, CSAT, temas y preguntas sin
 respuesta.</p></div>{toggle}</div></div>"""
-    return HTMLResponse(page("Resultados", body, active="resultados", session=ctx.session))
+    return HTMLResponse(page("Resultados", body, active="insights/results", session=ctx.session))
 
 
 @router.get("/resultados/export")
@@ -154,4 +154,4 @@ def toggle_weekly(request: Request, form: Form, deps: Deps) -> Response:
         return _forbidden("Esta acción es solo para los admins de la empresa.")
     with deps.connection() as conn:
         weekly.set_enabled(conn, ctx.tenant_id, form.get("activo") == "si")
-    return RedirectResponse("/panel/resultados", status_code=303)
+    return RedirectResponse("/panel/insights/results", status_code=303)

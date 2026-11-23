@@ -183,7 +183,7 @@ def test_el_panel_lista_y_borra_documentos_indexados(
     client.post("/panel/login", data={"email": NORTE, "password": NORTE_PASSWORD})
 
     def csrf() -> str:
-        found = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/onboarding").text)
+        found = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/knowledge").text)
         assert found is not None
         return found.group(1)
 
@@ -194,7 +194,7 @@ def test_el_panel_lista_y_borra_documentos_indexados(
         follow_redirects=False,
     )
     assert response.status_code == 303, response.text
-    page = client.get("/panel/onboarding").text
+    page = client.get("/panel/knowledge").text
     assert "Documentos indexados" in page and "catalogo" in page
     document = ingestion.indexed_documents(conn, norte)[0]
     response = client.post(
@@ -204,4 +204,4 @@ def test_el_panel_lista_y_borra_documentos_indexados(
     )
     assert response.status_code == 303
     assert ingestion.indexed_documents(conn, norte) == []
-    assert "Sitio web" in client.get("/panel/onboarding").text
+    assert "Sitio web" in client.get("/panel/knowledge").text

@@ -103,10 +103,10 @@ def _suggestion(item: feedback.ToImprove) -> str:
     return f"""<div class="card" style="margin:8px 0;background:var(--soft, transparent)">
 <b>Cargá un documento que responda esta pregunta (por ejemplo, la política o la página de ayuda
 del tema).</b>{topic}{searched}
-<a href="/panel/onboarding">Subir documentos</a></div>"""
+<a href="/panel/knowledge">Subir documentos</a></div>"""
 
 
-@router.get("/mejorar", response_class=HTMLResponse)
+@router.get("/test/improve", response_class=HTMLResponse)
 def improve_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -139,7 +139,7 @@ coma)</label><input id="palabras-{i.id}" name="palabras" maxlength="300">
 <p class="lead">Las respuestas que el equipo marcó como incorrectas. Escribí la respuesta esperada
 y convertila en un caso de eval: el reporte de preparación la prueba junto con los demás.</p>
 {cards}"""
-    return HTMLResponse(page("Para mejorar", body, active="mejorar", session=ctx.session))
+    return HTMLResponse(page("Para mejorar", body, active="test/improve", session=ctx.session))
 
 
 @router.post("/mejorar/{review_id}/eval")
@@ -159,5 +159,5 @@ def create_eval(review_id: uuid.UUID, request: Request, form: Form, deps: Deps) 
                 created_by=user_id,
             )
         except feedback.ReviewError:
-            return RedirectResponse("/panel/mejorar", status_code=303)
-    return RedirectResponse("/panel/mejorar?aviso=eval-creado", status_code=303)
+            return RedirectResponse("/panel/test/improve", status_code=303)
+    return RedirectResponse("/panel/test/improve?aviso=eval-creado", status_code=303)

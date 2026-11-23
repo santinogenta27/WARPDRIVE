@@ -198,7 +198,7 @@ def _companies_page(ctx: Ctx, deps: PanelDeps, notice: str, created: str = "") -
 agente, aislados de las demás. Nace vacía: todo lo que su agente sabe sale de su propio
 onboarding.</p>{notice}{created}
 <div class="card"><h2 style="margin-top:0">Crear una empresa</h2>
-<form method="post" action="/panel/empresas">{_csrf(ctx)}
+<form method="post" action="/panel/operator/companies">{_csrf(ctx)}
 <label for="nombre">Nombre de la empresa</label>
 <input id="nombre" name="nombre" required maxlength="80">
 <label for="email">Email del usuario</label>
@@ -210,10 +210,10 @@ onboarding.</p>{notice}{created}
 <div class="card"><h2 style="margin-top:0">Empresas creadas</h2>{table}</div>
 <div class="card"><h2 style="margin-top:0">Registro del operador</h2>{log}
 <p class="muted small">Altas y borrados de empresas. No se puede modificar ni borrar.</p></div>"""
-    return HTMLResponse(page("Empresas", body, active="empresas", session=ctx.session))
+    return HTMLResponse(page("Empresas", body, active="operator/companies", session=ctx.session))
 
 
-@router.get("/empresas", response_class=HTMLResponse)
+@router.get("/operator/companies", response_class=HTMLResponse)
 def companies_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -224,6 +224,7 @@ def companies_page(request: Request, deps: Deps) -> Response:
 
 
 @router.post("/empresas")
+@router.post("/operator/companies")
 def create_company_route(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
     if isinstance(ctx, Response):
@@ -239,7 +240,7 @@ def create_company_route(request: Request, form: Form, deps: Deps) -> Response:
                 conn, ctx.session.email, "company_created", company.tenant_id, company.name
             )
     except CompanyError as error:
-        return _back("empresas", error=str(error))
+        return _back("operator/companies", error=str(error))
     created = f"""<div class="card okmsg"><b>{esc(company.name)} quedó creada.</b>
 <p>Para entrar a su panel: cerrá esta sesión e ingresá con el email y la clave que cargaste.
 La clave no se vuelve a mostrar.</p>
@@ -248,7 +249,7 @@ La clave no se vuelve a mostrar.</p>
 
 
 # -- onboarding ------------------------------------------------------------------------------
-@router.get("/onboarding", response_class=HTMLResponse)
+@router.get("/knowledge", response_class=HTMLResponse)
 def onboarding_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -296,8 +297,8 @@ def onboarding_page(request: Request, deps: Deps) -> Response:
         )
     done = (
         '<div class="card okmsg"><b>El análisis terminó.</b> Mirá el '
-        '<a href="/panel/reporte">reporte de preparación</a> y después revisá y aprobá los tipos '
-        'de caso y las herramientas en <a href="/panel/configuracion">Configuración</a>.</div>'
+        '<a href="/panel/test">reporte de preparación</a> y después revisá y aprobá los tipos '
+        'de caso y las herramientas en <a href="/panel/agent/topics">Configuración</a>.</div>'
         if run is not None and run.status == "done" and not running
         else ""
     )
@@ -337,7 +338,7 @@ actualiza las páginas.</p><button type="submit">Leer el sitio</button></form></
         page(
             "Onboarding",
             body,
-            active="onboarding",
+            active="knowledge",
             session=ctx.session,
             refresh=8 if running else None,
         )
@@ -372,7 +373,7 @@ def delete_indexed(document_id: uuid.UUID, request: Request, form: Form, deps: D
         found = ingestion.delete_document(conn, ctx.tenant_id, document_id)
     if not found:
         return _not_found("Ese documento", ctx.session)
-    return _back("onboarding", ok="Documento borrado: el asistente ya no lo usa.")
+    return _back("knowledge", ok="Documento borrado: el asistente ya no lo usa.")
 
 
 @router.post("/onboarding/sitio")
@@ -382,11 +383,11 @@ async def read_site(request: Request, form: Form, deps: Deps) -> Response:
         return ctx
     url = form.get("sitio", "").strip()
     if not url.lower().startswith(("http://", "https://")):
-        return _back("onboarding", error="La dirección tiene que empezar con https://.")
+        return _back("knowledge", error="La dirección tiene que empezar con https://.")
     result = await run_in_threadpool(_ingest, deps, ctx.tenant_id, [Upload(url, b"")])
     if result.unreadable:
-        return _back("onboarding", error=" ".join(result.unreadable))
-    return _back("onboarding", ok=f"Se leyeron {result.documents} páginas del sitio.")
+        return _back("knowledge", error=" ".join(result.unreadable))
+    return _back("knowledge", ok=f"Se leyeron {result.documents} páginas del sitio.")
 
 
 def _pending_html(ctx: Ctx, waiting: list[ingestion.PendingDocument]) -> str:
@@ -422,16 +423,16 @@ def _ingest(deps: PanelDeps, tenant_id: uuid.UUID, files: list[Upload]) -> Any:
 @router.post("/onboarding/fuentes")
 async def upload_sources(request: Request, data: Files, deps: Deps) -> Response:
     if data.too_big:
-        return _back("onboarding", error="El envío supera los 50 MB.")
+        return _back("knowledge", error="El envío supera los 50 MB.")
     ctx = enter(request, deps, data.fields)
     if isinstance(ctx, Response):
         return ctx
     if not data.files:
-        return _back("onboarding", error="Elegí al menos un archivo.")
+        return _back("knowledge", error="Elegí al menos un archivo.")
     try:
         result = await run_in_threadpool(_ingest, deps, ctx.tenant_id, data.files)
     except onboarding.OnboardingError as error:
-        return _back("onboarding", error=str(error))
+        return _back("knowledge", error=str(error))
     summary = (
         f"Subiste {result.sources} archivos: {result.conversations} conversaciones y "
         f"{result.documents} documentos."
@@ -447,8 +448,8 @@ async def upload_sources(request: Request, data: Files, deps: Deps) -> Response:
     ]
     warning = " ".join([*result.unreadable, *waiting])
     if not result.sources and not result.skipped:
-        return _back("onboarding", warning=warning) if warning else _back("onboarding", ok=summary)
-    return _back("onboarding", ok=summary, warning=warning)
+        return _back("knowledge", warning=warning) if warning else _back("knowledge", ok=summary)
+    return _back("knowledge", ok=summary, warning=warning)
 
 
 @router.post("/onboarding/documentos/{document_id}/{action}")
@@ -473,7 +474,7 @@ async def decide_pending_document(
     if name is None:
         return _not_found("Ese documento", ctx.session)
     done = "quedó indexado" if action == "indexar" else "se descartó: no quedó nada guardado"
-    return _back("onboarding", ok=f"{name} {done}.")
+    return _back("knowledge", ok=f"{name} {done}.")
 
 
 @router.post("/onboarding/nombres")
@@ -483,7 +484,7 @@ def save_business_names(request: Request, form: Form, deps: Deps) -> Response:
         return ctx
     with deps.connection() as conn:
         onboarding.set_business_names(conn, ctx.tenant_id, form.get("nombres", "").split(","))
-    return _back("onboarding", ok="Nombres guardados.")
+    return _back("knowledge", ok="Nombres guardados.")
 
 
 @router.post("/onboarding/iniciar")
@@ -496,9 +497,9 @@ def start_onboarding(request: Request, form: Form, deps: Deps) -> Response:
             user_id = _user_id(conn, ctx.tenant_id, ctx.session.email)
             onboarding.start_run(conn, ctx.tenant_id, user_id)
     except onboarding.OnboardingError as error:
-        return _back("onboarding", error=str(error))
+        return _back("knowledge", error=str(error))
     deps.kick_worker()  # con la corrida ya confirmada en la cola
-    return _back("onboarding", ok="El análisis empezó.")
+    return _back("knowledge", ok="El análisis empezó.")
 
 
 ONLY_OPERATOR_DELETES = "Solo el operador de la plataforma puede borrar una empresa."
@@ -542,7 +543,7 @@ def delete_company_page(tenant_id: uuid.UUID, request: Request, deps: Deps) -> R
     items = "".join(f"<li><b>{count}</b> {esc(label)}</li>" for label, count in known)
     if other:
         items += f"<li><b>{other}</b> filas más (configuración, uso, sesiones del chat…)</li>"
-    body = f"""<p><a href="/panel/empresas">← Empresas</a></p>
+    body = f"""<p><a href="/panel/operator/companies">← Empresas</a></p>
 <div class="card alert" style="max-width:640px;color:var(--ink)">
 <h1 style="color:var(--bad)">Borrar {esc(name)}</h1>
 <p><b>Esto no se puede deshacer.</b> Se borran todos los datos de la empresa:</p>
@@ -554,8 +555,10 @@ sin datos de la empresa.</p>
 <label for="nombre">Para confirmar, escribí el nombre de la empresa: {esc(name)}</label>
 <input id="nombre" name="nombre" required autocomplete="off">
 <p class="row"><button class="danger" type="submit">Borrar la empresa y todos sus datos</button>
-<a class="btn" href="/panel/empresas">Cancelar</a></p></form></div>"""
-    return HTMLResponse(page("Borrar empresa", body, active="empresas", session=ctx.session))
+<a class="btn" href="/panel/operator/companies">Cancelar</a></p></form></div>"""
+    return HTMLResponse(
+        page("Borrar empresa", body, active="operator/companies", session=ctx.session)
+    )
 
 
 @router.post("/empresas/{tenant_id}/borrar")
@@ -573,10 +576,11 @@ def delete_company_route(
                 conn, tenant_id, operator=ctx.session.email, confirm_name=form.get("nombre", "")
             )
     except removal.DeleteError as error:
-        return _back("empresas", error=str(error))
+        return _back("operator/companies", error=str(error))
     total = sum(deleted.values())
     return _back(
-        "empresas", ok=f"La empresa quedó borrada: {total} filas en {len(deleted)} tablas."
+        "operator/companies",
+        ok=f"La empresa quedó borrada: {total} filas en {len(deleted)} tablas.",
     )
 
 
@@ -593,7 +597,7 @@ def _types_html(ctx: Ctx, types: list[review.CaseType], approved: set[str]) -> s
     if not types:
         return (
             '<p class="muted">Todavía no hay tipos de caso. Salen del análisis del '
-            '<a href="/panel/onboarding">onboarding</a>.</p>'
+            '<a href="/panel/knowledge">onboarding</a>.</p>'
         )
     cards = []
     for kind in types:
@@ -1044,7 +1048,7 @@ aparece en Casos.</p></div></div></form></div>
 @router.post("/configuracion/widget")
 async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
     if data.too_big:
-        return _back("configuracion", error="El logo es demasiado grande.")
+        return _back("deploy", error="El logo es demasiado grande.")
     ctx = enter(request, deps, data.fields)
     if isinstance(ctx, Response):
         return ctx
@@ -1064,8 +1068,8 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
                 greeting=fields.get("saludo", ""),
             )
     except widget.WidgetError as error:
-        return _back("configuracion", error=str(error))
-    return _back("configuracion", ok="Widget guardado.")
+        return _back("deploy", error=str(error))
+    return _back("deploy", ok="Widget guardado.")
 
 
 def _language_html(ctx: Ctx, language: str) -> str:
@@ -1090,10 +1094,10 @@ def save_language(request: Request, form: Form, deps: Deps) -> Response:
         return ctx
     choice = form.get("idioma", "")
     if choice not in i18n.LANGUAGES:
-        return _back("configuracion", error="Elegí un idioma de la lista.")
+        return _back("agent/language", error="Elegí un idioma de la lista.")
     with deps.connection() as conn:
         i18n.set_language(conn, ctx.tenant_id, choice)
-    return _back("configuracion", ok=f"Idioma guardado: {i18n.NAMES[choice]}.")
+    return _back("agent/language", ok=f"Idioma guardado: {i18n.NAMES[choice]}.")
 
 
 def _voice_html(ctx: Ctx, found: brand_voice.Voice, language: str) -> str:
@@ -1151,8 +1155,8 @@ def save_voice(request: Request, form: Form, deps: Deps) -> Response:
                 firma=form.get("firma", ""),
             )
     except brand_voice.VoiceError as error:
-        return _back("configuracion", error=str(error))
-    return _back("configuracion", ok="Voz de marca guardada.")
+        return _back("agent/voice", error=str(error))
+    return _back("agent/voice", ok="Voz de marca guardada.")
 
 
 def _supervised_html(ctx: Ctx, on: bool) -> str:
@@ -1198,7 +1202,7 @@ def save_answer_supervisor(request: Request, form: Form, deps: Deps) -> Response
     with deps.connection() as conn:
         answer_supervisor.set_enabled(conn, ctx.tenant_id, on)
     state = "activado" if on else "desactivado"
-    return _back("configuracion", ok=f"Supervisor de respuestas {state}.")
+    return _back("agent", ok=f"Supervisor de respuestas {state}.")
 
 
 @router.post("/configuracion/supervisado")
@@ -1209,7 +1213,7 @@ def save_supervised(request: Request, form: Form, deps: Deps) -> Response:
     on = form.get("activo") == "si"
     with deps.connection() as conn:
         supervision.set_enabled(conn, ctx.tenant_id, on)
-    return _back("configuracion", ok=f"Modo supervisado {'activado' if on else 'desactivado'}.")
+    return _back("agent", ok=f"Modo supervisado {'activado' if on else 'desactivado'}.")
 
 
 def _behind_html(ctx: Ctx, slug: str | None, on: bool) -> str:
@@ -1243,7 +1247,7 @@ def save_behind(request: Request, form: Form, deps: Deps) -> Response:
     with deps.connection() as conn:
         behind.set_enabled(conn, ctx.tenant_id, on)
     state = "activada" if on else "desactivada"
-    return _back("configuracion", ok=f"Vista detrás de escena {state}.")
+    return _back("operator/behind", ok=f"Vista detrás de escena {state}.")
 
 
 def _model_html(ctx: Ctx, conn: Any) -> str:
@@ -1334,10 +1338,10 @@ def save_rules(request: Request, form: Form, deps: Deps) -> Response:
         )
         handoff = rules.parse_handoff_email(form.get("derivar_a", ""))
     except rules.RulesError as error:
-        return _back("configuracion", error=str(error))
+        return _back("agent", error=str(error))
     with deps.connection() as conn:
         rules.save(conn, ctx.tenant_id, hours, handoff)
-    return _back("configuracion", ok="Reglas de atención guardadas.")
+    return _back("agent", ok="Reglas de atención guardadas.")
 
 
 def _upsell_html(ctx: Ctx, found: list[upsell.Rule], kinds: list[str]) -> str:
@@ -1391,8 +1395,8 @@ def add_upsell(request: Request, form: Form, deps: Deps) -> Response:
         with deps.connection() as conn:
             upsell.add(conn, ctx.tenant_id, form.get("producto", ""), kinds, discount)
     except upsell.UpsellError as error:
-        return _back("configuracion", error=str(error))
-    return _back("configuracion", ok="Producto para ofrecer agregado.")
+        return _back("agent/sales", error=str(error))
+    return _back("agent/sales", ok="Producto para ofrecer agregado.")
 
 
 @router.post("/configuracion/ventas/{rule_id}/borrar")
@@ -1402,7 +1406,7 @@ def remove_upsell(rule_id: uuid.UUID, request: Request, form: Form, deps: Deps) 
         return ctx
     with deps.connection() as conn:
         upsell.remove(conn, ctx.tenant_id, rule_id)
-    return _back("configuracion", ok="Producto quitado.")
+    return _back("agent/sales", ok="Producto quitado.")
 
 
 @router.post("/configuracion/modelo")
@@ -1416,9 +1420,9 @@ def save_model(request: Request, form: Form, deps: Deps) -> Response:
     try:
         cap = Decimal(raw) if raw else None
     except InvalidOperation:
-        return _back("configuracion", error="El tope tiene que ser un número.")
+        return _back("settings/usage", error="El tope tiene que ser un número.")
     if cap is not None and cap < 0:
-        return _back("configuracion", error="El tope no puede ser negativo.")
+        return _back("settings/usage", error="El tope no puede ser negativo.")
     with deps.connection() as conn:
         if choice == "plataforma":
             tenant_llm.clear_key(conn, ctx.tenant_id)
@@ -1427,78 +1431,257 @@ def save_model(request: Request, form: Form, deps: Deps) -> Response:
                 try:
                     tenant_llm.save_key(conn, ctx.tenant_id, choice, key)
                 except ValueError as error:
-                    return _back("configuracion", error=str(error))
+                    return _back("settings/usage", error=str(error))
             elif tenant_llm.own_provider(conn, ctx.tenant_id) != choice:
-                return _back("configuracion", error="Falta la API key de ese proveedor.")
+                return _back("settings/usage", error="Falta la API key de ese proveedor.")
         else:
-            return _back("configuracion", error="Elegí un proveedor de la lista.")
+            return _back("settings/usage", error="Elegí un proveedor de la lista.")
         spending.set_budget(conn, ctx.tenant_id, cap)
-    return _back("configuracion", ok="Modelo y tope guardados.")
+    return _back("settings/usage", ok="Modelo y tope guardados.")
 
 
-@router.get("/configuracion", response_class=HTMLResponse)
-def settings_page(request: Request, deps: Deps) -> Response:
+# Una línea de ayuda por pantalla, en lenguaje simple (decisión 085).
+LEADS = {
+    "Rules": (
+        "When your agent answers, when it hands off to your team, and how much it can do on its"
+        " own."
+    ),
+    "Actions": (
+        "What your agent can do in your store, like looking up an order or starting a refund. "
+        "Nothing runs until you approve it."
+    ),
+    "Topics": (
+        "The kinds of questions your customers ask, learned from your history. Turn on the ones"
+        " your agent should handle."
+    ),
+    "Brand & voice": ("How your agent sounds: its tone, the words it uses and how it signs off."),
+    "Sales": ("Products your agent can suggest after it solves the customer's question."),
+    "Language": (
+        "The language your agent uses with your customers. Your own dashboard language is in "
+        "the menu."
+    ),
+    "Deploy": ("Connect your store, put the agent on your website and WhatsApp, and go live."),
+    "Usage & model": (
+        "What your agent costs this month, your spending cap and the AI model it uses."
+    ),
+    "Your data": ("Your data is yours: take it with you or delete it."),
+    "Behind the scenes": ("The public demo page that shows each step of a case next to the chat."),
+}
+
+
+# -- secciones del panel (decisión 085): lo que antes era una sola página de Configuración --------
+def head(title: str, lead: str = "", actions: str = "") -> str:
+    """Encabezado de una pantalla: título, una línea de ayuda y acciones a la derecha."""
+    help_line = f'<p class="lead">{esc(lead)}</p>' if lead else ""
+    return f'<div class="pagehead"><div><h1>{esc(title)}</h1>{help_line}</div>{actions}</div>'
+
+
+def _section(request: Request, ctx: Ctx, active: str, title: str, body: str) -> HTMLResponse:
+    return HTMLResponse(page(title, _notice(request) + body, active=active, session=ctx.session))
+
+
+@router.get("/agent", response_class=HTMLResponse)
+def agent_rules_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
+        supervised = _supervised_html(ctx, supervision.enabled(conn, ctx.tenant_id))
+        reviewer = _answer_supervisor_html(
+            ctx,
+            answer_supervisor.enabled(conn, ctx.tenant_id),
+            answer_supervisor.stats(conn, ctx.tenant_id),
+        )
+    body = f"""{head("Rules", LEADS["Rules"])}
+<h2>Business hours and hand-offs</h2>{attention}
+<h2>Review before sending</h2>{supervised}
+<h2>Answer check</h2>{reviewer}"""
+    return _section(request, ctx, "agent", "Rules", body)
+
+
+@router.get("/agent/actions", response_class=HTMLResponse)
+def agent_actions_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        tools = review.tools(conn, ctx.tenant_id)
+    body = f"""{head("Actions", LEADS["Actions"])}
+{_tools_html(ctx, tools)}"""
+    return _section(request, ctx, "agent/actions", "Actions", body)
+
+
+@router.get("/agent/topics", response_class=HTMLResponse)
+def agent_topics_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
         return ctx
     with deps.connection() as conn:
         types = review.case_types(conn, ctx.tenant_id)
         tools = review.tools(conn, ctx.tenant_id)
+    approved = {t.name for t in tools if t.approved}
+    body = f"""{head("Topics", LEADS["Topics"])}
+{_types_html(ctx, types, approved)}"""
+    return _section(request, ctx, "agent/topics", "Topics", body)
+
+
+@router.get("/agent/voice", response_class=HTMLResponse)
+def agent_voice_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        language = i18n.tenant_language(conn, ctx.tenant_id)
+        voice_found = brand_voice.load(conn, ctx.tenant_id)
+    body = f"""{head("Brand & voice", LEADS["Brand & voice"])}
+{_voice_html(ctx, voice_found, language)}"""
+    return _section(request, ctx, "agent/voice", "Brand & voice", body)
+
+
+@router.get("/agent/sales", response_class=HTMLResponse)
+def agent_sales_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        offers = _upsell_html(
+            ctx, upsell.load(conn, ctx.tenant_id), upsell.eligible_types(conn, ctx.tenant_id)
+        )
+    body = f"""{head("Sales", LEADS["Sales"])}
+{offers}"""
+    return _section(request, ctx, "agent/sales", "Sales", body)
+
+
+@router.get("/agent/language", response_class=HTMLResponse)
+def agent_language_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        language = i18n.tenant_language(conn, ctx.tenant_id)
+    body = f"""{head("Language", LEADS["Language"])}
+{_language_html(ctx, language)}"""
+    return _section(request, ctx, "agent/language", "Language", body)
+
+
+@router.get("/deploy", response_class=HTMLResponse)
+def deploy_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
         found = system.load(conn, ctx.tenant_id)
         mode = system.mode_for(conn, ctx.tenant_id)
         slug = chat_slug(conn, ctx.tenant_id)
         brand = widget.load(conn, ctx.tenant_id)
-        language = i18n.tenant_language(conn, ctx.tenant_id)
-        behind_on = behind.enabled(conn, ctx.tenant_id)
-        supervised = supervision.enabled(conn, ctx.tenant_id)
-        voice_found = brand_voice.load(conn, ctx.tenant_id)
-        reviewer = _answer_supervisor_html(
-            ctx,
-            answer_supervisor.enabled(conn, ctx.tenant_id),
-            answer_supervisor.stats(conn, ctx.tenant_id),
-        )
         whatsapp_setup = whatsapp.load(conn, ctx.tenant_id)
-        model = _model_html(ctx, conn)
-        attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
-        offers = _upsell_html(
-            ctx, upsell.load(conn, ctx.tenant_id), upsell.eligible_types(conn, ctx.tenant_id)
-        )
-    approved = {t.name for t in tools if t.approved}
-    chat = (
-        f"<p>Probá el asistente de {esc(ctx.session.company)} en su propio chat: "
-        f'<a href="/c/{esc(slug)}" target="_blank" rel="noopener">/c/{esc(slug)}</a></p>'
-        '<p class="muted small">Usa los tipos de caso activos, las herramientas aprobadas y tus '
-        "documentos. Las conversaciones aparecen en Casos.</p>"
-        if slug and not ctx.session.admin
-        else '<p>El chat de la demo está en <a href="/" target="_blank" rel="noopener">la '
-        "página principal</a>.</p>"
-        if ctx.session.admin
-        else '<p class="muted">Esta empresa no tiene un chat web.</p>'
-    )
-    body = f"""<h1>Configuración</h1><p class="lead">Revisá lo que encontró el análisis y decidí
-qué usa el asistente. Lo que activás o aprobás acá pasa al asistente en vivo en el momento; nada
-queda activo sin tu aprobación.</p>{_notice(request)}
-<h2>Idioma</h2>{_language_html(ctx, language)}
-<h2>Voz de marca</h2>{_voice_html(ctx, voice_found, language)}
-<h2>Modo supervisado</h2>{_supervised_html(ctx, supervised)}
-<h2>Supervisor de respuestas</h2>{reviewer}
-<h2>Modelo y gasto</h2>{model}
-<h2 id="reglas">Reglas de atención</h2>{attention}
-<h2>Ventas cruzadas</h2>{offers}
-<h2>Tipos de caso</h2>{_types_html(ctx, types, approved)}
-<h2>Herramientas</h2>{_tools_html(ctx, tools)}
-<h2>Sistema de la empresa</h2>{_system_html(ctx, found, mode)}
-<h2>{"Channels" if english.english() else "Canales"}</h2>{
-        _whatsapp_html(ctx, request, whatsapp_setup)
-    }
-<h2>Chat de prueba</h2><div class="card">{chat}</div>
-<h2 id="widget">Widget para tu sitio</h2>{
+    site = (
         _widget_html(ctx, request, slug, brand)
         if slug
-        else '<p class="muted">Esta empresa no tiene un chat web.</p>'
-    }
-<h2>Vista detrás de escena</h2>{_behind_html(ctx, slug, behind_on)}"""
-    return HTMLResponse(page("Configuración", body, active="configuracion", session=ctx.session))
+        else '<div class="card empty">This company has no web chat.</div>'
+    )
+    body = f"""{head("Deploy", LEADS["Deploy"])}
+<h2>Connect your store</h2>{_system_html(ctx, found, mode)}
+<h2 id="widget">Add the chat to your website</h2>{site}
+<h2>WhatsApp</h2>{_whatsapp_html(ctx, request, whatsapp_setup)}"""
+    return _section(request, ctx, "deploy", "Deploy", body)
+
+
+@router.get("/settings/usage", response_class=HTMLResponse)
+def settings_usage_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    with deps.connection() as conn:
+        model = _model_html(ctx, conn)
+    body = f"""{head("Usage & model", LEADS["Usage & model"])}
+{model}"""
+    return _section(request, ctx, "settings/usage", "Usage & model", body)
+
+
+def _owner(ctx: Ctx) -> bool:
+    return not ctx.session.admin and ctx.session.role != "agent"
+
+
+@router.get("/settings/data", response_class=HTMLResponse)
+def settings_data_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    company = esc(ctx.session.company)
+    if ctx.session.admin:
+        actions = (
+            '<div class="card"><p>The demo company is managed from '
+            '<a href="/panel/operator/companies">Companies</a>.</p></div>'
+        )
+    else:
+        actions = f"""<div class="card"><h2>Export your data</h2>
+<p class="muted">Download everything {company} has here (conversations, customers, knowledge,
+rules and settings) as a .zip file. Passwords and keys are never included.</p>
+<a class="btn" href="/panel/settings/data/export">Download .zip</a></div>
+<div class="card alert"><h2>Delete your company</h2>
+<p>This permanently deletes {company} and all its data: conversations, customers, knowledge,
+users and connections. <b>It can't be undone.</b></p>
+<form method="post" action="/panel/settings/data/delete">{_csrf(ctx)}
+<label for="nombre">Type <b>{company}</b> to confirm</label>
+<input id="nombre" name="nombre" required autocomplete="off">
+<p><button class="danger solid" type="submit">Delete company and all data</button></p>
+</form></div>"""
+    body = f"""{head("Your data", LEADS["Your data"])}{actions}"""
+    return _section(request, ctx, "settings/data", "Your data", body)
+
+
+@router.get("/settings/data/export")
+def export_own_company(request: Request, deps: Deps) -> Response:
+    """Los datos de la propia empresa en un .zip, sin secretos (decisiones 055 y 085)."""
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    if not _owner(ctx):
+        return _forbidden("Esta sección es solo para los admins de la empresa.")
+    with deps.connection() as conn:
+        data = export.export_company(conn, ctx.tenant_id, operator=ctx.session.email)
+    return Response(
+        data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="empresa-{ctx.tenant_id}.zip"'},
+    )
+
+
+@router.post("/settings/data/delete")
+def delete_own_company(request: Request, form: Form, deps: Deps) -> Response:
+    """La empresa borra todos sus datos: hay que escribir su nombre (decisión 085)."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    if not _owner(ctx):
+        return _forbidden("Esta sección es solo para los admins de la empresa.")
+    try:
+        with deps.connection() as conn:
+            removal.delete_company(
+                conn, ctx.tenant_id, operator=ctx.session.email, confirm_name=form.get("nombre", "")
+            )
+    except removal.DeleteError as error:
+        return _back("settings/data", error=str(error))
+    response = RedirectResponse("/panel/login", status_code=303)
+    response.delete_cookie(auth.COOKIE, path="/panel")
+    return response
+
+
+@router.get("/operator/behind", response_class=HTMLResponse)
+def operator_behind_page(request: Request, deps: Deps) -> Response:
+    ctx = enter(request, deps)
+    if isinstance(ctx, Response):
+        return ctx
+    if not ctx.can_reset:  # el operador o una empresa de demo nuestra
+        return _forbidden("Solo el operador de la plataforma puede ver esta sección.")
+    with deps.connection() as conn:
+        slug = chat_slug(conn, ctx.tenant_id)
+        behind_on = behind.enabled(conn, ctx.tenant_id)
+    body = f"""{head("Behind the scenes", LEADS["Behind the scenes"])}
+{_behind_html(ctx, slug, behind_on)}"""
+    return _section(request, ctx, "operator/behind", "Behind the scenes", body)
 
 
 @router.post("/configuracion/tipos/{type_id}")
@@ -1518,10 +1701,10 @@ def update_case_type(type_id: uuid.UUID, request: Request, form: Form, deps: Dep
                 instructions=instructions.strip() + "\n" if instructions is not None else None,
             )
     except review.ReviewError as error:
-        return _back("configuracion", error=str(error))
+        return _back("agent/topics", error=str(error))
     if not found:
         return _not_found("Ese tipo de caso", ctx.session)
-    return _back("configuracion", ok="Tipo de caso actualizado.")
+    return _back("agent/topics", ok="Tipo de caso actualizado.")
 
 
 @router.post("/configuracion/herramientas/{tool_id}")
@@ -1554,16 +1737,16 @@ def update_tool(tool_id: uuid.UUID, request: Request, form: Form, deps: Deps) ->
                 always_approval=form.get("siempre") == "si" if rules_sent and writes else None,
             )
     except review.ReviewError as error:
-        return _back("configuracion", error=str(error))
+        return _back("agent/actions", error=str(error))
     if not found:
         return _not_found("Esa herramienta", ctx.session)
-    return _back("configuracion", ok="Herramienta actualizada.")
+    return _back("agent/actions", ok="Herramienta actualizada.")
 
 
 @router.post("/configuracion/sistema/openapi")
 async def save_openapi(request: Request, data: Files, deps: Deps) -> Response:
     if data.too_big:
-        return _back("configuracion", error="El archivo es demasiado grande.")
+        return _back("deploy", error="El archivo es demasiado grande.")
     ctx = enter(request, deps, data.fields)
     if isinstance(ctx, Response):
         return ctx
@@ -1573,13 +1756,13 @@ async def save_openapi(request: Request, data: Files, deps: Deps) -> Response:
         else data.fields.get("texto", "")
     )
     if not text.strip():
-        return _back("configuracion", error="Subí o pegá el OpenAPI.")
+        return _back("deploy", error="Subí o pegá el OpenAPI.")
     try:
         with deps.connection() as conn:
             found = system.save_openapi(conn, ctx.tenant_id, text)
     except system.ConnectionError_ as error:
-        return _back("configuracion", error=str(error))
-    return _back("configuracion", ok=f"OpenAPI guardado: {found.operations} operaciones.")
+        return _back("deploy", error=str(error))
+    return _back("deploy", ok=f"OpenAPI guardado: {found.operations} operaciones.")
 
 
 @router.post("/configuracion/sistema/acceso")
@@ -1598,8 +1781,8 @@ def save_access(request: Request, form: Form, deps: Deps) -> Response:
                 secret=form.get("credencial") or None,
             )
     except system.ConnectionError_ as error:
-        return _back("configuracion", error=str(error))
-    return _back("configuracion", ok="Acceso guardado. Ahora probá la conexión.")
+        return _back("deploy", error=str(error))
+    return _back("deploy", ok="Acceso guardado. Ahora probá la conexión.")
 
 
 @router.post("/configuracion/sistema/probar")
@@ -1611,10 +1794,10 @@ def test_system(request: Request, form: Form, deps: Deps) -> Response:
         with deps.connection() as conn:
             result = system.test_connection(conn, ctx.tenant_id, client_factory=deps.client_factory)
     except system.ConnectionError_ as error:
-        return _back("configuracion", error=str(error))
+        return _back("deploy", error=str(error))
     if result["ok"]:
-        return _back("configuracion", ok="La prueba de conexión pasó. Ya podés activar.")
-    return _back("configuracion", error=f"La prueba de conexión falló: {result['detalle']}")
+        return _back("deploy", ok="La prueba de conexión pasó. Ya podés activar.")
+    return _back("deploy", error=f"La prueba de conexión falló: {result['detalle']}")
 
 
 @router.post("/configuracion/sistema/plataforma")
@@ -1640,7 +1823,7 @@ def connect_platform(request: Request, form: Form, deps: Deps) -> Response:
             )
     except (ValueError, httpx.HTTPError) as error:
         detail = str(error) if isinstance(error, ValueError) else "Shopify no respondió."
-        return _back("configuracion", error=detail)
+        return _back("deploy", error=detail)
     return _back(
         "configuracion",
         ok="Tienda conectada. Probá la conexión y aprobá sus herramientas.",
@@ -1660,11 +1843,11 @@ def install_shopify(request: Request, form: Form, deps: Deps) -> Response:
         return ctx
     app_keys = shopify_auth.app_credentials()
     if app_keys is None:
-        return _back("configuracion", error="La instalación con Shopify no está configurada.")
+        return _back("deploy", error="La instalación con Shopify no está configurada.")
     try:
         shop = shopify.clean_shop(form.get("tienda", ""))
     except ValueError as error:
-        return _back("configuracion", error=str(error))
+        return _back("deploy", error=str(error))
     state = shopify_auth.make_state(ctx.tenant_id, shop)
     callback = f"{_public_url(request)}{OAUTH_PATH}/callback"
     response = RedirectResponse(
@@ -1694,7 +1877,7 @@ def shopify_callback(request: Request, deps: Deps) -> Response:
 
     def fail(message: str, *, used: bool = False) -> Response:
         # Un callback falso no borra la cookie: no puede cortar una instalación en curso.
-        response = _back("configuracion", error=message)
+        response = _back("deploy", error=message)
         if used:
             response.delete_cookie(OAUTH_COOKIE, path=OAUTH_PATH)
         return response
@@ -1745,10 +1928,10 @@ def probe_system_tools(request: Request, form: Form, deps: Deps) -> Response:
                 conn, ctx.tenant_id, form.get("ejemplo", ""), client_factory=deps.client_factory
             )
     except system.ConnectionError_ as error:
-        return _back("configuracion", error=str(error))
+        return _back("deploy", error=str(error))
     summary = " · ".join(f"{tool_label(r['herramienta'])}: {r['detalle']}" for r in results)
     failed = any(r["ok"] is False for r in results)
-    return _back("configuracion", **({"warning": summary} if failed else {"ok": summary}))
+    return _back("deploy", **({"warning": summary} if failed else {"ok": summary}))
 
 
 @router.post("/configuracion/sistema/activar")
@@ -1760,8 +1943,8 @@ def activate_system(request: Request, form: Form, deps: Deps) -> Response:
         with deps.connection() as conn:
             system.activate(conn, ctx.tenant_id)
     except system.ConnectionError_ as error:
-        return _back("configuracion", error=str(error))
-    return _back("configuracion", ok="Listo: el asistente ya usa tu sistema real.")
+        return _back("deploy", error=str(error))
+    return _back("deploy", ok="Listo: el asistente ya usa tu sistema real.")
 
 
 @router.post("/configuracion/sistema/desactivar")
@@ -1771,7 +1954,7 @@ def deactivate_system(request: Request, form: Form, deps: Deps) -> Response:
         return ctx
     with deps.connection() as conn:
         system.deactivate(conn, ctx.tenant_id)
-    return _back("configuracion", ok="El asistente volvió al modo simulado.")
+    return _back("deploy", ok="El asistente volvió al modo simulado.")
 
 
 # -- Canales → WhatsApp (self-service, decisión 068) ------------------------------------------
@@ -1785,12 +1968,12 @@ def _whatsapp_action(
         with deps.connection() as conn:
             message = action(conn, ctx.tenant_id)
     except whatsapp.SetupError as error:
-        return _back("configuracion", error=str(error))
+        return _back("deploy", error=str(error))
     except httpx.HTTPError as error:
-        return _back("configuracion", error=f"Meta no respondió ({type(error).__name__}).")
+        return _back("deploy", error=f"Meta no respondió ({type(error).__name__}).")
     if isinstance(message, tuple):
-        return _back("configuracion", error=message[0])
-    return _back("configuracion", ok=message)
+        return _back("deploy", error=message[0])
+    return _back("deploy", ok=message)
 
 
 @router.post("/configuracion/whatsapp")

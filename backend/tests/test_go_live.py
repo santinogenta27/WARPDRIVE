@@ -111,10 +111,10 @@ def test_el_playground_y_el_boton_de_salir_en_vivo(
     playground = client.get("/panel/probar")
     assert playground.status_code == 200 and "/panel/probar/live" in playground.text
     _report(conn, tenant, 0.5, 4)
-    page = client.get("/panel/reporte").text
+    page = client.get("/panel/test").text
     assert "Salir en vivo" in page and "disabled" in page
     _report(conn, tenant, 0.9, 4)
-    page = client.get("/panel/reporte").text
+    page = client.get("/panel/test").text
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None
     client.post("/panel/salir-en-vivo", data={"csrf": token.group(1), "activo": "si"})

@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import psycopg
 from fastapi import APIRouter, Depends, Request
@@ -35,8 +35,10 @@ from app.mailer import Mailer, mailer_from_env
 from app.panel import auth, english
 from app.panel.html import (
     ADMIN_ONLY,
+    DEMO,
     PENDING,
     RESOLVED_BY,
+    auth_card,
     esc,
     local_time,
     page,
@@ -220,8 +222,9 @@ class Ctx:
 def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None) -> Ctx | Response:
     """Puerta de entrada de cada ruta del panel. Sin sesión, va al login. Con `form` (un POST
     que cambia algo), exige además el token anti-CSRF. Devuelve la empresa de la sesión."""
-    english.set_language("es")
     session = _session(request, deps)
+    english.set_language(auth.language_or_default(session.language if session else ""))
+    english.THEME.set(session.theme if session else "light")
     if session is None:
         return _to_login()
     if form is not None and not auth.valid_csrf(session.token, form.get("csrf", "")):
@@ -235,9 +238,13 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
     active, language, demo, pending = _company(deps, session.tenant_id)
     if not session.admin and not active:
         return _to_login()  # la empresa fue borrada: su sesión deja de servir
-    # El panel habla el idioma de la empresa (decisión 037): vale para todo este pedido.
-    english.set_language(language)
+    # El idioma del panel es el que eligió el usuario (decisión 085) o, si no eligió, el del
+    # producto (inglés). El de la empresa es el que habla su agente con los clientes; los tests
+    # de antes lo usan también para el panel (`DEFAULT_LANGUAGE = "company"`).
+    if not session.language and auth.DEFAULT_LANGUAGE == "company":
+        english.set_language(language)
     PENDING.set(pending)  # el contador del menú
+    DEMO.set(demo)
     return Ctx(session, session.tenant_id, auth.csrf_token(session.token), demo=demo)
 
 
@@ -262,66 +269,58 @@ def _money(value: Any) -> str:
 
 
 # -- login -----------------------------------------------------------------------------------
+LANG_COOKIE = "panel_lang"  # el último idioma elegido: el login sale en ese idioma
+
+
 def _login_page(error: str = "") -> str:
     note = (
         ""
         if auth.configured()
         else '<p class="muted small">Falta configurar PANEL_EMAIL y PANEL_PASSWORD.</p>'
     )
-    alert = f'<p style="color:var(--bad)">{esc(error)}</p>' if error else ""
-    # Antes de entrar no se sabe la empresa: el idioma se elige acá (decisión 037).
+    alert = f'<div class="note" role="alert">{esc(error)}</div>' if error else ""
+    # Antes de entrar no se sabe quién es: el idioma se elige acá (decisión 085).
     other = (
-        '<a href="/panel/login">Español</a>'
+        '<a href="/panel/login?lang=es" lang="es" translate="no">Español</a>'
         if english.english()
-        else '<a href="/panel/login?lang=en">English</a>'
+        else '<a href="/panel/login?lang=en" lang="en" translate="no">English</a>'
     )
-    body = f"""<div class="card" style="max-width:400px;margin:40px auto">
-<div class="row"><h1 class="grow">Ingresar al panel</h1><span class="small">{other}</span></div>
-<p class="lead">Panel del equipo de atención.</p>{alert}{note}
+    body = f"""<div class="row"><h1 class="grow">Sign in</h1>
+<span class="small">{other}</span></div>
+<p class="muted">Manage your AI agent, conversations and results.</p>{alert}{note}
 <form method="post" action="/panel/login">
 <input type="hidden" name="lang" value="{"en" if english.english() else "es"}">
 <label for="email">Email</label><input id="email" name="email" type="email" required
  autocomplete="username">
-<label for="password">Clave</label><input id="password" name="password" type="password" required
- autocomplete="current-password">
-<p><button class="primary" type="submit" style="width:100%">Ingresar</button></p></form>
-<p class="muted small">¿Tu empresa no tiene cuenta? <a href="/registro">Creala acá</a>.</p></div>"""
-    return page("Ingresar", body, logged_in=False)
+<label for="password">Password</label><input id="password" name="password" type="password"
+ required autocomplete="current-password">
+<p><button class="primary" type="submit" style="width:100%">Sign in</button></p></form>
+<p class="muted small">New here? <a href="/registro">Create your account</a></p>"""
+    return page("Sign in", auth_card(body), logged_in=False)
 
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request, deps: Deps) -> Response:
-    return RedirectResponse("/panel/casos" if _session(request, deps) else "/panel/login", 303)
+def root(request: Request, deps: Deps) -> Response:
+    return RedirectResponse("/panel/home" if _session(request, deps) else "/panel/login", 303)
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_form(lang: str = "") -> HTMLResponse:
-    english.set_language(lang)
-    return HTMLResponse(_login_page())
+def login_form(request: Request, lang: str = "") -> HTMLResponse:
+    english.set_language(auth.language_or_default(lang or request.cookies.get(LANG_COOKIE)))
+    english.THEME.set("light")
+    response = HTMLResponse(_login_page())
+    if auth.chosen(lang):  # eligió el idioma acá: vale también para el panel
+        response.set_cookie(LANG_COOKIE, lang, max_age=365 * 86400, samesite="lax", path="/panel")
+    return response
 
 
-@router.post("/login")
-def login(request: Request, form: Form, deps: Deps) -> Response:
-    english.set_language(form.get("lang", ""))
-    email, password = form.get("email", "").strip().lower(), form.get("password", "")
-    if auth.too_many_failures(email):
-        message = "Demasiados intentos. Probá de nuevo en unos minutos."
-        return HTMLResponse(_login_page(message), status_code=429)
-    if auth.configured() and auth.check_credentials(email, password):
-        token = auth.new_session(email)  # operador de la plataforma: entra a la demo
-    else:
-        with deps.connection() as conn:
-            user = auth.company_login(conn, email, password)
-        if user is None:
-            auth.record_failure(email)
-            return HTMLResponse(_login_page("Email o clave incorrectos."), status_code=401)
-        token = auth.new_session(
-            user.email, tenant_id=user.tenant_id, company=user.company, admin=False, role=user.role
-        )
-    auth.clear_failures(email)
-    response = RedirectResponse("/panel/casos", status_code=303)
-    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+def _secure(request: Request) -> bool:
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+
+
+def _set_session(request: Request, response: Response, token: str, language: str) -> None:
+    secure = _secure(request)
     response.set_cookie(
         auth.COOKIE,
         token,
@@ -331,6 +330,46 @@ def login(request: Request, form: Form, deps: Deps) -> Response:
         secure=secure,
         path="/panel",
     )
+    if language:
+        response.set_cookie(
+            LANG_COOKIE, language, max_age=365 * 86400, samesite="lax", secure=secure, path="/panel"
+        )
+
+
+@router.post("/login")
+def login(request: Request, form: Form, deps: Deps) -> Response:
+    picked = auth.chosen(request.cookies.get(LANG_COOKIE))  # lo eligió antes, en este navegador
+    english.set_language(auth.language_or_default(form.get("lang") or picked))
+    english.THEME.set("light")
+    email, password = form.get("email", "").strip().lower(), form.get("password", "")
+    if auth.too_many_failures(email):
+        message = "Demasiados intentos. Probá de nuevo en unos minutos."
+        return HTMLResponse(_login_page(message), status_code=429)
+    language, theme = picked, "light"
+    if auth.configured() and auth.check_credentials(email, password):
+        # Operador de la plataforma: entra a la demo. Sus preferencias viven en la cookie.
+        token = auth.new_session(email, language=language)
+    else:
+        with deps.connection() as conn:
+            user = auth.company_login(conn, email, password)
+        if user is None:
+            auth.record_failure(email)
+            return HTMLResponse(_login_page("Email o clave incorrectos."), status_code=401)
+        saved = user.preferences or {}
+        language = auth.chosen(saved.get("language")) or picked
+        theme = "dark" if saved.get("theme") == "dark" else "light"
+        token = auth.new_session(
+            user.email,
+            tenant_id=user.tenant_id,
+            company=user.company,
+            admin=False,
+            role=user.role,
+            language=language,
+            theme=theme,
+        )
+    auth.clear_failures(email)
+    response = RedirectResponse("/panel/home", status_code=303)
+    _set_session(request, response, token, language)
     return response
 
 
@@ -338,6 +377,41 @@ def login(request: Request, form: Form, deps: Deps) -> Response:
 def logout() -> Response:
     response = _to_login()
     response.delete_cookie(auth.COOKIE, path="/panel")
+    return response
+
+
+@router.post("/preferences")
+def save_preferences(request: Request, form: Form, deps: Deps) -> Response:
+    """Idioma del panel o tema del usuario (decisión 085). Vale desde la próxima página, en
+    todas sus sesiones: queda en su usuario y en la sesión actual."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    session = ctx.session
+    changes: dict[str, str] = {}
+    if form.get("lang") in auth.LANGUAGES:
+        changes["language"] = form["lang"]
+    if form.get("theme") in auth.THEMES:
+        changes["theme"] = form["theme"]
+    language = changes.get("language", session.language)
+    theme = changes.get("theme", session.theme)
+    if changes and not session.admin:
+        with deps.connection() as conn:
+            auth.save_preferences(conn, ctx.tenant_id, session.email, changes)
+    token = auth.new_session(
+        session.email,
+        tenant_id=None if session.admin else session.tenant_id,
+        company="" if session.admin else session.company,
+        admin=session.admin,
+        role=session.role,
+        language=language,
+        theme=theme,
+    )
+    # De vuelta a la misma pantalla (solo una dirección del panel).
+    referer = urlsplit(request.headers.get("referer", ""))
+    back = referer.path if referer.path.startswith("/panel/") else "/panel/home"
+    response = RedirectResponse(back + (f"?{referer.query}" if referer.query else ""), 303)
+    _set_session(request, response, token, language)
     return response
 
 
@@ -389,7 +463,7 @@ def _pending(
         ).fetchall()
 
 
-@router.get("/aprobaciones", response_class=HTMLResponse)
+@router.get("/inbox/approvals", response_class=HTMLResponse)
 def approvals_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -404,7 +478,7 @@ def approvals_page(request: Request, deps: Deps) -> Response:
                 " left join users u on u.id = a.decided_by"
                 " where a.status <> 'pending' order by a.decided_at desc nulls last limit 10"
             ).fetchall()
-    cards = _approval_cards(pending, ctx.csrf, back="/panel/aprobaciones") or (
+    cards = _approval_cards(pending, ctx.csrf, back="/panel/inbox/approvals") or (
         '<div class="card empty">No hay pedidos esperando aprobación.</div>'
     )
     history = "".join(
@@ -422,7 +496,7 @@ def approvals_page(request: Request, deps: Deps) -> Response:
 no se ejecutan hasta que una persona las aprueba. Al aprobar, se ejecuta por el guardián y el
 cliente recibe el aviso en el chat.</p>{cards}
 {f"<h2>Decididas</h2>{history}" if history else ""}"""
-    return HTMLResponse(page("Aprobaciones", body, active="aprobaciones", session=ctx.session))
+    return HTMLResponse(page("Aprobaciones", body, active="inbox/approvals", session=ctx.session))
 
 
 def _approval_message(
@@ -461,7 +535,7 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
             )
         except ApprovalError:
             # Ya decidida (doble clic o reenvío): no se ejecuta ni se avisa de nuevo.
-            return RedirectResponse("/panel/aprobaciones", status_code=303)
+            return RedirectResponse("/panel/inbox/approvals", status_code=303)
         notice = "rechazado" if not approve else "aprobado"
         if approve and outcome.status != "executed":
             notice = "fallo"
@@ -487,7 +561,7 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
                 "already_sent": "reembolso-email",
                 "failed": "reembolso-sin-email",
             }.get(mailed, "reembolso")
-    target = back if back.startswith("/panel/") else "/panel/aprobaciones"
+    target = back if back.startswith("/panel/") else "/panel/inbox/approvals"
     target += ("&" if "?" in target else "?") + f"aviso={notice}"
     return RedirectResponse(target, status_code=303)
 
@@ -502,7 +576,7 @@ CASE_LABEL = (
 )
 
 
-@router.get("/casos", response_class=HTMLResponse)
+@router.get("/inbox", response_class=HTMLResponse)
 def inbox(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -511,8 +585,6 @@ def inbox(request: Request, deps: Deps) -> Response:
         # Regla de cierre: los que llevan 24 h sin respuesta del cliente quedan resueltos.
         close_inactive(conn, ctx.tenant_id)
         rows = _inbox_rows(conn, ctx.tenant_id)
-        steps = _first_steps_html(conn, ctx)
-        drafts = _draft_cards(conn, ctx.tenant_id, ctx.csrf, back="/panel/casos")
         waiting: dict[Any, tuple[Any, ...]] = {}  # caso -> su primera aprobación pendiente
         for approval in _pending(conn, ctx.tenant_id):
             waiting.setdefault(approval[3], approval)
@@ -559,7 +631,7 @@ style="text-decoration:none;color:inherit;min-width:0">{head}
 <div class="ellipsis muted small" style="margin-top:2px">{text}</div></a>
 <form method="post" action="/panel/aprobaciones/{approval_id}" class="row">
 <input type="hidden" name="csrf" value="{ctx.csrf}">
-<input type="hidden" name="volver" value="/panel/casos">
+<input type="hidden" name="volver" value="/panel/inbox">
 <button class="danger" name="decision" value="rechazar">Rechazar</button>
 <button class="primary" name="decision" value="aprobar">Aprobar</button></form></div>"""
         return f"""<a class="card row" href="/panel/casos/{case_id}" style="text-decoration:none;
@@ -573,13 +645,13 @@ color:inherit"><div class="grow">{head}
         '<div class="card empty">Todavía no hay conversaciones.</div>'
     )
     reset = '<a class="btn" href="/panel/reiniciar">Reiniciar demo</a>' if ctx.can_reset else ""
-    body = f"""{toast(request.query_params.get("aviso"))}{steps}
+    body = f"""{toast(request.query_params.get("aviso"))}
 <div class="row"><h1 class="grow">Casos</h1>{reset}</div>
 <p class="lead">Conversaciones con su estado: primero las derivadas
 a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
 confirma o pasan 24 h sin respuesta.</p><div class="kpis">{kpis}</div>
-{drafts}{items}"""
-    return HTMLResponse(page("Casos", body, active="casos", session=ctx.session))
+{items}"""
+    return HTMLResponse(page("Casos", body, active="inbox", session=ctx.session))
 
 
 @router.get("/reiniciar", response_class=HTMLResponse)
@@ -600,9 +672,9 @@ def reset_form(request: Request, deps: Deps) -> Response:
 inserción y no se borra.</p>
 <form method="post" action="/panel/reiniciar" class="row">
 <input type="hidden" name="csrf" value="{ctx.csrf}">
-<a class="btn" href="/panel/casos">Cancelar</a>
+<a class="btn" href="/panel/inbox">Cancelar</a>
 <button class="primary" type="submit">Reiniciar demo</button></form></div>"""
-    return HTMLResponse(page("Reiniciar demo", body, active="casos", session=ctx.session))
+    return HTMLResponse(page("Reiniciar demo", body, active="inbox", session=ctx.session))
 
 
 @router.post("/reiniciar")
@@ -615,7 +687,7 @@ def reset_demo(request: Request, form: Form, deps: Deps) -> Response:
     with deps.connection() as conn:
         archive_cases(conn, ctx.tenant_id, _user_id(conn, ctx.tenant_id, ctx.session.email))
     deps.reset_sandbox()
-    return RedirectResponse("/panel/casos", status_code=303)
+    return RedirectResponse("/panel/inbox", status_code=303)
 
 
 def _first_steps_html(conn: psycopg.Connection, ctx: Ctx) -> str:
@@ -882,7 +954,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         else f'<span class="badge escalated">Cadena rota en el evento {verdict.broken_at}: '
         f"{esc(verdict.reason)}</span>"
     )
-    body = f"""{toast(request.query_params.get("aviso"))}<p><a href="/panel/casos">← Casos</a></p>
+    body = f"""{toast(request.query_params.get("aviso"))}<p><a href="/panel/inbox">← Casos</a></p>
 <div class="row"><h1 class="grow">Caso {esc(type_label(type_name))}</h1>
 {status_badge(status, resolved_by, reopened)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
@@ -904,7 +976,7 @@ modelo · {tokens} tokens</div></div><div class="kpi"><div class="n">{len(events
 <div class="card"><div class="row"><h2 class="grow" style="margin:0">Auditoría paso a paso</h2>
 {chain}</div><p class="muted small">Costo total: USD {cost:.6f}</p>
 <ol class="audit">{steps}</ol></div>"""
-    return HTMLResponse(page("Caso", body, active="casos", session=ctx.session))
+    return HTMLResponse(page("Caso", body, active="inbox", session=ctx.session))
 
 
 @router.post("/casos/{case_id}/responder")
@@ -1063,7 +1135,7 @@ def decide_draft(draft_id: uuid.UUID, request: Request, form: Form, deps: Deps) 
     if isinstance(ctx, Response):
         return ctx
     back = form.get("volver", "")
-    target = back if back.startswith("/panel/") else "/panel/casos"
+    target = back if back.startswith("/panel/") else "/panel/inbox"
     with deps.connection() as conn:
         user_id = _user_id(conn, ctx.tenant_id, ctx.session.email)
         try:
@@ -1096,7 +1168,7 @@ def _tone(value: float) -> str:
     return "ok" if value >= 0.8 else "warn" if value >= 0.5 else "bad"
 
 
-@router.get("/reporte", response_class=HTMLResponse)
+@router.get("/test", response_class=HTMLResponse)
 def report_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -1110,13 +1182,11 @@ def report_page(request: Request, deps: Deps) -> Response:
     finished = None
     from app.companies import go_live
     from app.panel.live_routes import readiness_html
-    from app.panel.simulation_routes import simulation_card
 
     with deps.connection() as conn:
-        # Probar y salir en vivo (decisión 056): arriba de todo. Después, las simulaciones
-        # (decisión 080).
+        # Probar y salir en vivo (decisión 056): arriba de todo. Las simulaciones (decisión
+        # 080) tienen su pestaña.
         live = readiness_html(ctx, go_live.readiness(conn, ctx.tenant_id))
-        live += simulation_card(ctx, conn)
         for source in sources:
             with tenant_scope(conn, source):
                 row = conn.execute(
@@ -1129,11 +1199,11 @@ def report_page(request: Request, deps: Deps) -> Response:
     if report is None:
         body = (
             f'<h1>Reporte de preparación</h1>{live}<div class="card empty">Todavía no hay un '
-            'onboarding terminado. Empezá en <a href="/panel/onboarding">Onboarding</a>.</div>'
+            'onboarding terminado. Empezá en <a href="/panel/knowledge">Onboarding</a>.</div>'
         )
-        return HTMLResponse(page("Reporte", body, active="reporte", session=ctx.session))
+        return HTMLResponse(page("Reporte", body, active="test", session=ctx.session))
     body = _report_body(report, finished, ctx.session.company).replace("</h1>", f"</h1>{live}", 1)
-    return HTMLResponse(page("Reporte de preparación", body, active="reporte", session=ctx.session))
+    return HTMLResponse(page("Reporte de preparación", body, active="test", session=ctx.session))
 
 
 def _report_body(report: dict[str, Any], finished: Any, company: str) -> str:

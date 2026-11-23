@@ -256,7 +256,7 @@ armó el asistente: cada link lleva el identificador de su conversación.</p>
 <button type="submit" class="secondary">Actualizar ventas</button></form></div>"""
 
 
-@router.get("/metricas", response_class=HTMLResponse)
+@router.get("/insights", response_class=HTMLResponse)
 def metrics_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -265,7 +265,7 @@ def metrics_page(request: Request, deps: Deps) -> Response:
         data = metrics.collect(conn, ctx.tenant_id)
         sold = attribution.totals(conn, ctx.tenant_id)
     body = _notice(request) + render(data, ctx.session.company) + sales_html(sold, _csrf(ctx))
-    return HTMLResponse(page("Métricas", body, active="metricas", session=ctx.session))
+    return HTMLResponse(page("Métricas", body, active="insights", session=ctx.session))
 
 
 @router.post("/metricas/ventas")
@@ -276,4 +276,4 @@ def refresh_sales(request: Request, form: Form, deps: Deps) -> Response:
         return ctx
     with deps.connection() as conn:
         found = attribution.sync(conn, ctx.tenant_id, deps.guardian(conn, ctx.tenant_id))
-    return _back("metricas", ok="Ventas actualizadas." if found else "No hay ventas nuevas.")
+    return _back("insights", ok="Ventas actualizadas." if found else "No hay ventas nuevas.")

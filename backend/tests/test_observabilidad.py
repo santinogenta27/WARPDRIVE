@@ -268,9 +268,9 @@ def test_la_pagina_de_metricas_muestra_resolucion_latencia_errores_y_costos(
     assert sum(d["llamadas"] for d in data["por_dia"]) == data["modelo"]["llamadas"] > 0
     assert {m["uso"] for m in data["por_modelo"]} == {"llm", "embedding"}
 
-    assert client.get("/panel/metricas", follow_redirects=False).status_code == 303  # sin login
+    assert client.get("/panel/insights", follow_redirects=False).status_code == 303  # sin login
     login(client)
-    page = client.get("/panel/metricas").text
+    page = client.get("/panel/insights").text
     for text in (
         "50%",  # resolución
         "33%",  # derivación
@@ -313,7 +313,7 @@ def test_las_metricas_de_una_empresa_no_incluyen_las_de_otra(
     assert empty["modelo"]["llamadas"] == 0 and empty["por_caso"] == [] and empty["evals"] == []
 
     login(client, "ana@tiendanorte.example", "clave-de-norte-1")
-    page = client.get("/panel/metricas").text
+    page = client.get("/panel/insights").text
     assert "Tienda Norte" in page and "Todavía no hay uso" in page
     for leak in (str(answered.case_id)[:8], "modelo-de-acme", "claude-sonnet"):
         assert leak not in page, leak

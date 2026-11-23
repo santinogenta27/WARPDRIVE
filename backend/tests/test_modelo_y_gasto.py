@@ -160,7 +160,7 @@ def _login() -> TestClient:
 
 
 def _csrf(client: TestClient) -> str:
-    match = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/configuracion").text)
+    match = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/settings/usage").text)
     assert match is not None
     return match.group(1)
 
@@ -169,8 +169,8 @@ def test_el_panel_guarda_la_key_y_el_tope_sin_mostrar_la_key(
     conn: psycopg.Connection, panel: uuid.UUID
 ) -> None:
     client = _login()
-    page = client.get("/panel/configuracion").text
-    assert "Modelo y gasto" in page and "Gasto del mes" in page
+    page = client.get("/panel/settings/usage").text
+    assert "Uso y modelo" in page and "Gasto del mes" in page
     response = client.post(
         "/panel/configuracion/modelo",
         data={"csrf": _csrf(client), "proveedor": "groq", "clave": KEY, "tope": "25"},
@@ -179,7 +179,7 @@ def test_el_panel_guarda_la_key_y_el_tope_sin_mostrar_la_key(
     assert response.status_code == 303, response.text
     assert tenant_llm.own_provider(conn, panel) == "groq"
     assert spending.budget(conn, panel).cap_usd == Decimal(25)
-    page = client.get("/panel/configuracion").text
+    page = client.get("/panel/settings/usage").text
     assert KEY not in page and "Groq" in page
 
     # Sin clave nueva se conserva la guardada; "plataforma" la borra.

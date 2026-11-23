@@ -115,7 +115,7 @@ def _csv(name: str, header: list[str], rows: list[list[str]]) -> Response:
     )
 
 
-@router.get("/facturacion", response_class=HTMLResponse)
+@router.get("/operator/billing", response_class=HTMLResponse)
 def billing_page(request: Request, deps: Deps, mes: str = "") -> Response:
     ctx = _operator(request, deps)
     if isinstance(ctx, Response):
@@ -138,7 +138,7 @@ def billing_page(request: Request, deps: Deps, mes: str = "") -> Response:
     body = f"""<div class="row"><h1 class="grow">Facturación</h1>
 <a class="btn" href="/panel/facturacion/exportar.csv?mes={key}">Exportar CSV</a></div>
 <p class="lead">Casos resueltos por empresa y por mes. La unidad de cobro es el caso que resolvió
-el asistente.</p>{_switcher(year, month, "/panel/facturacion")}
+el asistente.</p>{_switcher(year, month, "/panel/operator/billing")}
 <div class="kpis"><div class="kpi big"><div class="n">{total}</div>
 <div class="muted">casos a cobrar</div></div>
 <div class="kpi"><div class="n">{pending}</div>
@@ -147,7 +147,7 @@ el asistente.</p>{_switcher(year, month, "/panel/facturacion")}
 <th class="num">Dentro de los 7 días</th><th class="num">Con una persona</th>
 <th class="num">Reabiertos</th><th class="num">Resueltos en total</th></tr>{rows}</table>
 {RULE}</div>"""
-    return HTMLResponse(page("Facturación", body, active="facturacion", session=ctx.session))
+    return HTMLResponse(page("Facturación", body, active="operator/billing", session=ctx.session))
 
 
 @router.get("/facturacion/exportar.csv")
@@ -215,7 +215,7 @@ def billing_detail(tenant_id: uuid.UUID, request: Request, deps: Deps, mes: str 
         else '<p class="muted">No hay casos resueltos en este mes.</p>'
     )
     base = f"/panel/facturacion/{tenant_id}"
-    body = f"""<p><a href="/panel/facturacion?mes={key}">← Todas las empresas</a></p>
+    body = f"""<p><a href="/panel/operator/billing?mes={key}">← Todas las empresas</a></p>
 <div class="row"><h1 class="grow">{esc(name)}</h1>
 <a class="btn" href="{base}/exportar.csv?mes={key}">Exportar CSV</a></div>
 <p class="lead">Casos resueltos en el mes, uno por renglón.</p>{_switcher(year, month, base)}
@@ -228,7 +228,7 @@ def billing_detail(tenant_id: uuid.UUID, request: Request, deps: Deps, mes: str 
 <div class="kpi"><div class="n">{counts["reabiertos"]}</div>
 <div class="muted">reabiertos</div></div></div>
 <div class="card">{table}{RULE}</div>"""
-    return HTMLResponse(page("Facturación", body, active="facturacion", session=ctx.session))
+    return HTMLResponse(page("Facturación", body, active="operator/billing", session=ctx.session))
 
 
 @router.get("/facturacion/{tenant_id}/exportar.csv")

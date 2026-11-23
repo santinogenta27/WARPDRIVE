@@ -416,7 +416,7 @@ def test_la_empresa_elige_el_idioma_en_configuracion(web: dict[str, object]) -> 
     conn = web["conn"]
     assert isinstance(conn, psycopg.Connection)
     client = _login(SHOP, SHOP_PASSWORD)
-    page = client.get("/panel/configuracion").text
+    page = client.get("/panel/agent/language").text
     assert '<select id="idioma" name="idioma"' in page
     assert '<option value="es" selected>Español</option>' in page
     token = re.search(r'name="csrf" value="([^"]+)"', page)
@@ -428,7 +428,9 @@ def test_la_empresa_elige_el_idioma_en_configuracion(web: dict[str, object]) -> 
     )
     assert saved.status_code == 303
     assert i18n.tenant_language(conn, company.tenant_id) == "en"  # type: ignore[attr-defined]
-    assert '<option value="en" selected>English</option>' in client.get("/panel/configuracion").text
+    assert (
+        '<option value="en" selected>English</option>' in client.get("/panel/agent/language").text
+    )
     bad = client.post("/panel/configuracion/idioma", data={"idioma": "fr", "csrf": token.group(1)})
     assert i18n.tenant_language(conn, company.tenant_id) == "en"  # type: ignore[attr-defined]
     assert "Choose a language from the list." in bad.text  # el panel ya está en inglés

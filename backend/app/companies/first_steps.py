@@ -28,37 +28,37 @@ STEPS = [
         "documentos",
         "Cargá tus documentos",
         "Políticas, preguntas frecuentes o tu historial: el asistente responde con ellos.",
-        "/panel/onboarding",
+        "/panel/knowledge",
     ),
     (
         "reglas",
         "Definí las reglas de atención",
         "El horario del equipo y a quién avisar cuando el asistente deriva.",
-        "/panel/configuracion#reglas",
+        "/panel/agent",
     ),
     (
         "marca",
         "Configurá tu marca",
         "El nombre, el color y el logo del chat.",
-        "/panel/configuracion#widget",
+        "/panel/deploy#widget",
     ),
     (
         "playground",
         "Probá el asistente en el playground",
         "Escribile como un cliente y mirá cada paso que da.",
-        "/panel/probar",
+        "/panel/test/playground",
     ),
     (
         "widget",
         "Instalá el widget en tu sitio",
         "Pegá la línea del script en tu sitio, en uno de tus dominios.",
-        "/panel/configuracion#widget",
+        "/panel/deploy#widget",
     ),
     (
         "en_vivo",
         "Salí en vivo",
         "Cuando el reporte de preparación da el visto bueno, el asistente atiende en tu sitio.",
-        "/panel/reporte",
+        "/panel/test",
     ),
 ]
 

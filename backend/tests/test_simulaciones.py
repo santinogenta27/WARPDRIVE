@@ -205,7 +205,7 @@ def panel(stack: SimulatedStack, monkeypatch: pytest.MonkeyPatch) -> Iterator[Te
 def test_el_boton_simula_y_el_resultado_entra_en_el_reporte(
     stack: SimulatedStack, panel: TestClient
 ) -> None:
-    page = panel.get("/panel/reporte").text
+    page = panel.get("/panel/test/simulations").text
     assert "Simular 20 conversaciones" in page
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None
@@ -221,13 +221,13 @@ def test_el_boton_simula_y_el_resultado_entra_en_el_reporte(
     ).fetchone()
     assert jobs is not None and jobs[0] == 1
     run_job(stack, found.id)
-    page = panel.get("/panel/reporte").text
+    page = panel.get("/panel/test/simulations").text
     assert "pass^3" in page
     done = simulation.latest(stack.conn, stack.seed.tenant_id)
     assert done is not None and done.status == "done"
     first = done.personas[0]["tipo_de_caso"]
     assert esc(type_label(first)) in page  # el resultado por tipo de caso
-    assert "Simulación: pass^3 100%" in page  # en la tarjeta de salir en vivo
+    assert "Simulación: pass^3 100%" in panel.get("/panel/test").text  # tarjeta de salir en vivo
 
 
 def test_el_sandbox_no_inventa_el_nombre_del_cliente() -> None:
