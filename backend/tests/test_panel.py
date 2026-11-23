@@ -66,12 +66,12 @@ def csrf(html: str) -> str:
 
 
 def test_el_panel_pide_login_y_rechaza_una_clave_incorrecta(client: TestClient) -> None:
-    for path in ("/panel/casos", "/panel/aprobaciones", "/panel/reporte"):
+    for path in ("/panel/inbox", "/panel/inbox/approvals", "/panel/test"):
         assert client.get(path, follow_redirects=False).headers["location"] == "/panel/login"
     bad = client.post("/panel/login", data={"email": EMAIL, "password": "otra"})
     assert bad.status_code == 401
     login(client)
-    assert client.get("/panel/casos").status_code == 200
+    assert client.get("/panel/inbox").status_code == 200
 
 
 def test_aprobar_un_reembolso_lo_ejecuta_y_el_cliente_lo_ve(
@@ -80,7 +80,7 @@ def test_aprobar_un_reembolso_lo_ejecuta_y_el_cliente_lo_ve(
     pending = stack.send("martin", "Quiero el reembolso del pedido 1005")
     assert pending.action == "pedir_aprobacion" and pending.approval_id is not None
     login(client)
-    page = client.get("/panel/aprobaciones").text
+    page = client.get("/panel/inbox/approvals").text
     # Textos legibles, sin identificadores de la herramienta ni de sus parámetros.
     assert "Reembolso · Pedido 1005 · $35.000" in page
     assert "iniciar_reembolso" not in page and "order_id" not in page
@@ -106,7 +106,7 @@ def test_aprobar_un_reembolso_lo_ejecuta_y_el_cliente_lo_ve(
         ).fetchall()
     assert status is not None and status[0] == "approved" and status[1] is not None
     assert len(told) == 1 and "aprob" in told[0][0].lower() and "1005" in told[0][0]
-    after = client.get("/panel/aprobaciones").text  # pasa de pendiente al historial
+    after = client.get("/panel/inbox/approvals").text  # pasa de pendiente al historial
     assert "No hay pedidos esperando aprobación" in after and "Aprobado" in after
 
 
@@ -117,7 +117,7 @@ def test_la_bandeja_muestra_primero_las_derivadas_y_se_responde_como_humano(
     stack.close_open_cases()
     escalated = stack.send("martin", "quiero hablar con una persona")
     login(client)
-    inbox = client.get("/panel/casos").text
+    inbox = client.get("/panel/inbox").text
     assert inbox.index(str(escalated.case_id)) < inbox.index("Abren los domingos")
 
     detail = client.get(f"/panel/casos/{escalated.case_id}").text
@@ -164,7 +164,7 @@ def test_enviar_dos_veces_el_mismo_formulario_manda_un_solo_mensaje(
         )
         assert response.status_code == 303
 
-    approvals = client.get("/panel/aprobaciones").text
+    approvals = client.get("/panel/inbox/approvals").text
     for _ in range(2):  # la segunda vez ya está decidida: vuelve a la lista sin error
         again = client.post(
             f"/panel/aprobaciones/{pending.approval_id}",
@@ -184,7 +184,7 @@ def test_los_tipos_de_caso_se_ven_con_nombre_legible(
 ) -> None:
     answered = stack.send("lucia", "¿Abren los domingos?")
     login(client)
-    inbox = client.get("/panel/casos").text
+    inbox = client.get("/panel/inbox").text
     assert "Horarios y sucursales" in inbox and ">horarios_y_sucursales<" not in inbox
     detail = client.get(f"/panel/casos/{answered.case_id}").text
     assert "Caso Horarios y sucursales" in detail
@@ -195,7 +195,7 @@ def test_la_charla_figura_como_conversacion_general(
 ) -> None:
     chat = stack.send("lucia", "¿sos un bot?")  # charla para el clasificador simulado
     login(client)
-    inbox = client.get("/panel/casos").text
+    inbox = client.get("/panel/inbox").text
     assert "Conversación general" in inbox and "Sin clasificar" not in inbox
     assert "Caso Conversación general" in client.get(f"/panel/casos/{chat.case_id}").text
 
@@ -210,8 +210,8 @@ def test_el_resumen_del_caso_no_muestra_codigos_ni_datos_personales(
     done = stack.send("nuevo", code)
     assert done.approval_id is not None
     login(client)
-    inbox = client.get("/panel/casos").text
-    approvals = client.get("/panel/aprobaciones").text
+    inbox = client.get("/panel/inbox").text
+    approvals = client.get("/panel/inbox/approvals").text
     for page_text in (inbox, approvals):
         assert "Quiero el reembolso del pedido 1005" in page_text  # el primer mensaje
         assert code not in page_text and "martin@example.com" not in page_text
@@ -229,7 +229,7 @@ def test_la_bandeja_cierra_los_casos_sin_respuesta_hace_24_horas(
             (answered.case_id,),
         )
     login(client)
-    client.get("/panel/casos")
+    client.get("/panel/inbox")
     with tenant_scope(conn, stack.seed.tenant_id):
         row = conn.execute(
             "select status, resolved_by from cases where id = %s", (answered.case_id,)
@@ -267,7 +267,7 @@ def test_el_cliente_del_chat_web_ve_los_mensajes_del_equipo(client: TestClient) 
         "typing": False,
     }
     login(client)
-    inbox = client.get("/panel/casos").text
+    inbox = client.get("/panel/inbox").text
     case_id = re.findall(r'href="/panel/casos/([0-9a-f-]{36})"', inbox)[0]
     detail = client.get(f"/panel/casos/{case_id}").text
     client.post(
@@ -320,7 +320,7 @@ def test_el_reporte_de_preparacion_muestra_tipos_volumen_y_porcentaje(
             (stack.seed.tenant_id, Jsonb(report)),
         )
     login(client)
-    page = client.get("/panel/reporte").text
+    page = client.get("/panel/test").text
     for text in (
         "72%",
         "Consulta estado pedido",

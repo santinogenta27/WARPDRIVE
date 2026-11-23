@@ -31,11 +31,11 @@ from app.panel.routes import PanelDeps, panel_deps
 ADMIN, ADMIN_PASSWORD = "operador@plataforma.example", "clave-del-operador"
 OWNER, PASSWORD = "lu@tiendasur.example", "clave-de-tienda-sur"
 LINKS = [
-    "/panel/onboarding",
-    "/panel/configuracion#reglas",
-    "/panel/configuracion#widget",
-    "/panel/probar",
-    "/panel/reporte",
+    "/panel/knowledge",
+    "/panel/agent",
+    "/panel/deploy#widget",
+    "/panel/test/playground",
+    "/panel/test",
 ]
 
 
@@ -86,7 +86,7 @@ def done_keys(world: World) -> list[str]:
 
 
 def test_una_empresa_nueva_ve_los_seis_pasos_con_su_enlace(world: World) -> None:
-    page = login(OWNER, PASSWORD).get("/panel/casos").text
+    page = login(OWNER, PASSWORD).get("/panel/home").text
     assert "Primeros pasos" in page and "0/6" in page
     for title in (
         "Cargá tus documentos",
@@ -135,7 +135,7 @@ def test_cada_paso_se_marca_con_el_progreso_real(world: World) -> None:
     api.get(f"/chat/widget/config?canal={slug}", headers={"Origin": "https://tiendasur.example"})
     assert "widget" in done_keys(world)
 
-    page = login(OWNER, PASSWORD).get("/panel/casos").text
+    page = login(OWNER, PASSWORD).get("/panel/home").text
     assert "5/6" in page
 
     with tenant_scope(world.conn, tenant):
@@ -145,11 +145,11 @@ def test_cada_paso_se_marca_con_el_progreso_real(world: World) -> None:
         )
     assert len(done_keys(world)) == 6
     # Todo hecho: la lista desaparece.
-    assert "Primeros pasos" not in login(OWNER, PASSWORD).get("/panel/casos").text
+    assert "Primeros pasos" not in login(OWNER, PASSWORD).get("/panel/home").text
 
 
 def test_no_aparece_en_la_demo(world: World) -> None:
-    assert "Primeros pasos" not in login(ADMIN, ADMIN_PASSWORD).get("/panel/casos").text
+    assert "Primeros pasos" not in login(ADMIN, ADMIN_PASSWORD).get("/panel/home").text
 
 
 def test_no_aparece_a_una_persona_del_equipo(world: World) -> None:
@@ -159,13 +159,13 @@ def test_no_aparece_a_una_persona_del_equipo(world: World) -> None:
             " values (%s, %s, 'agent', %s)",
             (world.tenant, "ana@tiendasur.example", auth.hash_password("clave-de-ana-123")),
         )
-    page = login("ana@tiendasur.example", "clave-de-ana-123").get("/panel/casos").text
+    page = login("ana@tiendasur.example", "clave-de-ana-123").get("/panel/home").text
     assert "Primeros pasos" not in page
 
 
 def test_en_ingles(world: World) -> None:
     i18n.set_language(world.conn, world.tenant, "en")
-    page = login(OWNER, PASSWORD).get("/panel/casos").text
+    page = login(OWNER, PASSWORD).get("/panel/home").text
     assert "First steps" in page and "Upload your documents" in page
     assert spanish_left(page) == []
     assert re.search(r"0/6</span>\s*<span>steps done", page)

@@ -8,6 +8,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
+from app.panel import auth
 from app.panel.html import page, toast
 from app.panel.routes import Deps, _draft_cards, _first_steps_html, enter
 
@@ -91,6 +92,8 @@ LEGACY = {
 
 def _legacy(slug: str) -> object:
     def redirect(request: Request) -> Response:
+        if auth.read_claims(request.cookies.get(auth.COOKIE)) is None:
+            return RedirectResponse("/panel/login", status_code=303)
         query = request.url.query
         return RedirectResponse(LEGACY[slug] + (f"?{query}" if query else ""), status_code=303)
 

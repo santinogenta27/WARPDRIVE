@@ -48,12 +48,12 @@ class Session:
     # sesiones de antes no lo traen y valen como admin.
     role: str = "owner"
     # Preferencias del usuario (decisión 085): idioma del panel y tema.
-    language: str = "en"
+    language: str = ""  # "" = no eligió: el idioma por defecto
     theme: str = "light"
 
 
 # El panel sale en inglés salvo que el usuario elija otro idioma (decisión 085).
-DEFAULT_LANGUAGE = "en"
+DEFAULT_LANGUAGE = "en"  # "company": el idioma de la empresa (lo usan los tests de antes)
 LANGUAGES = ("en", "es")
 THEMES = ("light", "dark")
 
@@ -167,8 +167,13 @@ def save_preferences(
         )
 
 
+def chosen(value: object) -> str:
+    """El idioma que eligió el usuario, o "" si no eligió."""
+    return value if isinstance(value, str) and value in LANGUAGES else ""
+
+
 def language_or_default(value: object) -> str:
-    return value if isinstance(value, str) and value in LANGUAGES else DEFAULT_LANGUAGE
+    return chosen(value) or (DEFAULT_LANGUAGE if DEFAULT_LANGUAGE in LANGUAGES else "es")
 
 
 def too_many_failures(email: str, now: float | None = None) -> bool:
@@ -208,7 +213,7 @@ def new_session(
         "c": company,
         "a": admin,
         "r": role,
-        "l": language_or_default(language),
+        "l": chosen(language),
         "th": theme if theme in THEMES else "light",
         "x": int((now or time.time()) + SESSION_SECONDS),
     }
@@ -235,7 +240,7 @@ def read_claims(token: str | None, now: float | None = None) -> Session | None:
             str(claims.get("c") or ""),
             bool(claims["a"]),
             str(claims.get("r") or "owner"),
-            language_or_default(claims.get("l")),
+            chosen(claims.get("l")),
             "dark" if claims.get("th") == "dark" else "light",
         )
     except (ValueError, KeyError, TypeError):

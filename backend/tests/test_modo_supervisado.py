@@ -154,7 +154,7 @@ def test_la_respuesta_queda_como_borrador_y_el_cliente_ve_escribiendo(world: Wor
 
     # En la bandeja, con el texto editable y los botones.
     client = panel()
-    inbox = client.get("/panel/casos").text
+    inbox = client.get("/panel/inbox/drafts").text
     assert "Borradores por revisar" in inbox
     assert f'action="/panel/borradores/{draft.id}"' in inbox
     assert draft.text.split("\n")[0] in inbox
@@ -164,7 +164,7 @@ def test_la_respuesta_queda_como_borrador_y_el_cliente_ve_escribiendo(world: Wor
     edited = "¡Hola! Soy del equipo de Acme, ¿en qué te ayudo?"
     sent = client.post(
         f"/panel/borradores/{draft.id}",
-        data={"csrf": csrf(inbox), "decision": "enviar", "texto": edited, "volver": "/panel/casos"},
+        data={"csrf": csrf(inbox), "decision": "enviar", "texto": edited, "volver": "/panel/inbox"},
         follow_redirects=False,
     )
     assert sent.status_code == 303 and "aviso=borrador-enviado" in sent.headers["location"]
@@ -200,7 +200,7 @@ def test_rechazar_no_envia_nada(world: World) -> None:
     draft = held_drafts(world)[0]
 
     client = panel()
-    token = csrf(client.get("/panel/casos").text)
+    token = csrf(client.get("/panel/inbox").text)
     client.post(
         f"/panel/borradores/{draft.id}",
         data={"csrf": token, "decision": "rechazar", "texto": draft.text},
@@ -218,7 +218,7 @@ def test_sin_editar_queda_registrado_como_no_editado(world: World) -> None:
     chat(api, session, "Hola")
     draft = held_drafts(world)[0]
     client = panel()
-    token = csrf(client.get("/panel/casos").text)
+    token = csrf(client.get("/panel/inbox").text)
     client.post(
         f"/panel/borradores/{draft.id}",
         data={"csrf": token, "decision": "enviar", "texto": draft.text},
@@ -248,8 +248,8 @@ def test_las_herramientas_siguen_pasando_por_el_guardian(world: World) -> None:
 
 def test_se_activa_desde_configuracion(world: World) -> None:
     client = panel()
-    page = client.get("/panel/configuracion").text
-    assert "Modo supervisado" in page
+    page = client.get("/panel/agent").text
+    assert "Revisar antes de enviar" in page
     saved = client.post(
         "/panel/configuracion/supervisado", data={"csrf": csrf(page), "activo": "si"}
     )
@@ -297,7 +297,7 @@ def test_por_whatsapp_queda_el_borrador_y_se_muestra_escribiendo(world: World) -
     assert len(drafts) == 1 and drafts[0].channel == "whatsapp"
 
     client = panel()
-    token = csrf(client.get("/panel/casos").text)
+    token = csrf(client.get("/panel/inbox").text)
     client.post(
         f"/panel/borradores/{drafts[0].id}",
         data={"csrf": token, "decision": "enviar", "texto": drafts[0].text},
@@ -318,8 +318,8 @@ def test_la_bandeja_con_borradores_en_ingles(world: World) -> None:
     chat(api, session, "Hi")
     draft = held_drafts(world)[0]
     client = panel()
-    inbox = client.get("/panel/casos").text
+    inbox = client.get("/panel/inbox/drafts").text
     assert "Drafts to review" in inbox and _new_spanish(inbox) == []
     detail = client.get(f"/panel/casos/{draft.case_id}").text
     assert _new_spanish(detail) == []
-    assert "Supervised mode" in client.get("/panel/configuracion").text
+    assert "Supervised mode" in client.get("/panel/agent").text

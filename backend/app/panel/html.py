@@ -305,6 +305,8 @@ OPERATOR: list[tuple[str, str, str, str]] = [
 ADMIN_ONLY = {"knowledge", "agent", "deploy", "settings", "onboarding", "configuracion", "equipo"}
 # Aprobaciones pendientes de la empresa de la sesión: `enter` lo fija en cada pedido.
 PENDING: ContextVar[int] = ContextVar("panel_pending", default=0)
+# ¿Es una empresa de demo nuestra (Acme, Northwind)? Su usuario ve "Behind the scenes".
+DEMO: ContextVar[bool] = ContextVar("panel_demo", default=False)
 
 # Confirmación breve después de decidir una aprobación (`?aviso=…`). El texto sale de esta lista:
 # lo que venga en la URL no se muestra.
@@ -385,11 +387,12 @@ def _sidebar(session: "Session", active: str) -> str:
         if not (session.role == "agent" and key in ADMIN_ONLY)
     )
     operator = ""
-    if session.admin:
+    if session.admin or DEMO.get():
         items = "".join(
             f'<a href="{url}" class="{"on" if key == active else ""}">{icon(name)}'
             f"<span>{esc(label)}</span></a>"
             for key, label, url, name in OPERATOR
+            if session.admin or key == "operator/behind"
         )
         operator = (
             f'<div class="group">Operator</div>'
@@ -442,6 +445,8 @@ def page(
     lang = "en" if english.english() else "es"
     reload = f'<meta http-equiv="refresh" content="{int(refresh)}">' if refresh else ""
     theme = ' data-theme="dark"' if english.THEME.get() == "dark" else ""
+    # El título va junto al nombre del producto: se traduce solo.
+    title = english.translate_text(title) if lang == "en" else spanish.translate_text(title)
     head = f"""<!doctype html>
 <html lang="{lang}"{theme}><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">{reload}

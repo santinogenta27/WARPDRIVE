@@ -161,6 +161,7 @@ class _Visible(HTMLParser):
             return
         classes = dict(attrs).get("class") or ""
         skip = tag in self.SKIP_TAGS or any(c in classes.split() for c in self.SKIP_CLASSES)
+        skip = skip or dict(attrs).get("translate") == "no"  # p. ej. el botón "Español"
         self.stack.append(skip or (bool(self.stack) and self.stack[-1]))
 
     def handle_endtag(self, tag: str) -> None:

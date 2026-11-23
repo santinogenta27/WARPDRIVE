@@ -87,7 +87,7 @@ def notify(
         row = conn.execute("select name from tenants where id = %s", (tenant_id,)).fetchone()
     company = str(row[0]) if row else ""
     base = (os.environ.get("PUBLIC_BASE_URL") or "").rstrip("/")
-    path = f"/panel/casos/{case_id}" if kind == "escalated" else "/panel/aprobaciones"
+    path = f"/panel/casos/{case_id}" if kind == "escalated" else "/panel/inbox/approvals"
     subject = SUBJECTS[kind].format(company=company)
     body = BODIES[kind].format(reason=reason, link=f"{base}{path}")
     audit_log.record(conn, tenant_id, case_id, NOTIFIED, {"key": key, "destinatarios": len(to)})

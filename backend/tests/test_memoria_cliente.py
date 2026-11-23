@@ -235,7 +235,7 @@ def _memory_id(world: World) -> uuid.UUID:
 def test_el_equipo_ve_corrige_y_borra_la_memoria(world: World) -> None:
     _remember_boots(world)
     client = panel()
-    listing = client.get("/panel/clientes")
+    listing = client.get("/panel/customers")
     assert listing.status_code == 200 and "Lucía Ferrari" in listing.text
     memory_id = _memory_id(world)
     detail = client.get(f"/panel/clientes/{memory_id}")
@@ -268,7 +268,7 @@ def test_el_equipo_ve_corrige_y_borra_la_memoria(world: World) -> None:
 
 def test_la_retencion_se_cambia_desde_el_panel(world: World) -> None:
     client = panel()
-    page = client.get("/panel/clientes").text
+    page = client.get("/panel/customers").text
     assert 'name="meses"' in page and 'value="12"' in page
     client.post("/panel/clientes/retencion", data={"csrf": csrf(page), "meses": "6"})
     assert memory.retention_months(world.conn, world.tenant) == 6

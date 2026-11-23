@@ -183,7 +183,7 @@ def test_por_linea_de_comandos_el_documento_se_indexa_sin_frenar(
 def upload(norte: TestClient, *files: tuple[str, bytes]) -> httpx.Response:
     return norte.post(
         "/panel/onboarding/fuentes",
-        data={"csrf": csrf(norte, "/panel/onboarding")},
+        data={"csrf": csrf(norte, "/panel/knowledge")},
         files=[("archivos", (name, data, "application/octet-stream")) for name, data in files],
         follow_redirects=False,
     )
@@ -201,7 +201,7 @@ def counts(world: World, tenant_id: uuid.UUID) -> tuple[int, int, int]:  # noqa:
 
 def pending_id(norte: TestClient) -> str:
     match = re.search(
-        r"/panel/onboarding/documentos/([0-9a-f-]{36})/indexar", norte.get("/panel/onboarding").text
+        r"/panel/onboarding/documentos/([0-9a-f-]{36})/indexar", norte.get("/panel/knowledge").text
     )
     assert match is not None
     return match.group(1)
@@ -219,7 +219,7 @@ def test_un_documento_con_datos_de_personas_espera_la_confirmacion(world: World)
     assert "clientes.md" in page and "4 emails" in page and "datos de personas" in page
     assert "marta.gomez@example.com" not in stored(world.conn, tenant_id)
     # Sigue avisando al volver a entrar, y no muestra los datos en la pantalla.
-    again = norte.get("/panel/onboarding").text
+    again = norte.get("/panel/knowledge").text
     assert "Indexar igual" in again and "Descartar" in again
     assert "marta.gomez@example.com" not in again
     # Subirlo de nuevo no lo duplica.
@@ -232,7 +232,7 @@ def test_un_documento_con_datos_de_personas_espera_la_confirmacion(world: World)
     for action in ("indexar", "descartar"):
         other = admin.post(
             f"/panel/onboarding/documentos/{document_id}/{action}",
-            data={"csrf": csrf(admin, "/panel/onboarding")},
+            data={"csrf": csrf(admin, "/panel/knowledge")},
         )
         assert other.status_code == 404
     # Sin el token anti-CSRF tampoco.
@@ -243,13 +243,13 @@ def test_un_documento_con_datos_de_personas_espera_la_confirmacion(world: World)
     # La empresa confirma: recién ahí se indexa.
     confirmed = norte.post(
         f"/panel/onboarding/documentos/{document_id}/indexar",
-        data={"csrf": csrf(norte, "/panel/onboarding")},
+        data={"csrf": csrf(norte, "/panel/knowledge")},
         follow_redirects=False,
     )
     assert confirmed.status_code == 303 and "ok=" in confirmed.headers["location"]
     assert counts(world, tenant_id) == (2, 2, 0)
     assert "marta.gomez@example.com" in stored(world.conn, tenant_id)
-    assert "Indexar igual" not in norte.get("/panel/onboarding").text
+    assert "Indexar igual" not in norte.get("/panel/knowledge").text
     # Ya indexado, subirlo otra vez no hace nada.
     upload(norte, ("clientes.md", CUSTOMERS.encode()))
     assert counts(world, tenant_id) == (2, 2, 0)
@@ -269,7 +269,7 @@ def test_un_documento_descartado_no_deja_nada_guardado(world: World) -> None:  #
 
     discarded = norte.post(
         f"/panel/onboarding/documentos/{pending_id(norte)}/descartar",
-        data={"csrf": csrf(norte, "/panel/onboarding")},
+        data={"csrf": csrf(norte, "/panel/knowledge")},
         follow_redirects=False,
     )
     assert discarded.status_code == 303 and "ok=" in discarded.headers["location"]

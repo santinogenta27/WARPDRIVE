@@ -151,8 +151,8 @@ def panel(stack: SimulatedStack, monkeypatch: pytest.MonkeyPatch) -> Iterator[Te
 
 
 def test_se_configura_en_configuracion(stack: SimulatedStack, panel: TestClient) -> None:
-    page = panel.get("/panel/configuracion").text
-    assert "Voz de marca" in page
+    page = panel.get("/panel/agent/voice").text
+    assert "Marca y voz" in page
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None
     panel.post(
@@ -170,5 +170,5 @@ def test_se_configura_en_configuracion(stack: SimulatedStack, panel: TestClient)
     assert saved == voice.Voice(
         "cálido", "tu", ("genial",), ("lamentablemente",), False, "Equipo Acme"
     )
-    page = panel.get("/panel/configuracion").text
+    page = panel.get("/panel/agent/voice").text
     assert 'value="cálido"' in page and json.dumps("Equipo Acme")[1:-1] in page

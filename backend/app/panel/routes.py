@@ -35,6 +35,7 @@ from app.mailer import Mailer, mailer_from_env
 from app.panel import auth, english
 from app.panel.html import (
     ADMIN_ONLY,
+    DEMO,
     PENDING,
     RESOLVED_BY,
     auth_card,
@@ -222,7 +223,7 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
     """Puerta de entrada de cada ruta del panel. Sin sesión, va al login. Con `form` (un POST
     que cambia algo), exige además el token anti-CSRF. Devuelve la empresa de la sesión."""
     session = _session(request, deps)
-    english.set_language(session.language if session else auth.DEFAULT_LANGUAGE)
+    english.set_language(auth.language_or_default(session.language if session else ""))
     english.THEME.set(session.theme if session else "light")
     if session is None:
         return _to_login()
@@ -234,12 +235,16 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
     section = request.url.path.removeprefix("/panel/").split("/", 1)[0]
     if session.role == "agent" and section in ADMIN_ONLY:
         return _forbidden("Esta sección es solo para los admins de la empresa.")
-    active, _, demo, pending = _company(deps, session.tenant_id)
+    active, language, demo, pending = _company(deps, session.tenant_id)
     if not session.admin and not active:
         return _to_login()  # la empresa fue borrada: su sesión deja de servir
-    # El idioma del panel es el del usuario (decisión 085), no el de la empresa: el de la
-    # empresa es el que habla su agente con los clientes.
+    # El idioma del panel es el que eligió el usuario (decisión 085) o, si no eligió, el del
+    # producto (inglés). El de la empresa es el que habla su agente con los clientes; los tests
+    # de antes lo usan también para el panel (`DEFAULT_LANGUAGE = "company"`).
+    if not session.language and auth.DEFAULT_LANGUAGE == "company":
+        english.set_language(language)
     PENDING.set(pending)  # el contador del menú
+    DEMO.set(demo)
     return Ctx(session, session.tenant_id, auth.csrf_token(session.token), demo=demo)
 
 
@@ -302,10 +307,12 @@ def root(request: Request, deps: Deps) -> Response:
 
 @router.get("/login", response_class=HTMLResponse)
 def login_form(request: Request, lang: str = "") -> HTMLResponse:
-    chosen = lang or request.cookies.get(LANG_COOKIE) or auth.DEFAULT_LANGUAGE
-    english.set_language(auth.language_or_default(chosen))
+    english.set_language(auth.language_or_default(lang or request.cookies.get(LANG_COOKIE)))
     english.THEME.set("light")
-    return HTMLResponse(_login_page())
+    response = HTMLResponse(_login_page())
+    if auth.chosen(lang):  # eligió el idioma acá: vale también para el panel
+        response.set_cookie(LANG_COOKIE, lang, max_age=365 * 86400, samesite="lax", path="/panel")
+    return response
 
 
 def _secure(request: Request) -> bool:
@@ -323,21 +330,22 @@ def _set_session(request: Request, response: Response, token: str, language: str
         secure=secure,
         path="/panel",
     )
-    response.set_cookie(
-        LANG_COOKIE, language, max_age=365 * 86400, samesite="lax", secure=secure, path="/panel"
-    )
+    if language:
+        response.set_cookie(
+            LANG_COOKIE, language, max_age=365 * 86400, samesite="lax", secure=secure, path="/panel"
+        )
 
 
 @router.post("/login")
 def login(request: Request, form: Form, deps: Deps) -> Response:
-    shown = auth.language_or_default(form.get("lang") or request.cookies.get(LANG_COOKIE))
-    english.set_language(shown)
+    picked = auth.chosen(request.cookies.get(LANG_COOKIE))  # lo eligió antes, en este navegador
+    english.set_language(auth.language_or_default(form.get("lang") or picked))
     english.THEME.set("light")
     email, password = form.get("email", "").strip().lower(), form.get("password", "")
     if auth.too_many_failures(email):
         message = "Demasiados intentos. Probá de nuevo en unos minutos."
         return HTMLResponse(_login_page(message), status_code=429)
-    language, theme = shown, "light"
+    language, theme = picked, "light"
     if auth.configured() and auth.check_credentials(email, password):
         # Operador de la plataforma: entra a la demo. Sus preferencias viven en la cookie.
         token = auth.new_session(email, language=language)
@@ -348,7 +356,7 @@ def login(request: Request, form: Form, deps: Deps) -> Response:
             auth.record_failure(email)
             return HTMLResponse(_login_page("Email o clave incorrectos."), status_code=401)
         saved = user.preferences or {}
-        language = auth.language_or_default(saved.get("language") or shown)
+        language = auth.chosen(saved.get("language")) or picked
         theme = "dark" if saved.get("theme") == "dark" else "light"
         token = auth.new_session(
             user.email,

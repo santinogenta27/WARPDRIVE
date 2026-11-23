@@ -23,12 +23,13 @@ def encryption_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def panel_in_spanish(monkeypatch: pytest.MonkeyPatch) -> None:
-    """El panel sale en inglés por defecto (decisión 085). Los tests de antes miran los textos en
-    español: corren con el español como idioma por defecto. Los del panel en inglés lo cambian."""
+def panel_in_company_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    """El panel sale en inglés por defecto (decisión 085). Los tests de antes miran el panel en
+    el idioma de la empresa, como antes: corren con ese idioma por defecto. Los del Hito 13
+    vuelven al inglés."""
     from app.panel import auth
 
-    monkeypatch.setattr(auth, "DEFAULT_LANGUAGE", "es")
+    monkeypatch.setattr(auth, "DEFAULT_LANGUAGE", "company")
 
 
 @pytest.fixture(scope="session")

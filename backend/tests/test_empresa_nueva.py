@@ -104,12 +104,12 @@ def test_una_empresa_nueva_llega_sola_a_atender_en_su_sitio(
     # 2. Sube su política.
     uploaded = owner.post(
         "/panel/onboarding/fuentes",
-        data={"csrf": _csrf(owner, "/panel/onboarding")},
+        data={"csrf": _csrf(owner, "/panel/knowledge")},
         files=[("archivos", ("envios.md", POLICY, "text/markdown"))],
         follow_redirects=False,
     )
     assert uploaded.status_code == 303
-    assert "Política de despacho" in owner.get("/panel/onboarding").text
+    assert "Política de despacho" in owner.get("/panel/knowledge").text
 
     # 3. Reglas y dominio de su sitio.
     owner.post(
@@ -146,9 +146,7 @@ def test_una_empresa_nueva_llega_sola_a_atender_en_su_sitio(
             "insert into onboarding_runs (tenant_id, status, report) values (%s, 'done', %s)",
             (tenant, Jsonb(report)),
         )
-    owner.post(
-        "/panel/salir-en-vivo", data={"csrf": _csrf(owner, "/panel/reporte"), "activo": "si"}
-    )
+    owner.post("/panel/salir-en-vivo", data={"csrf": _csrf(owner, "/panel/test"), "activo": "si"})
     config = api.get("/chat/widget/config", params={"canal": slug.group(1)}, headers=SHOP)
     assert config.json()["allowed"] is True
 
@@ -166,5 +164,5 @@ def test_una_empresa_nueva_llega_sola_a_atender_en_su_sitio(
     # 7. El caso aparece en su panel y en Métricas.
     with tenant_scope(conn, tenant):
         assert conn.execute("select count(*) from cases").fetchone() == (1,)
-    assert owner.get("/panel/casos").status_code == 200
-    assert owner.get("/panel/metricas").status_code == 200
+    assert owner.get("/panel/inbox").status_code == 200
+    assert owner.get("/panel/insights").status_code == 200

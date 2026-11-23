@@ -1471,8 +1471,8 @@ LEADS = {
 # -- secciones del panel (decisión 085): lo que antes era una sola página de Configuración --------
 def head(title: str, lead: str = "", actions: str = "") -> str:
     """Encabezado de una pantalla: título, una línea de ayuda y acciones a la derecha."""
-    help_line = f'<p class="lead">{lead}</p>' if lead else ""
-    return f'<div class="pagehead"><div><h1>{title}</h1>{help_line}</div>{actions}</div>'
+    help_line = f'<p class="lead">{esc(lead)}</p>' if lead else ""
+    return f'<div class="pagehead"><div><h1>{esc(title)}</h1>{help_line}</div>{actions}</div>'
 
 
 def _section(request: Request, ctx: Ctx, active: str, title: str, body: str) -> HTMLResponse:
@@ -1673,7 +1673,7 @@ def operator_behind_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
         return ctx
-    if not ctx.session.admin:
+    if not ctx.can_reset:  # el operador o una empresa de demo nuestra
         return _forbidden("Solo el operador de la plataforma puede ver esta sección.")
     with deps.connection() as conn:
         slug = chat_slug(conn, ctx.tenant_id)

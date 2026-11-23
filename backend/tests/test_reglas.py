@@ -98,8 +98,8 @@ def test_el_panel_guarda_horario_y_a_quien_derivar(
 ) -> None:
     client = TestClient(app)
     client.post("/panel/login", data={"email": ACME_EMAIL, "password": ACME_PASSWORD})
-    page = client.get("/panel/configuracion").text
-    assert "Reglas de atención" in page and "Exige identidad verificada" in page
+    page = client.get("/panel/agent").text
+    assert "Horario y derivaciones" in page and "Exige identidad verificada" in page
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None
     response = client.post(

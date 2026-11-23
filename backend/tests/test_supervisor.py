@@ -186,8 +186,8 @@ def test_configuracion_muestra_lo_que_agrega_y_lo_apaga(
     stack: SimulatedStack, panel: TestClient
 ) -> None:
     stack.send("lucia", ORDER_QUESTION)
-    page = panel.get("/panel/configuracion").text
-    assert "Supervisor de respuestas" in page
+    page = panel.get("/panel/agent").text
+    assert "Control de respuestas" in page
     assert re.search(r"<td>Revisiones</td><td>1</td>", page)
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None
