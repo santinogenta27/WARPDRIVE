@@ -19,6 +19,7 @@ from app import net
 from app.connectors import shopify
 
 API = "https://api.tiendanube.com/v1"
+DIAGNOSE_PATH = "/_diagnostico"  # la prueba de conexión del panel (no es parte de la API)
 CANONICAL_BASE = "https://tienda.local"
 USER_AGENT = "Enterprise Data AI (soporte@enterprisedataai.com)"
 STATUS = {"unpacked": "paid", "unfulfilled": "paid", "fulfilled": "shipped", "shipped": "shipped"}
@@ -128,6 +129,8 @@ class TiendanubeTransport(httpx.BaseTransport):
         url = urlsplit(str(request.url))
         query = {k: v[0] for k, v in parse_qs(url.query).items()}
         body = json.loads(request.content) if request.content else {}
+        if request.method == "GET" and url.path == DIAGNOSE_PATH:
+            return self._diagnose()
         if request.method == "GET" and url.path == "/customers":
             return self._customers(query.get("email", ""))
         if request.method == "GET" and url.path == "/products":
@@ -154,6 +157,36 @@ class TiendanubeTransport(httpx.BaseTransport):
                 },
             )
         return _json(404, {"code": "not_found", "message": "Operación no disponible."})
+
+    def _diagnose(self) -> httpx.Response:
+        """La prueba de conexión (decisión 086): la tienda existe, acepta el token, y sus
+        dominios (se agregan solos a los del chat)."""
+        store = self._api.get("/store")
+        if store.status_code == 401:
+            return _json(
+                401, {"code": "token_invalid", "message": "Tiendanube rechazó el token de acceso."}
+            )
+        if store.status_code == 404:
+            return _json(
+                404, {"code": "store_not_found", "message": "No existe una tienda con ese número."}
+            )
+        if store.status_code != 200:
+            return _json(store.status_code, {"message": "Tiendanube no respondió."})
+        data = store.json() or {}
+        name = data.get("name")
+        hosts = [
+            urlsplit(u if "//" in u else f"https://{u}").hostname
+            for u in [data.get("url_with_protocol"), data.get("original_domain")]
+            + list(data.get("domains") or [])
+            if isinstance(u, str) and u
+        ]
+        return _json(
+            200,
+            {
+                "shop": next(iter(name.values()), None) if isinstance(name, dict) else name,
+                "domains": [h for h in dict.fromkeys(hosts) if h],
+            },
+        )
 
     def _customers(self, email: str) -> httpx.Response:
         found = self._api.get("/customers", params={"q": email})

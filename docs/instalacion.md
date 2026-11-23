@@ -1,49 +1,56 @@
-# Instalar el asistente en tu tienda
+# Instalar el agente en tu sitio
 
-Guías cortas para las plataformas más usadas. En todas, el código es el mismo: copialo del panel en **Configuración → Widget para tu sitio → Copiar código**. Se ve así:
+Las mismas guías que muestra el panel en **Deploy → Add the chat to your website**, para mandarlas por email. El código es el mismo en todas las plataformas: copialo con **Copy code**. Se ve así:
 
 ```html
 <script src="https://TU-SERVICIO/widget.js" data-chat="ENLACE-DE-TU-CHAT" async></script>
 ```
 
-**Antes de pegarlo**, cargá el dominio de tu tienda en **Dominios permitidos**, en la misma pantalla (por ejemplo `www.tutienda.com`). Si no, el chat no abre en tu sitio. Detalle y opciones en [widget.md](widget.md).
+**Dominios permitidos.** El chat solo abre en los dominios cargados en **Allowed domains** (Dominios permitidos, en el mismo paso). Si conectaste tu tienda de Shopify o Tiendanube en el paso 1, sus dominios ya están cargados. Detalle en [widget.md](widget.md).
 
-Los menús de cada plataforma cambian seguido. Si algún nombre no coincide, buscá la opción para agregar código en el pie de todas las páginas.
+**Revisar la instalación.** Después de pegar el código y publicar, tocá **Check installation**: confirma que el chat cargó desde tu dominio, o te dice si el código no está en la página.
+
+Menús verificados en la documentación oficial el 23/11/2026 (decisión 086).
 
 ## Shopify
 
-1. En el admin: **Tienda online → Temas**.
-2. En el tema publicado: **⋯ → Editar código**.
-3. Abrí `layout/theme.liquid`.
-4. Pegá el código justo antes de `</body>` y tocá **Guardar**.
+1. En el admin: **Online Store** (Tienda online) → **Themes** (Temas).
+2. Al lado del tema actual: **⋯** → **Edit code** (Editar código).
+3. En la carpeta **Layout**, abrí `theme.liquid`.
+4. Pegá el código justo antes de `</body>` y tocá **Save**.
 5. Abrí la tienda: la burbuja aparece abajo a la derecha.
 
-Al cambiar de tema, repetí el paso 4 en el tema nuevo.
+Si cambiás de tema, pegá el código de nuevo. Shopify recomienda que las apps usen un "app embed" (Theme settings → App embeds): llega cuando la app de la plataforma tenga su extensión de tema (decisión 086).
 
 ## WordPress (y WooCommerce)
 
-Con un plugin, sin tocar el tema:
+**Sin plugin** (como administrador):
 
-1. **Plugins → Añadir nuevo** → buscá **WPCode** (antes "Insert Headers and Footers") → **Instalar** y **Activar**.
-2. **Code Snippets → Header & Footer**.
-3. Pegá el código en **Footer** y tocá **Guardar cambios**.
+1. Temas de bloques: **Apariencia → Editor → Patrones → Pie de página**. Temas clásicos: **Apariencia → Widgets**, un área del pie.
+2. Agregá un bloque **HTML personalizado**, pegá el código y guardá.
 
-Sin plugin: **Apariencia → Editor de archivos del tema → `footer.php`**, antes de `</body>`. Una actualización del tema lo puede borrar; por eso conviene el plugin.
+**Con un plugin**, si el tema no tiene un pie editable:
+
+1. **Plugins → Añadir nuevo plugin**, buscá **WPCode**, **Instalar ahora** y **Activar**.
+2. **Code Snippets → Header & Footer**, pegá el código en **Footer** y tocá **Save Changes**.
 
 ## Tiendanube
 
-1. En el administrador: **Configuración → Códigos externos**.
-2. Pegá el código en el campo de códigos de seguimiento que se carga en todas las páginas.
-3. Guardá y abrí la tienda.
+Desde marzo de 2024 Tiendanube no tiene el campo de "códigos de tracking". La forma oficial de sumar código externo es Google Tag Manager (solo planes pagos):
 
-Si tu plan no tiene esa opción, el chat igual funciona con su enlace propio (`/c/…`, en el panel): ponelo como botón o en el menú de la tienda.
+1. En Google Tag Manager, creá una etiqueta **HTML personalizado** con el código, activador **Todas las páginas**, y publicá.
+2. En el administrador de Tiendanube: **Configuración → Códigos externos**, pegá el ID del contenedor (`GTM-XXXXXXX`) en **Google GTM ID** y **Guardar cambios**.
+
+En cualquier plan: **Diseño → Editar el código de diseño** y pegá el código antes de `</body>` en el layout del tema, o agregá al menú un link a la página de tu chat.
+
+## Cualquier otro sitio
+
+Pegá el código antes de `</body>` en todas las páginas (en el pie o el layout compartido). En los creadores de sitios:
+
+- **Wix:** Configuración → Código personalizado.
+- **Squarespace:** Configuración → Avanzado → Inyección de código → Pie de página.
+- **Webflow:** Site settings → Custom code → Footer code.
 
 ## WhatsApp
 
-Si tu empresa tiene un número de WhatsApp Business verificado por Meta, el mismo asistente puede atender ahí. Hoy lo conecta el operador: escribinos. Detalle técnico en [whatsapp.md](whatsapp.md).
-
-## Probar que quedó bien
-
-- Abrí la tienda en una ventana privada y escribí "hola".
-- Mirá la conversación en el panel, en **Casos**.
-- Si la burbuja no aparece, abrí la consola del navegador: si dice que el dominio no está en la lista, falta cargarlo en **Dominios permitidos**.
+El mismo agente atiende en tu número de WhatsApp Business. Se conecta desde **Deploy → Connect WhatsApp**, con la guía paso a paso de [whatsapp.md](whatsapp.md) y la decisión 068.

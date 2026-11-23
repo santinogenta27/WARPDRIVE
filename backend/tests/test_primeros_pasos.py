@@ -32,7 +32,7 @@ OWNER, PASSWORD = "lu@tiendasur.example", "clave-de-tienda-sur"
 LINKS = [
     "/panel/knowledge",
     "/panel/agent",
-    "/panel/deploy#widget",
+    "/panel/agent/voice",
     "/panel/test/playground",
     "/panel/test",
 ]

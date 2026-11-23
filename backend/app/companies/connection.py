@@ -338,6 +338,14 @@ def test_connection(
         status = response.status_code
         result["status"] = status
         message = _platform_message(connection, response)
+        # Lo que dice la plataforma: el código del error (qué falta, decisión 086), la tienda y
+        # sus dominios (se agregan solos a los del chat).
+        body = _platform_body(connection, response)
+        for key, field in (("code", "codigo"), ("shop", "tienda"), ("domains", "dominios")):
+            if body.get(key):
+                result[field] = body[key]
+        if body.get("missing"):
+            result["faltan"] = body["missing"]
         if message and status >= 400:
             result |= {"ok": False, "detalle": message}
         elif status in (401, 403):
@@ -356,6 +364,18 @@ def test_connection(
             (Jsonb(result), bool(result["ok"]), tenant_id),
         )
     return result
+
+
+def _platform_body(connection: SystemConnection, response: Any) -> dict[str, Any]:
+    from app.connectors import platforms
+
+    if not platforms.is_platform(connection.base_url):
+        return {}
+    try:
+        body = response.json()
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
 
 
 def _platform_message(connection: SystemConnection, response: Any) -> str | None:

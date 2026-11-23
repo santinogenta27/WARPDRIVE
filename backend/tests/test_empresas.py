@@ -584,7 +584,7 @@ def test_la_empresa_conecta_su_sistema_con_credenciales_cifradas_y_prueba_antes_
     probe = world.upstream[-1]
     assert probe.method == "GET" and probe.url.path == "/v1/customers"  # solo lectura
     assert probe.headers["authorization"] == f"Bearer {SECRET}"
-    assert "La prueba pasó" in norte.get("/panel/deploy").text
+    assert "Conectado a tu tienda." in norte.get("/panel/deploy").text
 
     activated = post(norte, "/panel/configuracion/sistema/activar")
     assert "ok=" in activated.headers["location"]

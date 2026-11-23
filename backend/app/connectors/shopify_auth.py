@@ -63,6 +63,15 @@ class Credentials:
         return self.expires_at is not None and self.expires_at <= (now or time.time())
 
 
+class TokenError(ValueError):
+    """Shopify no entregó el token. `code` dice qué falta (decisión 086): `shop_not_permitted`,
+    `invalid_client`, `store_not_found` o `token_failed`."""
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def parse(secret: str | None) -> Credentials:
     """Las credenciales guardadas. Un texto que no es JSON es un token pegado (legacy)."""
     text = (secret or "").strip()
@@ -101,17 +110,23 @@ def _token_request(
     if response.status_code != 200 or not body.get("access_token"):
         error = str(body.get("error") or response.status_code)
         if "shop_not_permitted" in json.dumps(body):
-            raise ValueError(
+            raise TokenError(
                 "Shopify no deja pedir el token con Client ID y Secret en esta tienda: la app "
                 "tiene que ser de la misma organización que la tienda. Si es la tienda de un "
-                "cliente, usá «Instalar con Shopify»."
+                "cliente, usá «Instalar con Shopify».",
+                "shop_not_permitted",
             )
-        if error in ("invalid_client", "401", "400"):
-            raise ValueError(
+        if error in ("invalid_client", "401", "400") or "cannot_be_found" in json.dumps(body):
+            raise TokenError(
                 "Shopify rechazó el Client ID o el Client Secret: copialos de nuevo desde "
-                "Configuración de la app en el Dev Dashboard."
+                "Configuración de la app en el Dev Dashboard.",
+                "invalid_client",
             )
-        raise ValueError(f"Shopify no entregó el token ({error}).")
+        if response.status_code == 404:
+            raise TokenError(
+                "No existe una tienda de Shopify con esa dirección.", "store_not_found"
+            )
+        raise TokenError(f"Shopify no entregó el token ({error}).", "token_failed")
     return body
 
 

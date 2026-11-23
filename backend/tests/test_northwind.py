@@ -382,7 +382,7 @@ def test_el_panel_de_northwind_en_ingles(web: TestClient) -> None:
         for url in ("/panel/agent/topics", "/panel/agent/actions", "/panel/deploy")
     )
     assert '<html lang="en">' in settings
-    for text in ("Where is my order", "Refund", "Demo system (simulated API)", "Exchange"):
+    for text in ("Where is my order", "Refund", "simulated store", "Exchange"):
         assert text in settings, text
 
 

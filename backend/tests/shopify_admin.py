@@ -222,7 +222,11 @@ class FakeShopify:
     def _permisos(self, _: dict[str, Any]) -> httpx.Response:
         return self._data(
             {
-                "shop": {"name": "Mi Tienda"},
+                "shop": {
+                    "name": "Mi Tienda",
+                    "myshopifyDomain": SHOP,
+                    "primaryDomain": {"host": "www.mitienda.com.ar"},
+                },
                 "currentAppInstallation": {"accessScopes": [{"handle": s} for s in self.scopes]},
             }
         )
