@@ -234,7 +234,7 @@ def test_textos_comunes_en_ingles(world: World) -> None:
         ("/panel/agent/actions", "Low risk · requires a verified identity · read only"),
         ("/panel/agent/actions", ">On<"),
         ("/panel/agent/actions", ">Off<"),
-        ("/panel/agent/language", "Save language"),
+        ("/panel/agent/language", "Language your agent speaks"),
     ):
         assert text in client.get(url).text, text
 
