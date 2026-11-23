@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
+from app.agent import promises
 from app.audit import log as audit_log
 from app.cases import assist, feedback, refund_confirmation, supervision
 from app.cases.archive import archive_cases
@@ -830,6 +831,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
             if assist.needed(str(case[0]), bool(drafts))
             else None
         )
+        notices = promises.for_case(conn, tenant_id, case_id)  # decisión 084
     status, escalation, type_name, created, resolved_by, reopened = case
     csrf = ctx.csrf
     roles = {**ROLES, "human": f"Equipo de {company}"}
@@ -884,7 +886,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
 <div class="row"><h1 class="grow">Caso {esc(type_label(type_name))}</h1>
 {status_badge(status, resolved_by, reopened)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
-{escalated}{_assist_card(helper, case_id, csrf)}{approvals}{drafts}
+{escalated}{_assist_card(helper, case_id, csrf)}{_notices_card(notices)}{approvals}{drafts}
 <div class="kpis"><div class="kpi"><div class="n">USD {cost:.4f}</div><div class="muted">Costo
 del modelo{" (modelo gratuito)" if calls and not cost else ""}</div></div>
 <div class="kpi"><div class="n">{calls}</div><div class="muted">llamadas al
@@ -944,6 +946,33 @@ def reply(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Respo
                     },
                 )
     return RedirectResponse(f"/panel/casos/{case_id}", status_code=303)
+
+
+# -- avisos programados (decisión 084) -------------------------------------------------------
+NOTICE_KINDS = {
+    promises.APPROVAL: "Avisarle al cliente cuando se decida la aprobación",
+    promises.TEAM: "Responderle al cliente desde el equipo",
+}
+NOTICE_STATES = {"pending": "Pendiente", "sent": "Cumplido", "cancelled": "Cancelado"}
+
+
+def _notices_card(notices: list[promises.Notice]) -> str:
+    """Lo que el sistema se comprometió a avisarle al cliente y si ya lo cumplió."""
+    if not notices:
+        return ""
+    badge = {"pending": "waiting_approval", "sent": "resolved", "cancelled": ""}
+    items = "".join(
+        f'<li><span class="badge {badge[n.status]}">{esc(NOTICE_STATES[n.status])}</span> '
+        f"<span>{esc(NOTICE_KINDS.get(n.kind, n.kind))}</span> "
+        f'<span class="muted small">{local_time(n.created_at)}</span></li>'
+        for n in notices
+    )
+    return (
+        '<div class="card"><h2 style="margin-top:0">Avisos programados</h2>'
+        '<p class="muted small">El asistente solo puede prometerle un aviso al cliente si '
+        "hay uno de estos pendiente.</p>"
+        f'<ul class="small">{items}</ul></div>'
+    )
 
 
 # -- asistente para el equipo (decisión 082) ------------------------------------------------

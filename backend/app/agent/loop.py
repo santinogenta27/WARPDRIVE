@@ -18,7 +18,15 @@ import psycopg
 import yaml
 
 from app import i18n, memory
-from app.agent import conduct, manipulation, presentable, prompt, supervisor, voice
+from app.agent import (
+    conduct,
+    manipulation,
+    presentable,
+    promises,
+    prompt,
+    supervisor,
+    voice,
+)
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
     CHAT,
@@ -269,6 +277,7 @@ HANDOFF_CAUSES = (
     "limite_pasos",
     "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
     "supervisor",  # detalle: `derivar` o `reescribir` (lo pidió dos veces), decisión 079
+    "promesa_sin_aviso",  # prometió avisar sin un aviso programado (decisión 084)
 )
 _FIXED_VERIFICATION = (
     "Para darte datos de tu pedido necesito verificar",
@@ -360,6 +369,7 @@ class _Turn:
     memory: str = ""  # memoria del cliente verificado (decisión 078), para el prompt
     rules: str = ""  # instrucciones del tipo de caso, para el supervisor (decisión 079)
     supervisor_retries: int = 0  # el supervisor ya pidió una reescritura (decisión 079)
+    promise_retries: int = 0  # ya se corrigió una promesa sin aviso (decisión 084)
 
     def say(self, key: str, **values: Any) -> str:
         return i18n.text(self.lang, key, **values)
@@ -1056,6 +1066,27 @@ class Agent:
                             _correction(final_id, conduct.ACTION_CORRECTIONS[turn.lang])
                         )
                         continue
+                    listed: Any = final_input.get("fuentes") or []
+                    cited = [str(s) for s in listed]
+                    if _check(self._promises_without_notice, turn, said, cited):
+                        # Promesas cumplidas (decisión 084): prometer un aviso a futuro
+                        # necesita un aviso programado que lo cumpla.
+                        self._audit(
+                            turn,
+                            "promise_rejected",
+                            {"reason": promises.REASON, "rejected_message": final_input},
+                        )
+                        if turn.promise_retries >= 1:
+                            return self._give_up(
+                                turn,
+                                f"Control de promesas: {promises.REASON}.",
+                                chat,
+                                {"tipo": "promesa_sin_aviso"},
+                            )
+                        turn.promise_retries += 1
+                        messages.append({"role": "assistant", "content": response.content})
+                        messages.append(_correction(final_id, promises.CORRECTIONS[turn.lang]))
+                        continue
                     given = _check(conduct.asks_given_order, said, turn.text)
                     if given and not turn.asked_given_order:
                         # Pide el número de pedido que el cliente ya dio (decisión 066): se le
@@ -1437,6 +1468,18 @@ class Agent:
             language=turn.lang,
         )
 
+    def _promises_without_notice(self, turn: _Turn, said: str, cited: list[str]) -> bool:
+        """Promete avisar más adelante sin una aprobación creada en este turno, sin un aviso
+        programado pendiente en el caso y sin citar un documento que describa ese aviso de la
+        tienda (decisión 084)."""
+        if not promises.promised(said):
+            return False
+        if any(promises.documented(d.text) for d in turn.documents if d.source in cited):
+            return False
+        if any(d.status == "approval_required" for d in turn.decisions):
+            return False
+        return not promises.pending(self._conn, turn.tenant_id, turn.case_id)
+
     def _supervise(self, turn: _Turn, answer: str) -> supervisor.Review:
         """Revisión del supervisor (decisión 079), con su costo y su latencia en la auditoría."""
         documents: dict[str, str] = {}
@@ -1573,6 +1616,13 @@ class Agent:
         message = to_whatsapp(turn.prefix + message)
         self._save_message(turn.tenant_id, turn.case_id, "agent", message)
         self._remember(turn, action)
+        # Los avisos que el sistema se compromete a dar (decisión 084).
+        if action == "pedir_aprobacion" and approval_id is not None:
+            promises.schedule(
+                self._conn, turn.tenant_id, turn.case_id, promises.APPROVAL, str(approval_id)
+            )
+        elif action == "derivar":
+            promises.schedule(self._conn, turn.tenant_id, turn.case_id, promises.TEAM)
         self._audit(
             turn,
             "final_action",

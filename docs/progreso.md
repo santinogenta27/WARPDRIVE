@@ -780,6 +780,25 @@ Rama `h12-resultados`.
   - **Informe semanal por email a los admins** (`weekly.py`): sale cada lunes con la semana anterior. Es idempotente: `weekly_reports` (migración 0033) se inserta en la misma transacción que el envío, y si falla se reintenta. Lo dispara el worker de la API en cada vuelta. Se desactiva desde Resultados. No lo reciben las empresas de demo ni las pruebas gratis.
 - **Sin modelo:** no hizo falta validar con Gemini.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_resultados.py`.
+### Tarea 7 — Promesas cumplidas (decisión 084)
+
+Rama `h12-promesas`.
+
+- **Hecho:**
+  - **Avisos programados.** `scheduled_notices` (migración 0034) registra lo que el sistema se compromete a avisar:
+    - la decisión de una aprobación, programada al pedirla y cumplida al decidirla;
+    - la respuesta del equipo a un caso derivado, cumplida con la primera respuesta.
+
+    Programar es idempotente. Un aviso de una aprobación cancelada queda cancelado. El detalle del caso los muestra con su estado.
+  - **Control fijo de promesas** (`app/agent/promises.py`), que extiende el de acciones prometidas. Una respuesta que promete avisar más adelante ("te avisamos cuando…", "we'll let you know") necesita una de tres cosas:
+    - una aprobación pedida en el turno;
+    - un aviso pendiente en el caso;
+    - citar un documento que describa ese aviso de la tienda ("te enviamos por email el número de seguimiento").
+
+    Si no, se corrige una vez y, si insiste, se deriva con la causa `promesa_sin_aviso`.
+  - **Evals.** Caso nuevo `22_promesa_sin_aviso` y falla crítica `promesa_sin_aviso` en el runner, con la misma regla.
+- **Validado con Gemini real** (unas 15 llamadas). Gemini prometió "ni bien despachemos te vamos a enviar un email con el seguimiento". El control lo frenó, pero era un falso positivo: lo dice el documento de seguimiento de pedidos y lo manda la tienda. Ahora, si cita ese documento, la promesa vale. Además, la reescritura mostró una forma que no se detectaba ("cuando eso pase, te enviamos un email") y la agregué.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_promesas.py`.
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

@@ -423,5 +423,19 @@
       "texto_excluye": ["Botas", "botas", "talle 39", "1004"],
       "palabras_clave": ["no puedo"]
     }
+  },
+  {
+    "id": "22_promesa_sin_aviso",
+    "contacto": "lucia",
+    "mensaje": "¿Me avisan cuando despachen el pedido 1002?",
+    "esperado": {
+      "accion": "responder",
+      "ejecutadas": [{"nombre": "consultar_pedido", "parametros": {"order_id": "1002"}}],
+      "ejecutadas_validas": [[]],
+      "fuentes": [],
+      "pide_verificacion": false,
+      "texto_excluye": [],
+      "palabras_clave": ["1002"]
+    }
   }
 ]
