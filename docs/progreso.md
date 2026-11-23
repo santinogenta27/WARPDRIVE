@@ -865,6 +865,19 @@ Rama `h13-deploy`.
   3. Su Client ID y Client secret en `.env`.
 - **Test de aceptación:** `test_panel_deploy.py`.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_panel_deploy.py`; en el panel, `/panel/deploy`.
+- Mergeada en `hito-13` con el PR #54.
+
+### Tarea 5 — Agent: configurar sin miedo (decisión 087)
+
+Rama `h13-agent`.
+
+- **Hecho** (`app/panel/agent_forms.py`):
+  - En las seis pestañas (Rules, Actions, Topics, Brand & voice, Sales, Language), **cada opción** tiene una línea de ayuda en lenguaje simple y un ejemplo. Los interruptores tienen la misma forma: estado y Turn on/Turn off.
+  - **Brand & voice** muestra la marca del chat y la voz del agente al lado de una **vista previa del chat real**. Se actualiza al escribir y agrega una respuesta de ejemplo con el trato, los emojis y la firma.
+  - **"Saved":** al guardar aparece un aviso flotante que se va solo, en todo el panel.
+  - Actions y Topics, reescritas sin jerga: aprobar, identidad verificada, aprobación de una persona, topes e instrucciones.
+- **Test de aceptación:** `test_panel_agent.py`. Falla si un control de Agent queda sin ayuda o sin ejemplo.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_agent.py`; en el panel, `/panel/agent/voice`: cambiá la firma o los emojis y mirá la vista previa.
 
 ## Qué significa "simulado"
 

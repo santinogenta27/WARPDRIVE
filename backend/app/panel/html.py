@@ -335,7 +335,12 @@ def toast(key: str | None) -> str:
     text = NOTICES.get(key or "")
     if text is None:
         return ""
-    # Se va sola; sin `?aviso` en la dirección, recargar no la vuelve a mostrar.
+    return toast_text(text)
+
+
+def toast_text(text: str) -> str:
+    """El aviso de "guardado" (decisión 087): arriba, se va solo y, sin `?ok`/`?aviso` en la
+    dirección, recargar no lo vuelve a mostrar."""
     return (
         f'<div class="toast" role="status"><span aria-hidden="true">✓</span> {esc(text)}</div>'
         "<script>setTimeout(function(){var t=document.querySelector('.toast');"

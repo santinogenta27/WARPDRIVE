@@ -303,6 +303,203 @@ PHRASES: dict[str, str] = {
     "Store connected. You can now use your real store.": (
         "Tienda conectada. Ya podés usar tu tienda real."
     ),
+    # agent (decisión 087)
+    "Example:": "Ejemplo:",
+    "Safety checks": "Controles",
+    "Your team's hours": "El horario de tu equipo",
+    "Days": "Días",
+    "Mon": "Lun",
+    "Tue": "Mar",
+    "Wed": "Mié",
+    "Thu": "Jue",
+    "Fri": "Vie",
+    "Sat": "Sáb",
+    "Sun": "Dom",
+    "From": "Desde",
+    "To": "Hasta",
+    "Your agent answers 24/7. Outside these hours, when it passes a conversation to a person, it "
+    "tells the customer when your team will reply.": (
+        "Tu agente atiende siempre. Fuera de este horario, cuando pasa una conversación a una "
+        "persona, le dice al cliente cuándo le responde tu equipo."
+    ),
+    "Mon to Fri, 9:00 to 18:00": "Lun a Vie, de 9:00 a 18:00",
+    "Who gets hand-offs and approvals": "Quién recibe las derivaciones y aprobaciones",
+    "This email is notified when a conversation needs a person or an approval. Empty: every user "
+    "of your company.": (
+        "A este email le avisamos cuando una conversación necesita a una persona o una "
+        "aprobación. Vacío: a todos los usuarios de tu empresa."
+    ),
+    "support@yourstore.com": "soporte@tutienda.com",
+    "Every answer waits in Inbox → Drafts until someone on your team sends, edits or rejects it. "
+    "The customer sees “typing…” meanwhile.": (
+        "Cada respuesta espera en Bandeja → Borradores hasta que alguien de tu equipo la envía, "
+        "la edita o la rechaza. Mientras tanto, el cliente ve “escribiendo…”."
+    ),
+    "Turn it on for your first days; turn it off when the answers look right.": (
+        "Activalo los primeros días; desactivalo cuando las respuestas te convenzan."
+    ),
+    "A second, low-cost AI checks every answer with facts, policies or actions before it goes "
+    "out. If something is off, it asks for one rewrite or passes the conversation to a person.": (
+        "Una segunda IA, de bajo costo, revisa cada respuesta con datos, políticas o acciones "
+        "antes de enviarla. Si algo no cierra, pide reescribirla una vez o pasa la conversación "
+        "a una persona."
+    ),
+    "It stops an answer that promises a refund your policy doesn't allow.": (
+        "Frena una respuesta que promete un reembolso que tu política no permite."
+    ),
+    "Turn on": "Activar",
+    "Turn off": "Desactivar",
+    "Answers checked (30 days)": "Respuestas revisadas (30 días)",
+    "Rewritten": "Reescritas",
+    "Passed to a person": "Pasadas a una persona",
+    "Extra time per answer": "Tiempo extra por respuesta",
+    "Cost": "Costo",
+    "Rules and limits": "Reglas y límites",
+    "Ask for a verified customer": "Pedir un cliente verificado",
+    "The customer confirms who they are (a code sent to their email) before your agent can do "
+    "this.": (
+        "El cliente confirma quién es (con un código que le llega por email) antes de que tu "
+        "agente pueda hacerlo."
+    ),
+    "On for anything that shows or changes an order": (
+        "Activado para todo lo que muestra o cambia un pedido"
+    ),
+    "Always ask a person to approve": "Pedir siempre la aprobación de una persona",
+    "Every time, a person on your team approves it in Inbox → Approvals first.": (
+        "Cada vez, una persona de tu equipo lo aprueba antes en Bandeja → Aprobaciones."
+    ),
+    "On for refunds": "Activado para los reembolsos",
+    "Save rules": "Guardar reglas",
+    "Ask for approval above ($)": "Pedir aprobación por encima de ($)",
+    "Amounts over this wait for a person. Empty: never.": (
+        "Los montos mayores esperan a una persona. Vacío: nunca."
+    ),
+    "Never": "Nunca",
+    "Always (high risk)": "Siempre (riesgo alto)",
+    "Never allow above ($)": "No permitir nunca por encima de ($)",
+    "Amounts over this are always rejected, even if a person approves.": (
+        "Los montos mayores se rechazan siempre, aunque los apruebe una persona."
+    ),
+    "No limit": "Sin tope",
+    "Save limits": "Guardar límites",
+    "No actions yet": "Todavía no hay acciones",
+    "Your agent's actions come from your store.": "Las acciones de tu agente salen de tu tienda.",
+    "Uses actions that are off:": "Usa acciones desactivadas:",
+    "Actions:": "Acciones:",
+    "Answers with information only": "Responde solo con información",
+    "conversations in your history": "conversaciones en tu historial",
+    "Instructions": "Instrucciones",
+    "How your agent handles this topic": "Cómo atiende tu agente este tema",
+    "Step-by-step instructions. Changes apply to the next conversation.": (
+        "Instrucciones paso a paso. Los cambios valen desde la próxima conversación."
+    ),
+    "If the order is late, apologize and give the new date.": (
+        "Si el pedido está atrasado, pedí disculpas y dá la fecha nueva."
+    ),
+    "Save instructions": "Guardar instrucciones",
+    "No topics yet": "Todavía no hay temas",
+    "Topics come from your support history. Upload it in Knowledge and run the analysis.": (
+        "Los temas salen de tu historial de atención. Subilo en Conocimiento y corré el análisis."
+    ),
+    "Go to Knowledge": "Ir a Conocimiento",
+    "Name customers see": "Nombre que ven los clientes",
+    "Shown at the top of the chat.": "Aparece arriba del chat.",
+    "Accent color": "Color de acento",
+    "Pick a color": "Elegir un color",
+    "Used for the chat button and your agent's messages.": (
+        "Se usa en el botón del chat y en los mensajes de tu agente."
+    ),
+    "Logo": "Logo",
+    "Remove the current logo": "Quitar el logo actual",
+    "A square PNG, JPG or WebP image, up to 200 KB.": (
+        "Una imagen cuadrada PNG, JPG o WebP, de hasta 200 KB."
+    ),
+    "Your store's icon": "El ícono de tu tienda",
+    "Your agent's name": "El nombre de tu agente",
+    "Optional. How your agent introduces itself.": "Opcional. Cómo se presenta tu agente.",
+    "Greeting": "Saludo",
+    "The first message customers see when they open the chat.": (
+        "El primer mensaje que ven los clientes al abrir el chat."
+    ),
+    "Hi! I'm Nina from Acme. How can I help?": "¡Hola! Soy Nina, de Acme. ¿En qué te ayudo?",
+    "Suggested questions": "Preguntas sugeridas",
+    "Up to 4, one per line. Customers can tap them when the chat is empty.": (
+        "Hasta 4, una por línea. Los clientes las tocan cuando el chat está vacío."
+    ),
+    "Where is my order?": "¿Dónde está mi pedido?",
+    "Tone": "Tono",
+    "A few words about how your agent should sound.": "Unas palabras sobre cómo tiene que sonar.",
+    "Warm and friendly, straight to the point": "Cálido y cercano, sin vueltas",
+    "Form of address in Spanish": "Trato en español",
+    "Based on the language": "Según el idioma",
+    "How your agent addresses customers when it writes in Spanish.": (
+        "Cómo trata tu agente a los clientes cuando escribe en español."
+    ),
+    "Vos, for customers in Argentina": "Vos, para clientes de Argentina",
+    "Words to use": "Palabras a usar",
+    "Separated by commas. Your agent uses them when they fit.": (
+        "Separadas por coma. Tu agente las usa cuando vienen al caso."
+    ),
+    "shipping, exchange, size guide": "envío, cambio, guía de talles",
+    "Words to avoid": "Palabras a evitar",
+    "Separated by commas. An answer that uses one is rewritten before it's sent.": (
+        "Separadas por coma. Una respuesta que usa alguna se reescribe antes de enviarla."
+    ),
+    "cheap, problem, unfortunately": "barato, problema, lamentablemente",
+    "Emojis": "Emojis",
+    "Use emojis": "Usar emojis",
+    "Off: emojis are removed from every answer before it's sent.": (
+        "Desactivado: se sacan los emojis de cada respuesta antes de enviarla."
+    ),
+    "On for a casual brand; off for a formal one": (
+        "Activado para una marca informal; desactivado para una formal"
+    ),
+    "Signature": "Firma",
+    "Added at the end of every answer. Empty: no signature.": (
+        "Se agrega al final de cada respuesta. Vacío: sin firma."
+    ),
+    "Preview": "Vista previa",
+    "Your real chat. It updates as you type; nothing changes for customers until you save.": (
+        "Tu chat real. Se actualiza mientras escribís; para los clientes no cambia nada hasta "
+        "que guardes."
+    ),
+    "Products to suggest": "Productos para sugerir",
+    "No products to suggest yet": "Todavía no hay productos para sugerir",
+    "Add one below.": "Agregá uno abajo.",
+    "Product": "Producto",
+    "When": "Cuándo",
+    "Max. discount": "Descuento máx.",
+    "Remove": "Quitar",
+    "At most one product per conversation, only after the customer's question is solved.": (
+        "Como mucho un producto por conversación, y solo después de resolver la consulta del "
+        "cliente."
+    ),
+    "Add a product": "Agregar un producto",
+    "Use the same name it has in your store, so your agent can find it.": (
+        "Usá el mismo nombre que tiene en tu tienda, así tu agente lo encuentra."
+    ),
+    "Leather care kit": "Kit de cuidado de cuero",
+    "When to suggest it": "Cuándo sugerirlo",
+    "After solving one of these topics. Never when the customer is upset or complaining.": (
+        "Después de resolver uno de estos temas. Nunca si el cliente está enojado o reclamando."
+    ),
+    "After a question about shoe sizes": "Después de una consulta por talles",
+    "Maximum discount (%)": "Descuento máximo (%)",
+    "Your agent can never offer more than this. 0: no discount.": (
+        "Tu agente nunca puede ofrecer más que esto. 0: sin descuento."
+    ),
+    "Add product": "Agregar producto",
+    "Turn on a topic first: products are suggested after solving one.": (
+        "Primero activá un tema: los productos se sugieren después de resolver uno."
+    ),
+    "Go to Topics": "Ir a Temas",
+    "Language your agent speaks": "Idioma en el que habla tu agente",
+    "Your agent answers, the chat and the verification email use this language. In Spanish, "
+    "your agent writes in Rioplatense Spanish (vos).": (
+        "Las respuestas de tu agente, el chat y el email de verificación usan este idioma. En "
+        "español, tu agente escribe en rioplatense (con vos)."
+    ),
+    "English, for a store in the United States": "Inglés, para una tienda en Estados Unidos",
     # diagnóstico de la conexión (app/companies/deploy.py)
     "Connected to your store.": "Conectado a tu tienda.",
     "In the Dev Dashboard, open your app → Versions, add them under Scopes and click Release. "
@@ -377,6 +574,25 @@ PATTERNS: list[tuple[re.Pattern[str], Callable[[re.Match[str]], str]]] = [
     ),
     (re.compile(r"(\d+) of (\d+) on"), lambda m: f"{m[1]} de {m[2]} activas"),
     (re.compile(r"Connected to (.+)\."), lambda m: f"Conectado a {m[1]}."),
+    (re.compile(r"— The (.+) team"), lambda m: f"— El equipo de {m[1]}"),
+    (
+        re.compile(r"Messages you send here show up in your Inbox as (.+)'s chat\."),
+        lambda m: f"Los mensajes que mandes acá aparecen en tu Bandeja como chat de {m[1]}.",
+    ),
+    (
+        re.compile(
+            r"(Low|Medium|High) risk · (requires a verified identity|no identity needed) · "
+            r"(changes data|read only)(?: · cap (.+))?"
+        ),
+        lambda m: " · ".join(
+            [
+                {"Low": "Riesgo bajo", "Medium": "Riesgo medio", "High": "Riesgo alto"}[m[1]],
+                "pide identidad verificada" if m[2].startswith("requires") else "sin identidad",
+                "modifica datos" if m[3] == "changes data" else "solo consulta",
+            ]
+            + ([f"tope {m[4]}"] if m[4] else [])
+        ),
+    ),
     (
         re.compile(r"Your Shopify app is missing these permissions: (.+)\."),
         lambda m: f"A tu app de Shopify le faltan estos permisos: {m[1]}.",

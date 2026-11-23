@@ -32,9 +32,10 @@ from app.demo import behind
 from app.llm import spending, tenant_llm
 from app.onboarding import ingest as ingestion
 from app.onboarding.ingest import Upload
+from app.panel import agent_forms as forms
 from app.panel import auth, english, guides
-from app.panel.html import esc, local_time, page
-from app.panel.labels import money, tool_label, type_label
+from app.panel.html import esc, local_time, page, toast_text
+from app.panel.labels import tool_label
 from app.panel.routes import Ctx, Deps, Form, PanelDeps, _forbidden, _not_found, _user_id, enter
 from app.sales import upsell
 
@@ -47,7 +48,6 @@ KINDS = {
     "document": "Documento",
     "url": "Página web",
 }
-RISKS = {"low": "Bajo", "medium": "Medio", "high": "Alto"}
 STAGE_STATUS = {
     "pendiente": "Pendiente",
     "en_curso": "En curso",
@@ -113,7 +113,7 @@ def _notice(request: Request) -> str:
         return f'<div class="card alert" role="alert">{lines}</div>'
     # `aviso`: algo que no se pudo hacer aunque el resto sí (un PDF escaneado en una carga).
     warning = request.query_params.get("aviso")
-    shown = f'<div class="card okmsg">{esc(ok[:400])}</div>' if ok else ""
+    shown = toast_text(ok[:400]) if ok else ""
     return shown + (f'<div class="card alert">{esc(warning[:1200])}</div>' if warning else "")
 
 
@@ -594,114 +594,6 @@ MODES = {
 }
 
 
-def _types_html(ctx: Ctx, types: list[review.CaseType], approved: set[str]) -> str:
-    if not types:
-        return (
-            '<p class="muted">Todavía no hay temas. Salen del análisis del '
-            '<a href="/panel/knowledge">onboarding</a>.</p>'
-        )
-    cards = []
-    for kind in types:
-        missing = [t for t in kind.tools if t not in approved]
-        warning = (
-            f'<div class="missing">Usa acciones sin aprobar: '
-            f"{esc(', '.join(tool_label(t) for t in missing))}. Hasta aprobarlas, no las usa.</div>"
-            if missing
-            else ""
-        )
-        tools = ", ".join(tool_label(t) for t in kind.tools) or "solo información"
-        cards.append(
-            f"""<div class="card"><div class="row"><div class="grow">
-<span class="badge {"resolved" if kind.active else ""}">{"Activo" if kind.active else "Inactivo"}
-</span> <b class="data">{esc(type_label(kind.name))}</b>
-<div class="muted small data">{esc(kind.goal)}</div>
-<div class="muted small">{kind.volume} conversaciones del historial · Acciones: {esc(tools)}
-</div>{warning}</div>
-<form method="post" action="/panel/configuracion/tipos/{kind.id}">{_csrf(ctx)}
-<button class="{"" if kind.active else "primary"}" name="activo"
- value="{"no" if kind.active else "si"}">{"Desactivar" if kind.active else "Activar"}</button>
-</form></div>
-<details class="small" style="margin-top:8px"><summary class="muted">Ver y editar las
-instrucciones</summary>
-<form method="post" action="/panel/configuracion/tipos/{kind.id}">{_csrf(ctx)}
-<textarea name="instrucciones" style="min-height:190px" class="mono">{esc(kind.instructions)}
-</textarea><button type="submit">Guardar instrucciones</button></form></details></div>"""
-        )
-    return "".join(cards)
-
-
-def _tools_html(ctx: Ctx, tools: list[review.Tool]) -> str:
-    if not tools:
-        return (
-            '<p class="muted">Todavía no hay acciones. Se generan en el análisis a partir '
-            "del OpenAPI de tu sistema (cargalo más abajo y volvé a analizar).</p>"
-        )
-    cards = []
-    for tool in tools:
-        m = tool.manifest
-        high = m["risk"] == "high"
-        writes = m["upstream"]["method"] != "GET"
-        limits = ""
-        if writes:
-            over = (
-                '<input value="Siempre (riesgo alto)" disabled>'
-                if high
-                else f'<input name="aprobacion_sobre" inputmode="decimal" '
-                f'value="{esc(_plain(m.get("approval_over")))}" placeholder="Nunca">'
-            )
-            limits = f"""<form method="post" action="/panel/configuracion/herramientas/{tool.id}"
- class="row" style="margin-top:10px;align-items:flex-end">{_csrf(ctx)}
-<div class="grow"><label>Pedir aprobación de una persona sobre $</label>{over}</div>
-<div class="grow"><label>Rechazar siempre sobre $</label>
-<input name="monto_maximo" inputmode="decimal" value="{esc(_plain(m.get("max_amount")))}"
- placeholder="Sin tope"></div>
-<button name="limites" value="si" type="submit">Guardar límites</button></form>"""
-        facts = [
-            f"Riesgo {RISKS.get(m['risk'], m['risk']).lower()}",
-            "pide identidad verificada" if m.get("requires_verified_contact") else "sin identidad",
-            "modifica datos" if writes else "solo consulta",
-        ]
-        if m.get("max_amount") is not None and m.get("amount_from") == "input.percent":
-            facts.append(f"tope {m['max_amount']}%")  # un descuento (decisión 039)
-        elif m.get("max_amount") is not None:
-            facts.append(f"tope {money(m['max_amount'])}")
-        checked = " checked" if m.get("requires_verified_contact") else ""
-        always = " checked" if high else ""
-        rules_form = f"""<form method="post" action="/panel/configuracion/herramientas/{tool.id}"
- class="row small" style="margin-top:8px;gap:16px">{_csrf(ctx)}
-<input type="hidden" name="reglas" value="si">
-<label style="font-weight:400"><input type="checkbox" name="identidad" value="si"{checked}>
-Exige identidad verificada</label>
-{
-            f'<label style="font-weight:400"><input type="checkbox" name="siempre" value="si"'
-            f"{always}> Siempre pide aprobación</label>"
-            if writes
-            else ""
-        }
-<button type="submit">Guardar reglas</button></form>"""
-        cards.append(
-            f"""<div class="card"><div class="row"><div class="grow">
-<span class="badge {"resolved" if tool.approved else ""}">
-{"Aprobada" if tool.approved else "Sin aprobar"}</span> <b>{esc(tool_label(tool.name))}</b>
-<div class="muted small data">{esc(m.get("description"))}</div>
-<div class="muted small"><span class="mono">{esc(m["upstream"]["method"])}
-{esc(m["upstream"]["path"])}</span> · {esc(" · ".join(facts))}</div></div>
-<form method="post" action="/panel/configuracion/herramientas/{tool.id}">{_csrf(ctx)}
-<button class="{"" if tool.approved else "primary"}" name="aprobada"
- value="{"no" if tool.approved else "si"}">
-{"Quitar aprobación" if tool.approved else "Aprobar"}</button></form></div>{rules_form}{limits}
-</div>"""
-        )
-    return "".join(cards)
-
-
-def _plain(value: Any) -> str:
-    if value is None:
-        return ""
-    number = float(value)
-    return str(int(number)) if number == int(number) else str(number)
-
-
 def _whatsapp_html(ctx: Ctx, request: Request, found: whatsapp.WhatsAppSetup | None) -> str:
     """Canales → WhatsApp (decisión 068): los datos de la app de Meta, el webhook para copiar,
     probar, mensaje de prueba, activar y la guía. En el idioma del panel."""
@@ -792,176 +684,6 @@ def _whatsapp_html(ctx: Ctx, request: Request, found: whatsapp.WhatsAppSetup | N
     }</summary><div class="small">{guides.whatsapp_guide()}</div></details></div>"""
 
 
-def _platforms_html(ctx: Ctx) -> str:
-    """Shopify (tres métodos de conexión y la guía del Dev Dashboard, decisión 067) y
-    Tiendanube (token). El texto sale en el idioma del panel."""
-    en = english.english()
-
-    def t(es: str, en_text: str) -> str:
-        return en_text if en else es
-
-    oauth = ""
-    if shopify_auth.app_credentials():
-        oauth = f"""<form method="post" action="/panel/configuracion/sistema/shopify/instalar"
- class="row" style="align-items:flex-end">{_csrf(ctx)}<div><label for="oauth-tienda">{
-            t("Tienda de un cliente", "A client's store")
-        }</label><input id="oauth-tienda"
- name="tienda" required placeholder="mitienda.myshopify.com" style="max-width:360px"></div>
-<button type="submit">{t("Instalar con Shopify", "Install with Shopify")}</button></form>
-<p class="muted small">{
-            t(
-                "Abre Shopify para que la tienda apruebe la app de la plataforma con los permisos "
-                "mínimos. Volvés acá con la tienda conectada.",
-                "Opens Shopify so the store approves the platform's app with the minimum scopes. "
-                "You come back here with the store connected.",
-            )
-        }</p>"""
-    return f"""<h3>{t("¿Usás Shopify?", "Do you use Shopify?")}</h3><p class="muted small">{
-        t(
-            "Conectá tu tienda sin OpenAPI: se crean las acciones de pedidos, envíos, "
-            "reembolsos, cupones y cancelaciones, sin aprobar. Después probá la conexión y "
-            "aprobalas más arriba.",
-            "Connect your store without an OpenAPI: the order, shipping, refund, coupon and "
-            "cancellation actions are created, unapproved. Then test the connection and approve "
-            "them above.",
-        )
-    }</p>
-<form method="post" action="/panel/configuracion/sistema/plataforma">{_csrf(ctx)}
-<input type="hidden" name="plataforma" value="shopify">
-<label for="shop-tienda">{t("Tienda", "Store")}</label><input id="shop-tienda" name="tienda"
- required placeholder="mitienda.myshopify.com" style="max-width:360px">
-<p class="small" style="margin:10px 0 4px"><b>{t("Método de conexión", "Connection method")}</b>
-</p><label style="font-weight:400"><input type="radio" name="metodo" value="app" checked> {
-        t(
-            "App del Dev Dashboard: Client ID y Client Secret (recomendado)",
-            "Dev Dashboard app: Client ID and Client Secret (recommended)",
-        )
-    }</label><label style="font-weight:400"><input type="radio" name="metodo" value="token"> {
-        t(
-            "Token de una app legacy que tu tienda ya tiene (shpat_…)",
-            "Token of a legacy app your store already has (shpat_…)",
-        )
-    }</label>
-<label for="client_id">Client ID</label><input id="client_id" name="client_id"
- autocomplete="off" style="max-width:420px">
-<label for="client_secret">Client Secret</label><input id="client_secret" name="client_secret"
- type="password" autocomplete="off" style="max-width:420px">
-<label for="shop-token">{t("Token de acceso (solo app legacy)", "Access token (legacy app only)")}
-</label><input id="shop-token" name="token" type="password" autocomplete="off"
- style="max-width:420px"><button type="submit">{t("Conectar Shopify", "Connect Shopify")}</button>
-</form>{oauth}
-<details style="margin:10px 0"><summary>{
-        t(
-            "Guía: crear la app en el Dev Dashboard y copiar sus credenciales",
-            "Guide: create the app in the Dev Dashboard and copy its credentials",
-        )
-    }</summary><div class="small">{guides.shopify_app_guide()}</div></details>
-<h3>{t("¿Usás Tiendanube?", "Do you use Tiendanube?")}</h3>
-<form method="post" action="/panel/configuracion/sistema/plataforma">{_csrf(ctx)}
-<input type="hidden" name="plataforma" value="tiendanube">
-<label for="tn-tienda">{t("Número de tu tienda", "Your store number")}</label>
-<input id="tn-tienda" name="tienda" required style="max-width:360px">
-<label for="tn-token">{t("Token de acceso (de tu app)", "Access token (from your app)")}</label>
-<input id="tn-token" name="token" type="password" autocomplete="off" required
- style="max-width:420px"><button type="submit">{t("Conectar Tiendanube", "Connect Tiendanube")}
-</button></form>"""
-
-
-def _system_html(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> str:
-    badge, label = MODES[mode]
-    if mode == "demo" and found is not None and found.base_url != system.DEMO_BASE_URL:
-        # Otra empresa de demo (Northwind, decisión 038): su propia API simulada.
-        return (
-            f'<div class="card"><span class="badge {badge}">Sistema de demo (API simulada)</span>'
-            '<p class="muted small">Esta empresa usa la API simulada de la demo: sus acciones '
-            "llegan a pedidos de prueba, nunca a un sistema real.</p></div>"
-        )
-    if mode == "demo":
-        return (
-            f'<div class="card"><span class="badge {badge}">{label}</span><p class="muted small">'
-            "Acme usa la API simulada de pedidos de la demo. Las demás empresas conectan acá su "
-            "sistema real.</p></div>"
-        )
-    spec_note = (
-        f"OpenAPI cargado: {found.operations} operaciones."
-        if found and found.openapi
-        else "Todavía no cargaste el OpenAPI."
-    )
-    test = ""
-    if found and found.last_test:
-        last = found.last_test
-        ok = bool(last.get("ok"))
-        test = (
-            f'<div class="card {"okmsg" if ok else "alert"}" style="margin-top:10px">'
-            f"<b>{'La prueba pasó' if ok else 'La prueba falló'}.</b> {esc(last.get('detalle'))} "
-            f'<span class="muted small mono">{esc(last.get("operacion"))} · '
-            f"{esc(last.get('status', '—'))} · {esc(last.get('ms'))} ms</span></div>"
-        )
-    kind = found.auth_kind if found else "none"
-    options = "".join(
-        f'<option value="{value}"{" selected" if value == kind else ""}>{text}</option>'
-        for value, text in (
-            ("none", "Sin autenticación"),
-            ("bearer", "Token (Authorization: Bearer)"),
-            ("api_key", "Clave de API en un encabezado"),
-            ("basic", "Usuario y clave (Basic)"),
-        )
-    )
-    saved = "Guardadas. Dejalo vacío para conservarlas." if found and found.has_credentials else ""
-    status = found.status if found else "draft"
-    activate = ""
-    if status == "tested":
-        activate = (
-            f'<form method="post" action="/panel/configuracion/sistema/activar">{_csrf(ctx)}'
-            '<button class="primary" type="submit">Activar: usar mi sistema real</button></form>'
-        )
-    elif status == "active":
-        activate = (
-            f'<form method="post" action="/panel/configuracion/sistema/desactivar">{_csrf(ctx)}'
-            '<button type="submit">Volver al modo simulado</button></form>'
-        )
-    probe = (
-        f'<form method="post" action="/panel/configuracion/sistema/probar">{_csrf(ctx)}'
-        '<button type="submit">Probar conexión</button></form>'
-        if found and found.base_url
-        else ""
-    )
-    tools_probe = (
-        f'<form method="post" action="/panel/configuracion/sistema/herramientas" class="row"'
-        f' style="align-items:flex-end">{_csrf(ctx)}<div><label for="ejemplo">Número de pedido'
-        ' de ejemplo</label><input id="ejemplo" name="ejemplo" required placeholder="1001"'
-        ' style="max-width:200px"></div><button type="submit">Probar acciones</button></form>'
-        if found and found.base_url
-        else ""
-    )
-    return f"""<div class="card"><span class="badge {badge}">{label}</span>
-{_platforms_html(ctx)}
-<h3>1. OpenAPI de tu sistema</h3><p class="muted small">{esc(spec_note)} Con el OpenAPI, el
-análisis genera las acciones del agente. Subí el archivo (.json o .yaml) o pegalo.</p>
-<form method="post" action="/panel/configuracion/sistema/openapi" enctype="multipart/form-data">
-{_csrf(ctx)}<input name="archivo" type="file" accept=".json,.yaml,.yml">
-<textarea name="texto" class="mono" placeholder="…o pegá acá el OpenAPI"></textarea>
-<button type="submit">Guardar OpenAPI</button></form>
-<h3>2. URL base y credenciales</h3>
-<form method="post" action="/panel/configuracion/sistema/acceso">{_csrf(ctx)}
-<label for="url">URL base (HTTPS)</label>
-<input id="url" name="url" type="url" required placeholder="https://api.tuempresa.com"
- value="{esc(found.base_url if found and found.base_url else "")}">
-<label for="auth">Autenticación</label><select id="auth" name="auth">{options}</select>
-<label for="encabezado">Nombre del encabezado (solo para clave de API)</label>
-<input id="encabezado" name="encabezado" placeholder="X-API-Key"
- value="{esc(found.auth_header if found and found.auth_header else "")}">
-<label for="credencial">Credencial (token, clave de API o usuario:clave)</label>
-<input id="credencial" name="credencial" type="password" autocomplete="off"
- placeholder="{esc(saved)}">
-<p class="muted small">Se guarda cifrada con una clave propia de tu empresa y no se vuelve a
-mostrar. Cualquier cambio obliga a probar la conexión de nuevo.</p>
-<button type="submit">Guardar acceso</button></form>
-<h3>3. Probar y activar</h3><p class="muted small">La prueba hace una consulta de solo lectura
-a tu sistema con tus credenciales. Hasta que actives, el agente usa respuestas simuladas.</p>
-<div class="row">{probe}{activate}</div>{test}{tools_probe}</div>"""
-
-
 def _public_url(request: Request) -> str:
     """La dirección pública del servicio. Detrás de un proxy (Render), el protocolo real llega
     en X-Forwarded-Proto."""
@@ -970,69 +692,6 @@ def _public_url(request: Request) -> str:
 
 
 # Vista previa: cada cambio del formulario se ve en el widget antes de guardar.
-WIDGET_PREVIEW_JS = """(function(){var f=document.getElementById("widget-form");if(!f)return;
-var logo=null;function v(n){return f.elements[n].value}
-function push(){if(!window.EnterpriseChat)return;var c={name:v("nombre").trim(),accent:v("color"),
-suggestions:v("sugerencias").split("\\n").map(function(s){return s.trim()}).filter(Boolean)
-.slice(0,4),greeting:v("saludo").trim()};
-if(logo!==null)c.logo=logo;window.EnterpriseChat.setBrand(c)}
-f.elements.saludo.addEventListener("input",push);
-f.elements.pick.addEventListener("input",function(){f.elements.color.value=this.value;push()});
-f.elements.color.addEventListener("input",function(){if(/^#[0-9a-fA-F]{6}$/.test(this.value))
-f.elements.pick.value=this.value;push()});
-f.elements.nombre.addEventListener("input",push);f.elements.sugerencias.addEventListener("input",push);
-f.elements.logo.addEventListener("change",function(){var file=this.files[0];if(!file)return;
-var r=new FileReader();r.onload=function(){logo=r.result;push()};r.readAsDataURL(file)});
-var copy=document.getElementById("copy-snippet");if(copy)copy.addEventListener("click",function(){
-var text=document.getElementById("snippet").textContent;
-(navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject()).then(function(){
-copy.textContent=copy.getAttribute("data-done")},function(){var r=document.createRange();
-r.selectNodeContents(document.getElementById("snippet"));var s=getSelection();s.removeAllRanges();
-s.addRange(r)})})})();"""
-
-
-def _brand_html(ctx: Ctx, slug: str, found: widget.WidgetSettings) -> str:
-    """La marca del chat (nombre, color, logo, nombre del agente, saludo y preguntas sugeridas)
-    con la vista previa: el widget real, dentro de la página. El código y los dominios están en
-    Deploy (decisión 086)."""
-    logo_note = (
-        '<label style="font-weight:400"><input type="checkbox" name="quitar_logo" value="si"> '
-        "Quitar el logo actual</label>"
-        if found.has_logo
-        else ""
-    )
-    return f"""<div class="card"><form method="post" action="/panel/configuracion/widget"
- enctype="multipart/form-data" id="widget-form">{_csrf(ctx)}
-<input type="hidden" name="volver" value="agent/voice">
-<div class="row" style="align-items:flex-start"><div class="grow" style="min-width:260px">
-<label for="nombre">Nombre que ve el cliente</label>
-<input id="nombre" name="nombre" maxlength="60" required value="{esc(found.name)}">
-<label for="color">Color de acento</label>
-<div class="row"><input type="color" name="pick" aria-label="Elegir color"
- value="{esc(found.accent)}" style="width:54px;height:44px;padding:4px">
-<input id="color" name="color" class="mono grow" maxlength="7" required
- pattern="#[0-9a-fA-F]{{6}}" value="{esc(found.accent)}"></div>
-<label for="logo">Logo (PNG, JPG o WebP, cuadrado, hasta 200 KB)</label>
-<input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">{logo_note}
-<label for="asistente">Nombre del agente (opcional)</label>
-<input id="asistente" name="asistente" maxlength="40" value="{esc(found.assistant)}"
- placeholder="Por ejemplo: Nina">
-<label for="saludo">Saludo al abrir el chat (opcional)</label>
-<textarea id="saludo" name="saludo" maxlength="300" style="min-height:70px"
- placeholder="{esc(widget.greeting(found.name, found.language))}">{esc(found.greeting)}</textarea>
-<label for="sugerencias">Preguntas sugeridas (hasta 4, una por línea)</label>
-<textarea id="sugerencias" name="sugerencias" style="min-height:96px"
- placeholder="¿Hacen envíos?">{esc(chr(10).join(found.suggestions))}</textarea>
-<p class="muted small">Se muestran cuando la conversación está vacía.</p>
-<button class="primary" type="submit">Guardar widget</button></div>
-<div><label>Vista previa</label>
-<div id="widget-preview" style="width:min(372px,calc(100vw - 66px));height:560px"></div>
-<p class="muted small">Es el chat real de {esc(ctx.session.company)}: lo que escribas acá
-aparece en la Bandeja.</p></div></div></form></div>
-<script src="/widget.js" data-chat="{esc(slug)}" data-mode="inline"
- data-target="#widget-preview"></script><script>{WIDGET_PREVIEW_JS}</script>"""
-
-
 @router.post("/configuracion/widget")
 async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
     if data.too_big:
@@ -1063,21 +722,6 @@ async def save_widget(request: Request, data: Files, deps: Deps) -> Response:
     return _back(back, ok="Widget guardado.")
 
 
-def _language_html(ctx: Ctx, language: str) -> str:
-    """Idioma de la empresa (decisión 036): el del agente, el chat, el widget y los emails."""
-    options = "".join(
-        f'<option value="{code}"{" selected" if code == language else ""}>{name}</option>'
-        for code, name in i18n.NAMES.items()
-    )
-    return f"""<div class="card"><form method="post" action="/panel/configuracion/idioma">
-{_csrf(ctx)}<label for="idioma">Idioma con el que atiende el agente</label>
-<div class="row"><select id="idioma" name="idioma" style="max-width:260px">{options}</select>
-<button type="submit">Guardar idioma</button></div>
-<p class="muted small">Cambia las respuestas del agente, los textos del chat y del widget y el
-email del código de verificación. En inglés, el agente usa un tono cálido y profesional; en
-español, rioplatense con voseo.</p></form></div>"""
-
-
 @router.post("/configuracion/idioma")
 def save_language(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
@@ -1089,43 +733,6 @@ def save_language(request: Request, form: Form, deps: Deps) -> Response:
     with deps.connection() as conn:
         i18n.set_language(conn, ctx.tenant_id, choice)
     return _back("agent/language", ok=f"Idioma guardado: {i18n.NAMES[choice]}.")
-
-
-def _voice_html(ctx: Ctx, found: brand_voice.Voice, language: str) -> str:
-    """Voz de marca (decisión 081): se aplica en el prompt y la controla el supervisor."""
-    # El trato es del español: en una empresa en inglés queda oculto (el mismo HTML en los dos
-    # idiomas, decisión 037).
-    options = "".join(
-        f'<option value="{code}"{" selected" if found.trato == code else ""}>{esc(label)}'
-        "</option>"
-        for code, label in (("", "Según el idioma"), ("vos", "Vos"), ("tu", "Tú"),
-                            ("usted", "Usted"))
-    )  # fmt: skip
-    treatment = (
-        f"<div{' hidden' if language == 'en' else ''}>"
-        '<label for="trato">Trato</label>'
-        f'<select id="trato" name="trato" style="max-width:260px">{options}</select></div>'
-    )
-    checked = " checked" if found.emojis else ""
-    company = ctx.session.company
-    signature = f"— The {company} team" if english.english() else f"— El equipo de {company}"
-    return f"""<div class="card"><form method="post" action="/panel/configuracion/voz">{_csrf(ctx)}
-<label for="tono">Tono</label>
-<input id="tono" name="tono" maxlength="{brand_voice.MAX_TONE}" value="{esc(found.tono)}"
- placeholder="Cálido y cercano, sin vueltas">{treatment}
-<label for="usar">Palabras a usar (separadas por coma)</label>
-<input id="usar" name="usar" value="{esc(", ".join(found.usar))}">
-<label for="evitar">Palabras a evitar (separadas por coma)</label>
-<input id="evitar" name="evitar" value="{esc(", ".join(found.evitar))}">
-<label class="row" style="gap:8px"><input type="checkbox" name="emojis" value="si"{checked}
- style="width:auto"> <span>Usar emojis</span></label>
-<label for="firma">Firma</label>
-<input id="firma" name="firma" maxlength="{brand_voice.MAX_SIGNATURE}" value="{esc(found.firma)}"
- placeholder="{esc(signature)}">
-<p class="muted small">Va en las instrucciones del agente y la controla el supervisor de respuestas:
-una palabra a evitar hace que la respuesta se reescriba. La firma se agrega al final de cada
-respuesta y, sin emojis, se sacan antes de enviar.</p>
-<button type="submit">Guardar voz de marca</button></form></div>"""
 
 
 @router.post("/configuracion/voz")
@@ -1148,39 +755,6 @@ def save_voice(request: Request, form: Form, deps: Deps) -> Response:
     except brand_voice.VoiceError as error:
         return _back("agent/voice", error=str(error))
     return _back("agent/voice", ok="Voz de marca guardada.")
-
-
-def _supervised_html(ctx: Ctx, on: bool) -> str:
-    """Modo supervisado (decisión 072): apagado por defecto."""
-    state = "Activado" if on else "Desactivado"
-    return f"""<div class="card"><div class="row"><div class="grow">
-<span class="badge {"resolved" if on else ""}">{state}</span>
-<p class="muted small">Cada respuesta del agente queda como borrador en la Bandeja. Una persona del
-equipo la envía, la edita o la rechaza antes de que llegue al cliente, que mientras tanto ve
-“escribiendo…”. Las acciones de riesgo alto siguen esperando su aprobación.</p></div>
-<form method="post" action="/panel/configuracion/supervisado">{_csrf(ctx)}
-<button name="activo" value="{"no" if on else "si"}" class="{"" if on else "primary"}">
-{"Desactivar" if on else "Activar"}</button></form></div></div>"""
-
-
-def _answer_supervisor_html(ctx: Ctx, on: bool, found: dict[str, Any]) -> str:
-    """Supervisor de respuestas (decisión 079): encendido por defecto, con lo que agregó."""
-    state = "Activado" if on else "Desactivado"
-    seconds = f"{found['avg_ms'] / 1000:.1f} s"
-    return f"""<div class="card"><div class="row"><div class="grow">
-<span class="badge {"resolved" if on else ""}">{state}</span>
-<p class="muted small">Un modelo barato revisa cada respuesta con datos, políticas o acciones
-antes de enviarla: que coincida con las fuentes y las acciones, con las reglas y con el tono
-de la marca. Puede aprobarla, pedir que se reescriba una vez o derivar a una persona.</p>
-<table class="small"><thead><tr><th>Últimos 30 días</th><th></th></tr></thead><tbody>
-<tr><td>Revisiones</td><td>{found["reviews"]}</td></tr>
-<tr><td>Pidió reescribir</td><td>{found["rewrites"]}</td></tr>
-<tr><td>Derivó</td><td>{found["escalations"]}</td></tr>
-<tr><td>Latencia media que agrega</td><td>{seconds}</td></tr>
-<tr><td>Costo total</td><td>US$ {found["cost_usd"]:.4f}</td></tr></tbody></table></div>
-<form method="post" action="/panel/configuracion/supervisor">{_csrf(ctx)}
-<button name="activo" value="{"no" if on else "si"}" class="{"" if on else "primary"}">
-{"Desactivar" if on else "Activar"}</button></form></div></div>"""
 
 
 @router.post("/configuracion/supervisor")
@@ -1287,35 +861,6 @@ style="max-width:320px">{options}</select>
 <div class="row"><button type="submit">Guardar</button></div></form></div>"""
 
 
-DAYS = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
-
-
-def _rules_html(ctx: Ctx, found: rules.Rules) -> str:
-    """Horario del equipo y a quién derivar (decisión 051). Las reglas por acción están en
-    cada acción, más abajo."""
-    hours = found.hours
-    days = "".join(
-        f'<label style="font-weight:400"><input type="checkbox" name="dia_{n}" value="si"'
-        f"{' checked' if hours and n in hours.days else ''}> {label}</label> "
-        for n, label in enumerate(DAYS, start=1)
-    )
-    start = esc(hours.start if hours else "")
-    end = esc(hours.end if hours else "")
-    return f"""<div class="card"><form method="post" action="/panel/configuracion/reglas">
-{_csrf(ctx)}<label>Días en que atiende el equipo</label><div class="row small">{days}</div>
-<div class="row"><div><label for="desde">Desde</label>
-<input id="desde" name="desde" type="time" value="{start}"></div>
-<div><label for="hasta">Hasta</label><input id="hasta" name="hasta" type="time" value="{end}">
-</div></div>
-<p class="muted small">El agente atiende siempre. Fuera de este horario, cuando pasa un caso a
-una persona, le dice al cliente cuándo le responden. Sin días marcados, no se avisa nada.</p>
-<label for="derivar_a">Email que recibe los casos derivados y las aprobaciones</label>
-<input id="derivar_a" name="derivar_a" type="email" value="{esc(found.handoff_email or "")}"
- placeholder="soporte@tutienda.com" style="max-width:360px">
-<p class="muted small">Vacío: el aviso va a los usuarios de la empresa.</p>
-<button type="submit">Guardar reglas</button></form></div>"""
-
-
 @router.post("/configuracion/reglas")
 def save_rules(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
@@ -1332,46 +877,6 @@ def save_rules(request: Request, form: Form, deps: Deps) -> Response:
     with deps.connection() as conn:
         rules.save(conn, ctx.tenant_id, hours, handoff)
     return _back("agent", ok="Reglas de atención guardadas.")
-
-
-def _upsell_html(ctx: Ctx, found: list[upsell.Rule], kinds: list[str]) -> str:
-    """Ventas cruzadas (decisión 061): qué producto ofrecer, cuándo y con qué descuento máximo.
-    Las aplica el guardián: una oferta por conversación, nunca con el cliente enojado ni en un
-    reclamo."""
-    rows = "".join(
-        f"<tr><td>{esc(r.product)}</td>"
-        f'<td class="data">{esc(", ".join(type_label(k) for k in r.case_types))}</td>'
-        f'<td class="mono">{r.max_discount:g} %</td><td>'
-        f'<form method="post" action="/panel/configuracion/ventas/{r.id}/borrar">{_csrf(ctx)}'
-        '<button type="submit" class="secondary">Quitar</button></form></td></tr>'
-        for r in found
-    )
-    table = (
-        "<table><thead><tr><th>Producto</th><th>Cuándo</th><th>Descuento máximo</th><th></th>"
-        f"</tr></thead><tbody>{rows}</tbody></table>"
-        if found
-        else '<p class="muted">Todavía no hay productos para ofrecer.</p>'
-    )
-    boxes = "".join(
-        f'<label style="font-weight:400"><input type="checkbox" name="tipo_{esc(k)}" value="si">'
-        f' <span class="data">{esc(type_label(k))}</span></label> '
-        for k in kinds
-    )
-    form = (
-        f"""<form method="post" action="/panel/configuracion/ventas">{_csrf(ctx)}
-<label for="producto">Producto (con el nombre que tiene en tu tienda)</label>
-<input id="producto" name="producto" style="max-width:360px">
-<label>Cuándo ofrecerlo</label><div class="row small">{boxes}</div>
-<label for="descuento">Descuento máximo (%)</label>
-<input id="descuento" name="descuento" inputmode="decimal" value="0" style="max-width:120px">
-<button type="submit">Agregar</button></form>"""
-        if kinds
-        else '<p class="muted small">No hay temas activos donde ofrecer algo.</p>'
-    )
-    return f"""<div class="card">{table}
-<p class="muted small">El agente ofrece como mucho un producto por conversación, después de
-resolver lo que pidió el cliente, y nunca si está enojado o en medio de un reclamo. El descuento
-no pasa el máximo.</p>{form}</div>"""
 
 
 @router.post("/configuracion/ventas")
@@ -1476,17 +981,16 @@ def agent_rules_page(request: Request, deps: Deps) -> Response:
     if isinstance(ctx, Response):
         return ctx
     with deps.connection() as conn:
-        attention = _rules_html(ctx, rules.load(conn, ctx.tenant_id))
-        supervised = _supervised_html(ctx, supervision.enabled(conn, ctx.tenant_id))
-        reviewer = _answer_supervisor_html(
-            ctx,
+        attention = forms.rules_html(ctx.csrf, rules.load(conn, ctx.tenant_id))
+        checks = forms.review_html(
+            ctx.csrf,
+            supervision.enabled(conn, ctx.tenant_id),
             answer_supervisor.enabled(conn, ctx.tenant_id),
             answer_supervisor.stats(conn, ctx.tenant_id),
         )
-    body = f"""{head("Rules", LEADS["Rules"])}
+    body = f"""{forms.FORM_CSS}{head("Rules", LEADS["Rules"])}
 <h2>Business hours and hand-offs</h2>{attention}
-<h2>Review before sending</h2>{supervised}
-<h2>Answer check</h2>{reviewer}"""
+<h2>Safety checks</h2>{checks}"""
     return _section(request, ctx, "agent", "Rules", body)
 
 
@@ -1497,8 +1001,8 @@ def agent_actions_page(request: Request, deps: Deps) -> Response:
         return ctx
     with deps.connection() as conn:
         tools = review.tools(conn, ctx.tenant_id)
-    body = f"""{head("Actions", LEADS["Actions"])}
-{_tools_html(ctx, tools)}"""
+    body = f"""{forms.FORM_CSS}{head("Actions", LEADS["Actions"])}
+{forms.actions_html(ctx.csrf, tools)}"""
     return _section(request, ctx, "agent/actions", "Actions", body)
 
 
@@ -1511,8 +1015,8 @@ def agent_topics_page(request: Request, deps: Deps) -> Response:
         types = review.case_types(conn, ctx.tenant_id)
         tools = review.tools(conn, ctx.tenant_id)
     approved = {t.name for t in tools if t.approved}
-    body = f"""{head("Topics", LEADS["Topics"])}
-{_types_html(ctx, types, approved)}"""
+    body = f"""{forms.FORM_CSS}{head("Topics", LEADS["Topics"])}
+{forms.topics_html(ctx.csrf, types, approved)}"""
     return _section(request, ctx, "agent/topics", "Topics", body)
 
 
@@ -1526,10 +1030,13 @@ def agent_voice_page(request: Request, deps: Deps) -> Response:
         voice_found = brand_voice.load(conn, ctx.tenant_id)
         slug = chat_slug(conn, ctx.tenant_id)
         brand = widget.load(conn, ctx.tenant_id)
-    chat = _brand_html(ctx, slug, brand) if slug else ""
-    body = f"""{head("Brand & voice", LEADS["Brand & voice"])}
-<h2>How your chat looks</h2>{chat}
-<h2>How your agent writes</h2>{_voice_html(ctx, voice_found, language)}"""
+    company = ctx.session.company
+    chat = forms.brand_html(ctx.csrf, brand) if slug else ""
+    preview = forms.preview_html(slug, language, company) if slug else ""
+    voice = forms.voice_html(ctx.csrf, voice_found, language, company)
+    body = f"""{forms.FORM_CSS}{head("Brand & voice", LEADS["Brand & voice"])}
+<div class="split"><div><h2 style="margin-top:0">How your chat looks</h2>{chat}
+<h2>How your agent writes</h2>{voice}</div><div>{preview}</div></div>"""
     return _section(request, ctx, "agent/voice", "Brand & voice", body)
 
 
@@ -1539,10 +1046,10 @@ def agent_sales_page(request: Request, deps: Deps) -> Response:
     if isinstance(ctx, Response):
         return ctx
     with deps.connection() as conn:
-        offers = _upsell_html(
-            ctx, upsell.load(conn, ctx.tenant_id), upsell.eligible_types(conn, ctx.tenant_id)
+        offers = forms.sales_html(
+            ctx.csrf, upsell.load(conn, ctx.tenant_id), upsell.eligible_types(conn, ctx.tenant_id)
         )
-    body = f"""{head("Sales", LEADS["Sales"])}
+    body = f"""{forms.FORM_CSS}{head("Sales", LEADS["Sales"])}
 {offers}"""
     return _section(request, ctx, "agent/sales", "Sales", body)
 
@@ -1554,8 +1061,8 @@ def agent_language_page(request: Request, deps: Deps) -> Response:
         return ctx
     with deps.connection() as conn:
         language = i18n.tenant_language(conn, ctx.tenant_id)
-    body = f"""{head("Language", LEADS["Language"])}
-{_language_html(ctx, language)}"""
+    body = f"""{forms.FORM_CSS}{head("Language", LEADS["Language"])}
+{forms.language_html(ctx.csrf, language, i18n.NAMES)}"""
     return _section(request, ctx, "agent/language", "Language", body)
 
 
