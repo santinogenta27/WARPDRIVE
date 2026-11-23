@@ -736,6 +736,18 @@ Rama `h12-simulaciones`.
   - 20 clientes × 3 corridas son cientos de llamadas: no entra en la cuota diaria de Gemini gratis. Con un proveedor pago, tarda varios minutos.
   - El job corre en una sola transacción.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_simulaciones.py`.
+### Tarea 4 — Voz de marca (decisión 081)
+
+Rama `h12-voz-de-marca`.
+
+- **Hecho:**
+  - **Dónde se configura.** Configuración → Voz de marca (`app/agent/voice.py`): tono, trato (vos, tú o usted), palabras a usar y a evitar, emojis sí o no y firma.
+  - **En el prompt.** Va en `<voz_de_marca>`. El trato elige el tono del agente en español; "usted" es un tono nuevo, sin voseo.
+  - **En código.** La firma va al final de cada respuesta redactada por el agente; los mensajes fijos no la llevan. Sin emojis, se sacan antes de enviar.
+  - **Supervisor.** Recibe la voz de marca y frena sin llamar al modelo una respuesta con una palabra a evitar: pide reescribir y, si se repite, deriva.
+  - **Sin voz configurada no cambia nada:** ni el prompt ni las líneas base.
+- **Validado con Gemini real** (unas 16 llamadas). Con Acme configurada de usted, sin "lamentablemente" y con firma, respondió "Con gusto le informo…", con la firma al final. El supervisor aprobó citando el trato y el tono.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_voz_de_marca.py`.
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

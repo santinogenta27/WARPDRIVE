@@ -18,7 +18,7 @@ import psycopg
 import yaml
 
 from app import i18n, memory
-from app.agent import conduct, manipulation, presentable, prompt, supervisor
+from app.agent import conduct, manipulation, presentable, prompt, supervisor, voice
 from app.agent.classifier import (
     ASK_FOR_HUMAN,
     CHAT,
@@ -421,6 +421,7 @@ class Agent:
         self._mailer = mailer or mailer_from_env()
         self._assistant = ""  # nombre del asistente de la empresa del turno (decisión 052)
         self._supervisor_on = True  # supervisor de respuestas de la empresa (decisión 079)
+        self._voice = voice.Voice()  # voz de marca de la empresa del turno (decisión 081)
 
     # -- entrada ---------------------------------------------------------------------------
     def handle_message(self, tenant_id: uuid.UUID, contact_id: uuid.UUID, text: str) -> AgentResult:
@@ -777,7 +778,12 @@ class Agent:
         self._load_memory(turn)
         turn.rules = instructions
         system = prompt.system_prompt(
-            company, tone, instructions, self._assistant, memory=bool(turn.memory)
+            company,
+            tone,
+            instructions,
+            self._assistant,
+            memory=bool(turn.memory),
+            brand=voice.prompt_block(self._voice, turn.lang == "en"),
         )
         messages: list[dict[str, Any]] = [
             {
@@ -848,7 +854,12 @@ class Agent:
         instructions = template.format(empresa=company, capacidades=goals)
         self._load_memory(turn)
         system = prompt.system_prompt(
-            company, tone, instructions, self._assistant, memory=bool(turn.memory)
+            company,
+            tone,
+            instructions,
+            self._assistant,
+            memory=bool(turn.memory),
+            brand=voice.prompt_block(self._voice, turn.lang == "en"),
         )
         messages: list[dict[str, Any]] = [
             {
@@ -1445,7 +1456,17 @@ class Agent:
             documents=documents,
             tool_results=results,
             rules=turn.rules,
-            tone=prompt.TONES.get(turn.tone, prompt.TONES["rioplatense"]),
+            tone=" ".join(
+                part
+                for part in (
+                    prompt.TONES.get(turn.tone, prompt.TONES["rioplatense"]),
+                    voice.describe(self._voice, turn.lang == "en")
+                    if self._voice.configured
+                    else "",
+                )
+                if part
+            ),
+            avoid=list(self._voice.evitar),
         )
         if found.response is not None:
             self._audit_model_call(turn, supervisor.ROLE, found.response)
@@ -1489,14 +1510,19 @@ class Agent:
         pending = next((d for d in turn.decisions if d.status == "approval_required"), None)
         if pending is not None:
             return self._finish(
-                turn, "pedir_aprobacion", message, sources=sources, approval_id=pending.approval_id
+                turn,
+                "pedir_aprobacion",
+                message,
+                sources=sources,
+                approval_id=pending.approval_id,
+                drafted=True,
             )
         action: Action = (
             "ejecutar"
             if any(d.status == "executed" and d.side_effect for d in turn.decisions)
             else "responder"
         )
-        return self._finish(turn, action, message, sources=sources)
+        return self._finish(turn, action, message, sources=sources, drafted=True)
 
     # -- cierre ----------------------------------------------------------------------------
     def _escalate(self, turn: _Turn, reason: str, cause: dict[str, Any]) -> AgentResult:
@@ -1535,10 +1561,15 @@ class Agent:
         verification: bool = False,
         summary: dict[str, Any] | None = None,
         approval_id: uuid.UUID | None = None,
+        drafted: bool = False,
     ) -> AgentResult:
+        """`drafted`: la respuesta la redactó el agente (no es un mensaje fijo): lleva la
+        firma de la marca y, si la marca no usa emojis, se le sacan (decisión 081)."""
         # Se guarda y se envía tal como lo ve el cliente.
         if turn.tone == "rioplatense":
             message = to_voseo(message)  # por si el modelo se escapa al tuteo
+        if drafted:
+            message = voice.apply(message, self._voice)
         message = to_whatsapp(turn.prefix + message)
         self._save_message(turn.tenant_id, turn.case_id, "agent", message)
         self._remember(turn, action)
@@ -1603,6 +1634,10 @@ class Agent:
         # El nombre que eligió la empresa para el asistente (decisión 052), para el prompt.
         self._assistant = str((settings.get("brand") or {}).get("assistant") or "")
         self._supervisor_on = settings.get(supervisor.SETTING) is not False
+        # Voz de marca (decisión 081): en español, el trato elegido manda sobre el tono.
+        self._voice = voice.from_settings(settings)
+        if lang == "es":
+            tone = voice.tone_for(self._voice, tone)
         return row[0], tone, lang
 
     def _contact(self, tenant_id: uuid.UUID, contact_id: uuid.UUID) -> ContactContext:

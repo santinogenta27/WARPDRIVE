@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app import i18n
 from app.agent import supervisor as answer_supervisor
+from app.agent import voice as brand_voice
 from app.cases import supervision
 from app.channels.web import widget
 from app.channels.whatsapp import selfservice as whatsapp
@@ -1095,6 +1096,64 @@ def save_language(request: Request, form: Form, deps: Deps) -> Response:
     return _back("configuracion", ok=f"Idioma guardado: {i18n.NAMES[choice]}.")
 
 
+def _voice_html(ctx: Ctx, found: brand_voice.Voice, language: str) -> str:
+    """Voz de marca (decisión 081): se aplica en el prompt y la controla el supervisor."""
+    treatment = ""
+    if language != "en":  # el trato es del español
+        options = "".join(
+            f'<option value="{code}"{" selected" if found.trato == code else ""}>{esc(label)}'
+            "</option>"
+            for code, label in (("", "Según el idioma"), ("vos", "Vos"), ("tu", "Tú"),
+                                ("usted", "Usted"))
+        )  # fmt: skip
+        treatment = (
+            '<label for="trato">Trato</label>'
+            f'<select id="trato" name="trato" style="max-width:260px">{options}</select>'
+        )
+    checked = " checked" if found.emojis else ""
+    company = ctx.session.company
+    signature = f"— The {company} team" if english.english() else f"— El equipo de {company}"
+    return f"""<div class="card"><form method="post" action="/panel/configuracion/voz">{_csrf(ctx)}
+<label for="tono">Tono</label>
+<input id="tono" name="tono" maxlength="{brand_voice.MAX_TONE}" value="{esc(found.tono)}"
+ placeholder="Cálido y cercano, sin vueltas">{treatment}
+<label for="usar">Palabras a usar (separadas por coma)</label>
+<input id="usar" name="usar" value="{esc(", ".join(found.usar))}">
+<label for="evitar">Palabras a evitar (separadas por coma)</label>
+<input id="evitar" name="evitar" value="{esc(", ".join(found.evitar))}">
+<label class="row" style="gap:8px"><input type="checkbox" name="emojis" value="si"{checked}
+ style="width:auto"> <span>Usar emojis</span></label>
+<label for="firma">Firma</label>
+<input id="firma" name="firma" maxlength="{brand_voice.MAX_SIGNATURE}" value="{esc(found.firma)}"
+ placeholder="{esc(signature)}">
+<p class="muted small">Va en el prompt del asistente y la controla el supervisor de respuestas: una
+palabra a evitar hace que la respuesta se reescriba. La firma se agrega al final de cada
+respuesta y, sin emojis, se sacan antes de enviar.</p>
+<button type="submit">Guardar voz de marca</button></form></div>"""
+
+
+@router.post("/configuracion/voz")
+def save_voice(request: Request, form: Form, deps: Deps) -> Response:
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    try:
+        with deps.connection() as conn:
+            brand_voice.save(
+                conn,
+                ctx.tenant_id,
+                tono=form.get("tono", ""),
+                trato=form.get("trato", ""),
+                usar=form.get("usar", ""),
+                evitar=form.get("evitar", ""),
+                emojis=form.get("emojis") == "si",
+                firma=form.get("firma", ""),
+            )
+    except brand_voice.VoiceError as error:
+        return _back("configuracion", error=str(error))
+    return _back("configuracion", ok="Voz de marca guardada.")
+
+
 def _supervised_html(ctx: Ctx, on: bool) -> str:
     """Modo supervisado (decisión 072): apagado por defecto."""
     state = "Activado" if on else "Desactivado"
@@ -1391,6 +1450,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
         language = i18n.tenant_language(conn, ctx.tenant_id)
         behind_on = behind.enabled(conn, ctx.tenant_id)
         supervised = supervision.enabled(conn, ctx.tenant_id)
+        voice_found = brand_voice.load(conn, ctx.tenant_id)
         reviewer = _answer_supervisor_html(
             ctx,
             answer_supervisor.enabled(conn, ctx.tenant_id),
@@ -1418,6 +1478,7 @@ def settings_page(request: Request, deps: Deps) -> Response:
 qué usa el asistente. Lo que activás o aprobás acá pasa al asistente en vivo en el momento; nada
 queda activo sin tu aprobación.</p>{_notice(request)}
 <h2>Idioma</h2>{_language_html(ctx, language)}
+<h2>Voz de marca</h2>{_voice_html(ctx, voice_found, language)}
 <h2>Modo supervisado</h2>{_supervised_html(ctx, supervised)}
 <h2>Supervisor de respuestas</h2>{reviewer}
 <h2>Modelo y gasto</h2>{model}

@@ -156,6 +156,8 @@ class SimulatedClaude:
         def reply(text: str, sources: list[str] | None = None, factual: bool = True) -> list[Any]:
             if self.mode == "tuteo":  # se escapa del voseo, como a veces el modelo real
                 text = f"{text} Dime si necesitas algo más."
+            if self.mode == "emojis":  # voz de marca (decisión 081): pone un emoji
+                text = f"{text} 😊"
             data = {"mensaje": text, "fuentes": sources or [], "factual": factual}
             loose = _loose_text(self.mode, data, corrected)
             if loose is not None:
