@@ -860,6 +860,25 @@ PHRASES: dict[str, str] = {
     "No se envió al cliente": "It wasn't sent to the customer",
     "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
+    # Asistente para el equipo (Hito 12, decisión 082)
+    "Asistente para el equipo": "Team assistant",
+    "Volver a sugerir": "Suggest again",
+    "Resumen": "Summary",
+    "Paso siguiente": "Next step",
+    "Memoria del cliente": "Customer memory",
+    "ver cliente": "view customer",
+    "Preferencias": "Preferences",
+    "La respuesta sugerida está abajo, en “Responder como persona del equipo”: revisala y "
+    "editala antes de enviarla.": (
+        "The suggested reply is below, in “Reply as a team member”: check it and edit it before "
+        "sending it."
+    ),
+    "Sin respuesta sugerida: el asistente no está disponible ahora.": (
+        "No suggested reply: the assistant isn't available right now."
+    ),
+    "Revisá el motivo de la derivación y la conversación, y respondé al cliente.": (
+        "Check the reason for the handoff and the conversation, and reply to the customer."
+    ),
     # Voz de marca (Hito 12, decisión 081)
     "Voz de marca": "Brand voice",
     "Cálido y cercano, sin vueltas": "Warm and friendly, straight to the point",
