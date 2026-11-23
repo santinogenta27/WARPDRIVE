@@ -26,7 +26,7 @@ NORTE, NORTE_PASSWORD = "ana@tiendanorte.example", "clave-de-tienda-norte"
 
 def test_la_guia_de_instalacion_cubre_cada_plataforma() -> None:
     text = (DOCS / "instalacion.md").read_text(encoding="utf-8")
-    for platform in ("Shopify", "WordPress", "Tiendanube", "WhatsApp"):
+    for platform in ("Shopify", "WordPress", "Tiendanube", "Cualquier sitio"):
         assert f"## {platform}" in text
     assert "theme.liquid" in text and "Dominios permitidos" in text
 
@@ -56,6 +56,6 @@ def client(conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch) -> Iterato
 def test_las_guias_estan_al_lado_del_codigo_para_copiar(client: TestClient) -> None:
     page = client.get("/panel/deploy").text
     snippet = page.index('id="snippet"')
-    for platform in ("Shopify", "WordPress", "Tiendanube", "WhatsApp"):
+    for platform in ("Shopify", "WordPress", "Tiendanube", "Cualquier sitio"):
         found = re.search(rf"<summary>[^<]*{platform}", page[snippet:])
         assert found is not None, platform
