@@ -860,6 +860,28 @@ PHRASES: dict[str, str] = {
     "No se envió al cliente": "It wasn't sent to the customer",
     "Envió la respuesta aprobada": "Sent the approved reply",
     "Tiene": "It has",
+    # Voz de marca (Hito 12, decisión 081)
+    "Voz de marca": "Brand voice",
+    "Cálido y cercano, sin vueltas": "Warm and friendly, straight to the point",
+    "Trato": "Form of address",
+    "Según el idioma": "By language",
+    "Vos": "Informal (vos)",
+    "Tú": "Informal",
+    "Usted": "Formal",
+    "Palabras a usar (separadas por coma)": "Words to use (comma-separated)",
+    "Palabras a evitar (separadas por coma)": "Words to avoid (comma-separated)",
+    "Usar emojis": "Use emojis",
+    "Firma": "Signature",
+    "Va en el prompt del asistente y la controla el supervisor de respuestas: una palabra a evitar "
+    "hace que la respuesta se reescriba. La firma se agrega al final de cada respuesta y, sin "
+    "emojis, se sacan antes de enviar.": (
+        "It goes into the assistant's prompt and the answer supervisor checks it: a word to "
+        "avoid makes the answer be rewritten. The signature is added at the end of every answer "
+        "and, without emojis, they're removed before sending."
+    ),
+    "Guardar voz de marca": "Save brand voice",
+    "Voz de marca guardada.": "Brand voice saved.",
+    "Elegí un trato de la lista.": "Pick an option from the list.",
     # Simulaciones (Hito 12, decisión 080)
     "Simulaciones": "Simulations",
     "Las conversaciones simuladas corren en segundo plano. Volvé a abrir el Reporte en unos "

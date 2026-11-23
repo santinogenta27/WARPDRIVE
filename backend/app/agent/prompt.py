@@ -30,6 +30,11 @@ TONES = {
         ' "usted" ni sus formas ("indícanos", "dime", "puedes").'
     ),
     "neutro": "Hablá en español neutro con tuteo.",
+    # Trato de usted, elegido en la voz de marca (decisión 081).
+    "usted": (
+        'Escribí en español neutro y tratá al cliente de usted, con cortesía ("¿Me indica el '
+        'número de pedido?", "puede", "quiere"). Nunca uses tú ni vos ni sus formas.'
+    ),
     "english": (
         "Always write in natural, warm and professional English, like a friendly support "
         "specialist at a good online store: clear, courteous and to the point. Use contractions "
@@ -143,7 +148,9 @@ def system_prompt(
     assistant: str = "",
     *,
     memory: bool = False,
+    brand: str = "",
 ) -> str:
+    """`brand`: el bloque `<voz_de_marca>` de la empresa (decisión 081); vacío, nada cambia."""
     name = SYSTEM_PROMPT_VERSION + (ENGLISH_SUFFIX if is_english(tone) else "")
     template = (PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
     fixed = template.replace("{empresa}", company).replace(
@@ -160,6 +167,8 @@ def system_prompt(
         fixed = f"{fixed.rstrip()}\n{intro}"
     if memory:
         fixed = f"{fixed.rstrip()}\n{MEMORY_RULES['en' if is_english(tone) else 'es']}"
+    if brand:
+        fixed = f"{fixed.rstrip()}\n{brand}"
     return f"{fixed}\n<tipo_de_caso>\n{case_type_instructions.strip()}\n</tipo_de_caso>"
 
 

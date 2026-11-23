@@ -11,6 +11,7 @@ Encendido por defecto; se apaga por empresa (`settings.answer_supervisor`).
 
 import html
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -159,7 +160,18 @@ def review(
     tool_results: list[dict[str, Any]],
     rules: str,
     tone: str,
+    avoid: list[str] | None = None,
 ) -> Review:
+    """`avoid`: palabras que la marca evita (decisión 081). Si la respuesta usa alguna,
+    se pide reescribir sin llamar al modelo."""
+    used = [
+        word
+        for word in avoid or []
+        if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", answer, re.IGNORECASE)
+    ]
+    if used:
+        reason = "usa palabras que la marca evita: " + ", ".join(f'"{w}"' for w in used)
+        return Review(REWRITE, reason, 0)
     lang = "en" if language == "en" else "es"
     docs = "\n".join(
         f'<documento id="{_escape(source)}">\n{_escape(text[:MAX_DOCUMENT_CHARS])}\n</documento>'
