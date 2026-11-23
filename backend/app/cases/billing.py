@@ -137,11 +137,15 @@ def reopen_candidate(
 def reopen(conn: psycopg.Connection, tenant_id: uuid.UUID, case_id: uuid.UUID) -> None:
     """Reabre el caso: vuelve a estar abierto y deja de contar como resuelto por el asistente."""
     with tenant_scope(conn, tenant_id):
+        # Las horas desde el cierre quedan en la auditoría: una reapertura dentro de las 72 h
+        # quita la resolución autónoma (decisión 083).
         row = conn.execute(
-            "update cases set status = 'open', reopened = true, resolved_by = null,"
-            " closed_at = null, updated_at = now() where id = %s and status = 'resolved'"
-            " returning 1",
-            (case_id,),
+            "with antes as (select closed_at from cases where id = %s and status = 'resolved')"
+            " update cases c set status = 'open', reopened = true, resolved_by = null,"
+            " closed_at = null, updated_at = now() from antes"
+            " where c.id = %s and c.status = 'resolved'"
+            " returning round(extract(epoch from now() - antes.closed_at) / 3600, 1)",
+            (case_id, case_id),
         ).fetchone()
     if row is not None:
         audit_log.record(
@@ -149,7 +153,10 @@ def reopen(conn: psycopg.Connection, tenant_id: uuid.UUID, case_id: uuid.UUID) -
             tenant_id,
             case_id,
             "case_reopened",
-            {"motivo": f"El cliente volvió por el mismo tema dentro de los {REOPEN_DAYS} días."},
+            {
+                "motivo": f"El cliente volvió por el mismo tema dentro de los {REOPEN_DAYS} días.",
+                "horas_desde_cierre": float(row[0]) if row[0] is not None else None,
+            },
         )
 
 

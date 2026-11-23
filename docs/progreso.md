@@ -759,6 +759,27 @@ Rama `h12-asistente-equipo`.
   - **Fuera de producción.** Sin configuración de producción, el panel no llama a ningún modelo (como el embedder), así los tests no gastan cuota.
 - **Validado con Gemini real** (unas 6 llamadas). En un caso derivado con Lucía molesta, resumió la consulta y el enojo. Sugirió validar la frustración y ofrecer un reclamo al correo. Propuso una respuesta en voseo con su nombre y la fecha del pedido.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_asistente_equipo.py`.
+### Tarea 6 — Resultados medibles (decisión 083)
+
+Rama `h12-resultados`.
+
+- **Hecho:**
+  - **Resolución autónoma auditable** (`app/outcomes/autonomy.py`). Un caso lo es si:
+    - nunca se derivó;
+    - lo resolvió el asistente;
+    - no se reabrió en 72 h (la reapertura ahora guarda las horas desde el cierre);
+    - no tuvo CSAT negativo.
+
+    Cada caso tiene un estado: autónoma, en ventana, derivada, con persona, reabierta en 72 h o CSAT negativo. La página **Resultados** muestra el informe del mes, con la tasa sin contar los casos en ventana, y lo exporta en CSV: un renglón por caso, sin datos del cliente.
+  - **Análisis de conversaciones** de los últimos 30 días (`analysis.py`), sin modelo:
+    - temas principales;
+    - motivos de derivación;
+    - preguntas sin respuesta, agrupadas por la palabra que más comparten.
+
+    Los ejemplos pasan por el anonimizador del onboarding y se les tapan los números.
+  - **Informe semanal por email a los admins** (`weekly.py`): sale cada lunes con la semana anterior. Es idempotente: `weekly_reports` (migración 0033) se inserta en la misma transacción que el envío, y si falla se reintenta. Lo dispara el worker de la API en cada vuelta. Se desactiva desde Resultados. No lo reciben las empresas de demo ni las pruebas gratis.
+- **Sin modelo:** no hizo falta validar con Gemini.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_resultados.py`.
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
