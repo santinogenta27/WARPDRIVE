@@ -195,7 +195,7 @@ def test_el_panel_lista_y_borra_documentos_indexados(
     )
     assert response.status_code == 303, response.text
     page = client.get("/panel/knowledge").text
-    assert "Documentos indexados" in page and "catalogo" in page
+    assert "Tus documentos" in page and "catalogo" in page
     document = ingestion.indexed_documents(conn, norte)[0]
     response = client.post(
         f"/panel/onboarding/indexados/{document.id}/borrar",

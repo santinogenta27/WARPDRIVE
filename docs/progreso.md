@@ -878,6 +878,46 @@ Rama `h13-agent`.
   - Actions y Topics, reescritas sin jerga: aprobar, identidad verificada, aprobación de una persona, topes e instrucciones.
 - **Test de aceptación:** `test_panel_agent.py`. Falla si un control de Agent queda sin ayuda o sin ejemplo.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_panel_agent.py`; en el panel, `/panel/agent/voice`: cambiá la firma o los emojis y mirá la vista previa.
+- Mergeada en `hito-13` con el PR #55. Un reintento del CI: `test_memoria_cliente` falló una vez por el orden de dos eventos con la misma hora. Es inestable y no lo toca esta tarea; al reintentar pasó.
+
+### Tarea 6 — Knowledge (decisión 088)
+
+Rama `h13-knowledge`.
+
+- **Todo lo de Onboarding sigue, más claro:**
+  - lectura de PDF, DOCX y CSV;
+  - el sitio;
+  - la anonimización;
+  - los documentos con datos personales que esperan confirmación;
+  - el análisis del historial: temas, pruebas, acciones y reporte de preparación;
+  - el aviso de que terminó, con links para aprobar temas y acciones.
+- **Lo nuevo:**
+  - **Subir arrastrando** con el estado de cada archivo (Processing, Ready, Failed con el motivo exacto y qué hacer, o Needs you).
+  - **Qué aprendió** de cada documento: sus secciones y el texto extraído.
+  - **Reemplazar** reindexa, aunque el archivo nuevo tenga otro nombre; **borrar** lo saca en el momento.
+  - **Ask your knowledge**, con las fuentes exactas.
+  - **Problemas:** contradicciones de plazos, temas sin cobertura (de Insights) e información vieja.
+  - **El sitio**, con sus páginas: elegir cuáles usar, sincronizar a mano o cada semana (el worker; idempotente), con la fecha de la última sincronización.
+- **Calidad (medida en `docs/calidad.md`):**
+  - La extracción conserva títulos, listas y tablas (`app/onboarding/extract.py`).
+  - Los fragmentos van por sección, con su título, y nunca cortan un párrafo ni una fila.
+  - Con embeddings de Gemini: 0 fragmentos cortados (antes 25 de 48), y la respuesta en el fragmento con su sección en 46 de 46 (antes 38).
+  - Contra el sitio de una tienda real, el rastreo ahora prioriza las páginas de ayuda y políticas y saca el menú y el pie repetidos: las preguntas de envíos y devoluciones traen la sección correcta.
+- **Documentos de prueba** (Acme, ficticios) en `evals/fixtures/knowledge/`:
+  - un PDF de 3 páginas con tablas;
+  - un DOCX con títulos, listas y tabla;
+  - un CSV de 60 productos;
+  - 46 preguntas.
+
+  Se arman con `build.py`.
+- **Migración 0037** (aditiva): columnas nuevas en `documents`, y las tablas `sites` y `site_pages` con RLS.
+- **Tests:**
+  - `test_panel_knowledge.py` (aceptación);
+  - los `test_onboarding_*.py` pasan. Tres aserciones cambiaron a la forma nueva: los párrafos del PDF unidos y los del DOCX separados.
+- **Cómo probarlo:**
+  - `python -m pytest backend/tests/test_panel_knowledge.py backend/tests/test_onboarding_*.py`;
+  - `python evals/knowledge_recall.py` (con `--simulated` sin claves);
+  - en el panel, `/panel/knowledge`.
 
 ## Qué significa "simulado"
 
