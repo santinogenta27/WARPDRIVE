@@ -92,6 +92,25 @@ def _evidence_dates(text: str) -> set[tuple[int, int]]:
 
 # "20:00" dice la hora 20, como "20 horas" en un documento: los minutos en punto no son un dato.
 _ON_THE_HOUR = re.compile(r"\b(\d{1,2}):00\b")
+# "8 p.m." es la hora 20 (decisión 093): en inglés, la respuesta pasa a 12 horas lo que el
+# documento dice en 24 ("de 10 a 20 hs"), o al revés.
+_TWELVE_HOUR = re.compile(r"(?i)\b(\d{1,2})(?::([0-5]\d))?\s*([ap])\.?\s?m\b\.?")
+
+
+# "24/7" dice "las 24 horas, todos los días": el 7 tiene respaldo si las fuentes lo dicen así.
+_ALWAYS = re.compile(r"\b24\s*/\s*7\b")
+_EVERY_DAY = re.compile(r"(?i)todos\s+los\s+d[ií]as|every\s*day|7\s+d[ií]as|7\s+days|24/7")
+
+
+def _to_24h(text: str) -> str:
+    def convert(found: re.Match[str]) -> str:
+        hour = int(found.group(1))
+        if not 1 <= hour <= 12:
+            return found.group(0)
+        hour = hour % 12 + (12 if found.group(3).lower() == "p" else 0)
+        return f"{hour}:{found.group(2)}" if found.group(2) else str(hour)
+
+    return _TWELVE_HOUR.sub(convert, text)
 
 
 def _plain(number: str) -> str:
@@ -138,15 +157,20 @@ def check_grounding(
     if factual and not sources and not tool_backed:
         return GroundingVerdict(False, "afirmación factual sin fuente ni herramienta", NO_SOURCE)
     sources_text = " ".join([*documents.values(), *evidence])
+    in_24h = _to_24h(sources_text)
     known = {
         _plain(n)
         for n in [
             *_NUMBER.findall(sources_text),
             *_numbers(sources_text),
             *_numbers(sources_text, "en"),
+            *_NUMBER.findall(in_24h),
         ]
     }
-    numbers = _numbers(_ON_THE_HOUR.sub(r"\1", _LIST_MARKER.sub("", message)), language)
+    checked = _to_24h(_LIST_MARKER.sub("", message))
+    if "24" in known and _EVERY_DAY.search(sources_text):
+        checked = _ALWAYS.sub("24", checked)
+    numbers = _numbers(_ON_THE_HOUR.sub(r"\1", checked), language)
     unsupported = sorted({n for n in numbers if _plain(n) not in known})
     if unsupported:
         return GroundingVerdict(False, f"datos sin respaldo en las fuentes: {unsupported}", NUMBER)
