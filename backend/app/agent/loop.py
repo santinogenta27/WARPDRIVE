@@ -41,7 +41,7 @@ from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
 from app.cases import billing, closing, csat, team_notify
 from app.channels.whatsapp.format import to_whatsapp
-from app.companies import rules
+from app.companies import go_live, rules
 from app.db.connection import tenant_scope
 from app.identity import email_code
 from app.llm import spending
@@ -273,6 +273,7 @@ HANDOFF_CAUSES = (
     "accion_sin_herramienta",
     "cobro_afirmado",  # dijo que cobró o compró (decisión 060)
     "tope_de_gasto",
+    "agente_en_pausa",  # la empresa pausó el agente desde el panel (decisión 090)
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
     "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
@@ -508,8 +509,10 @@ class Agent:
             return rated
         # Tope de gasto mensual alcanzado (decisión 049): deriva sin llamar al modelo.
         capped = spending.over(self._conn, tenant_id)
+        # Agente en pausa (decisión 090): cada mensaje pasa a una persona, sin llamar al modelo.
+        paused = go_live.is_paused(self._conn, tenant_id)
         case_id, classification = self._open_case(
-            tenant_id, contact_id, company, text, lang, classify_reopen=not capped
+            tenant_id, contact_id, company, text, lang, classify_reopen=not (capped or paused)
         )
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(
@@ -521,6 +524,8 @@ class Agent:
             return self._escalate(
                 turn, "Tope de gasto mensual alcanzado.", {"tipo": "tope_de_gasto"}
             )
+        if paused:
+            return self._escalate(turn, "El agente está en pausa.", {"tipo": "agente_en_pausa"})
         if not contact.verified and self._asks_about_someone_else(turn, company):
             # Privacidad (decisión 069): el email de otra persona nunca recibe un código.
             self._audit(turn, "classified", {"case_type": NOT_ALLOWED})
