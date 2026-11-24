@@ -30,3 +30,6 @@ Thumbs.db
 .claude/settings.local.json
 evals/last_quality_report.json
 evals/last_onboarding.md
+
+# Capturas del QA de punta a punta (evals/qa_e2e.py)
+evals/last_qa_e2e_browser/

@@ -1,0 +1,170 @@
+{
+  "empresa": "Brightside Outdoor QA 6e5664",
+  "pasos": [
+    {
+      "paso": "Registro: llega el email de confirmación",
+      "ok": true,
+      "detalle": "owner-6e5664@brightside.example"
+    },
+    {
+      "paso": "Confirmación: entra al panel",
+      "ok": true,
+      "detalle": "http://localhost:8010/panel/home"
+    },
+    {
+      "paso": "Knowledge: brightside_policies.pdf",
+      "ok": true,
+      "detalle": {
+        "name": "brightside_policies.pdf",
+        "status": "ready",
+        "message": ""
+      }
+    },
+    {
+      "paso": "Knowledge: brightside_shipping_guide.docx",
+      "ok": true,
+      "detalle": {
+        "name": "brightside_shipping_guide.docx",
+        "status": "ready",
+        "message": ""
+      }
+    },
+    {
+      "paso": "Knowledge: brightside_faq.csv",
+      "ok": true,
+      "detalle": {
+        "name": "brightside_faq.csv",
+        "status": "ready",
+        "message": ""
+      }
+    },
+    {
+      "paso": "Knowledge: los tres documentos listos",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "paso": "Agent: nombre, saludo y firma guardados",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "paso": "Tienda: acciones de la tienda simulada en Agent → Actions",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "paso": "Deploy: el código para copiar",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "paso": "Deploy: el widget se permite en el dominio de la tienda",
+      "ok": true,
+      "detalle": {
+        "allowed": true,
+        "name": "Brightside Outdoor",
+        "accent": "#0f766e",
+        "logo": null,
+        "greeting": "Hi! I'm Sunny from Brightside. How can I help?",
+        "suggestions": [
+          "Where is my order?",
+          "What is your return policy?"
+        ],
+        "limit": 20,
+        "lang": "en"
+      }
+    },
+    {
+      "paso": "Deploy: y no en otro dominio",
+      "ok": true,
+      "detalle": {
+        "allowed": false
+      }
+    },
+    {
+      "paso": "Widget: saludo propio",
+      "ok": true,
+      "detalle": "Hi! I'm Sunny from Brightside. How can I help?"
+    },
+    {
+      "paso": "Política con fuente (PDF)",
+      "ok": true,
+      "detalle": "Hello, I am Sunny, the virtual assistant for Brightside Outdoor. You can return any unused item within 45 days of delivery for a full refund, provided items are clean, unworn, and in their original packaging with tags attached. Final sale items, gift cards, and personalized products cannot be returned, and returns are free with a prepaid label. Is there anything else you need help with?\n\n— The Brightside team"
+    },
+    {
+      "paso": "Pedido: pide verificar",
+      "ok": true,
+      "detalle": "If that email is linked to a purchase, you'll receive a 6-digit code. Type it here to confirm you're the account holder. It expires in 10 minutes."
+    },
+    {
+      "paso": "Pedido verificado: estado del pedido",
+      "ok": true,
+      "detalle": "All set, you're verified! Hello, I am Sunny, the virtual assistant for Brightside Outdoor. Your order NW-4521 shipped with UPS Ground under tracking number 1Z9A4F210377451236.\n\nUnfortunately, there is a delay due to a weather delay at the carrier's Denver hub, so it is now expected to arrive on November 26, 2026. I am very sorry for the inconvenience this may cause.\n\nSince your order is arriving later than expected, would you like a 10% off coupon for your next order or free express shipping? Is there anything else I can help with?\n\n— The Brightside team"
+    },
+    {
+      "paso": "Cupón excesivo negado (ofrece hasta 10 %)",
+      "ok": true,
+      "detalle": "Hello Emily. I am Sunny, the virtual assistant for Brightside Outdoor. I understand this is frustrating, but our policy only allows us to offer up to 10% off your next order or free express shipping for delayed deliveries. Would you prefer the 10% coupon or free express shipping?\n\n— The Brightside team"
+    },
+    {
+      "paso": "Reembolso: queda pendiente de aprobación",
+      "ok": true,
+      "detalle": "I've started the refund for order NW-4528. It is currently under review by a member of our team, and you'll get a message here once it's approved. Once issued, refunds go back to your original payment method within 5 to 7 business days.\n\n— The Brightside team"
+    },
+    {
+      "paso": "Inbox: la aprobación aparece",
+      "ok": true,
+      "detalle": 1
+    },
+    {
+      "paso": "Aprobada: el cliente recibe la confirmación",
+      "ok": true,
+      "detalle": [
+        "Good news! We approved the refund for order NW-4528 of $213. It's on its way: we'll let you know when it reaches your payment method."
+      ]
+    },
+    {
+      "paso": "Derivación: pasa a una persona",
+      "ok": true,
+      "detalle": "I'm passing you to a member of our team, who will reply right here in this chat."
+    },
+    {
+      "paso": "Asistente del equipo: resumen y respuesta sugerida",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "paso": "La respuesta del equipo llega al cliente",
+      "ok": true,
+      "detalle": [
+        "Hi, this is Ana from Brightside. How can I help?"
+      ]
+    },
+    {
+      "paso": "Venta: link de compra",
+      "ok": true,
+      "detalle": "I have set up your order for the Trail Runner Jacket in Black, size M, for $149. You can complete your purchase securely at this checkout link: http://localhost:8010/demo/northwind-outfitters/cart/NW-TRJ-BLK-M:1?ref=ea-e65016152cf5. Let me know if you need anything else!\n\n— The Brightside team"
+    },
+    {
+      "paso": "Home: muestra la actividad",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "paso": "Inbox: los casos",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "paso": "Customers: la clienta verificada",
+      "ok": true,
+      "detalle": ""
+    },
+    {
+      "paso": "Insights: métricas con los casos",
+      "ok": true,
+      "detalle": ""
+    }
+  ]
+}

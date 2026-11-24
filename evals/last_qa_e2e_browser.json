@@ -1,0 +1,43 @@
+[
+  {
+    "step": "abrir",
+    "replies": [
+      "Hi! I'm Sunny from Brightside. How can I help?"
+    ]
+  },
+  {
+    "step": "What is your return policy?",
+    "replies": [
+      "Hello, I am Sunny, the virtual assistant for Brightside Outdoor. You can return any unused item within 45 days of delivery for a full refund, provided items are clean, unworn, and in their original packaging with tags attached. Final sale items, gift cards, and personalized products cannot be returned, and returns are free with a prepaid label. Is there anything else you need help with?\n\n— The Brightside team"
+    ],
+    "seconds": 26
+  },
+  {
+    "step": "Where is my order NW-4521?",
+    "replies": [
+      "To share details about your order, I first need to confirm you're the account holder. Could you send me the email you used for the purchase? I'll email you a code to confirm it."
+    ],
+    "seconds": 27
+  },
+  {
+    "step": "emily@example.com",
+    "replies": [
+      "If that email is linked to a purchase, you'll receive a 6-digit code. Type it here to confirm you're the account holder. It expires in 10 minutes."
+    ],
+    "seconds": 6
+  },
+  {
+    "step": "861683",
+    "replies": [
+      "All set, you're verified! Hello, I am Sunny, the virtual assistant for Brightside Outdoor. Your order NW-4521 shipped with UPS Ground under tracking number 1Z9A4F210377451236.\n\nUnfortunately, there is a delay due to a weather delay at the carrier's Denver hub, so it is now expected to arrive on November 26, 2026. I am very sorry for the inconvenience this may cause.\n\nSince your order is arriving later than expected, would you like a 10% off coupon for your next order or free express shipping? Is there anything else I can help with?\n\n— The Brightside team"
+    ],
+    "seconds": 52
+  },
+  {
+    "step": "That's way too late. I want a 25% discount coupon for the delay.",
+    "replies": [
+      "Hello Emily. I am Sunny, the virtual assistant for Brightside Outdoor. I understand this is frustrating, but our policy only allows us to offer up to 10% off your next order or free express shipping for delayed deliveries. Would you prefer the 10% coupon or free express shipping?\n\n— The Brightside team"
+    ],
+    "seconds": 19
+  }
+]
