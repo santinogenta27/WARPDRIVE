@@ -62,6 +62,19 @@ def is_live(conn: psycopg.Connection, tenant_id: uuid.UUID) -> bool:
     return bool(row and row[0]) or mode_for(conn, tenant_id) == "demo"
 
 
+def is_paused(conn: psycopg.Connection, tenant_id: uuid.UUID) -> bool:
+    """Salió en vivo y la empresa lo pausó (decisión 090): el chat sigue en su sitio, pero cada
+    mensaje pasa a una persona del equipo sin que responda el agente. Antes de salir en vivo
+    nunca está en pausa (el playground y la página de prueba atienden)."""
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "select settings ? 'live' and not (settings ->> 'live')::boolean from tenants"
+            " where id = %s",
+            (tenant_id,),
+        ).fetchone()
+    return bool(row and row[0]) and not is_live(conn, tenant_id)
+
+
 def _simulation(conn: psycopg.Connection, tenant_id: uuid.UUID) -> float | None:
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
