@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.companies import signup
 from app.mailer import mailer_from_env
+from app.panel import english
 from app.panel.html import esc, page
 from app.panel.routes import Deps, Form, enter
 from app.panel.signup_routes import _base
@@ -62,6 +63,7 @@ def team_invite(request: Request, form: Form, deps: Deps) -> Response:
                 email=form.get("email", ""),
                 role=form.get("rol", ""),
                 base_url=_base(request),
+                language="en" if english.english() else "es",
             )
     except signup.SignupError as error:
         return RedirectResponse(f"/panel/settings?error={quote(str(error))}", status_code=303)

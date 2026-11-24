@@ -27,6 +27,7 @@ SIGNUP_TTL = timedelta(hours=24)
 INVITE_TTL = timedelta(days=7)
 MAX_SIGNUPS_PER_DAY = 5
 ROLES = {"owner": "Admin", "agent": "Persona del equipo"}
+ROLE_NAMES_EN = {"owner": "Admin", "agent": "A team member"}
 
 
 class SignupError(ValueError):
@@ -59,10 +60,12 @@ def start_signup(
     password: str,
     base_url: str,
     trial_token: str = "",
+    language: str = "es",
 ) -> None:
     """Guarda el registro pendiente y envía el enlace de confirmación. `trial_token`: viene de
     "Empezar mi piloto" en una prueba gratis; al confirmar, se convierte esa empresa de prueba
-    (decisión 075). El email tiene que ser el de la prueba."""
+    (decisión 075). El email tiene que ser el de la prueba. `language`: el de la página de
+    registro, para el email de confirmación (decisión 096)."""
     company, email = company.strip(), email.strip().lower()
     trial_id = None
     if trial_token:
@@ -103,16 +106,19 @@ def start_signup(
         ),
     )
     link = f"{base_url.rstrip('/')}/registro/confirmar?token={token}"
-    mailer.send(
-        Email(
-            to=email,
-            subject=f"Confirmá tu email para crear {company}",
-            body=(
-                f"Para crear la cuenta de {company}, abrí este enlace (vence en 24 horas):\n\n"
-                f"{link}\n\nSi no te registraste, ignorá este email."
-            ),
+    if language == "en":
+        subject = f"Confirm your email to create {company}"
+        body = (
+            f"To create the {company} account, open this link (it expires in 24 hours):\n\n"
+            f"{link}\n\nIf you didn't sign up, you can ignore this email."
         )
-    )
+    else:
+        subject = f"Confirmá tu email para crear {company}"
+        body = (
+            f"Para crear la cuenta de {company}, abrí este enlace (vence en 24 horas):\n\n"
+            f"{link}\n\nSi no te registraste, ignorá este email."
+        )
+    mailer.send(Email(to=email, subject=subject, body=body))
 
 
 def confirm_signup(conn: psycopg.Connection, token: str) -> Company:
@@ -146,7 +152,9 @@ def invite(
     email: str,
     role: str,
     base_url: str,
+    language: str = "es",
 ) -> None:
+    """`language`: el del panel de quien invita (decisión 096)."""
     email = email.strip().lower()
     if role not in ROLES:
         raise SignupError("Elegí un rol de la lista.")
@@ -165,17 +173,21 @@ def invite(
             (tenant_id, email, role, _hash(token), _now() + INVITE_TTL),
         )
     link = f"{base_url.rstrip('/')}/panel/invitacion?token={token}"
-    mailer.send(
-        Email(
-            to=email,
-            subject=f"Te invitaron al panel de {company}",
-            body=(
-                f"Te invitaron a atender a los clientes de {company} como "
-                f"{ROLES[role].lower()}. Para entrar, elegí tu clave en este enlace (vence en 7 "
-                f"días):\n\n{link}"
-            ),
+    if language == "en":
+        subject = f"You're invited to the {company} dashboard"
+        body = (
+            f"You've been invited to help {company}'s customers as "
+            f"{ROLE_NAMES_EN[role].lower()}. To sign in, choose your password with this link "
+            f"(it expires in 7 days):\n\n{link}"
         )
-    )
+    else:
+        subject = f"Te invitaron al panel de {company}"
+        body = (
+            f"Te invitaron a atender a los clientes de {company} como "
+            f"{ROLES[role].lower()}. Para entrar, elegí tu clave en este enlace (vence en 7 "
+            f"días):\n\n{link}"
+        )
+    mailer.send(Email(to=email, subject=subject, body=body))
 
 
 def accept_invitation(conn: psycopg.Connection, token: str, password: str) -> Member:
