@@ -671,11 +671,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--pause", type=float, default=0.0, help="segundos entre casos")
     parser.add_argument(
+        "--fallback",
+        action="store_true",
+        help="con el respaldo entre gratuitos (Groq → Gemini), como en producción",
+    )
+    parser.add_argument(
         "--record",
         action="store_true",
         help="guarda la corrida en el historial de evals aunque sea simulada",
     )
     args = parser.parse_args(argv)
+    if args.fallback:
+        # Con respaldo, el juez tiene que existir en los dos gratuitos: el alias del agente (el
+        # qwen de Groq no tiene equivalente en Gemini).
+        os.environ.setdefault("EVAL_JUDGE_MODEL", JUDGE_MODEL)
 
     load_dotenv()
     backend = llm_backend()
@@ -695,7 +704,11 @@ def main(argv: list[str] | None = None) -> int:
             from simulated.stack import build_real_stack
 
             stack = build_real_stack(
-                conn, CACHE_DIR, cache_models=not args.no_cache, company=company
+                conn,
+                CACHE_DIR,
+                cache_models=not args.no_cache,
+                company=company,
+                fallback=args.fallback,
             )
         else:
             from simulated.stack import build_simulated_stack
