@@ -1318,6 +1318,65 @@ PATTERNS: list[tuple[re.Pattern[str], Replacement]] = [
         re.compile(r"La clave tiene que tener al menos (\d+) caracteres\."),
         lambda m: f"The password must have at least {m[1]} characters.",
     ),
+    # Por qué no se pudo leer un archivo (Knowledge, decisión 088).
+    (
+        re.compile(
+            r"(.+) es un PDF escaneado: son imágenes, sin texto para leer\. Subí una versión con "
+            r"texto \(exportada desde Word o Google Docs\), o pasalo a DOCX o Markdown\."
+        ),
+        lambda m: (
+            f"{m[1]} is a scanned PDF: it's images, with no text to read. Please upload a "
+            "version with text (exported from Word or Google Docs), or convert it to DOCX or "
+            "Markdown."
+        ),
+    ),
+    (
+        re.compile(r"(.+) está protegido con contraseña\. Subí una copia sin contraseña\."),
+        lambda m: f"{m[1]} is password-protected. Please upload a copy without a password.",
+    ),
+    (
+        re.compile(r"(.+) tiene (\d+) páginas y el máximo es (\d+)\. Subilo en partes\."),
+        lambda m: f"{m[1]} has {m[2]} pages and the limit is {m[3]}. Please upload it in parts.",
+    ),
+    (
+        re.compile(
+            r"(.+): no se pudo leer el PDF\. Puede estar dañado\. Probá exportarlo de nuevo, o "
+            r"subilo como DOCX o Markdown\."
+        ),
+        lambda m: (
+            f"{m[1]}: we couldn't read this PDF. It may be damaged: export it again, or upload "
+            "it as DOCX or Markdown."
+        ),
+    ),
+    (
+        re.compile(
+            r"(.+): no se pudo leer el DOCX\. Puede estar dañado: abrilo en Word y guardalo de "
+            r"nuevo, o subilo como PDF\."
+        ),
+        lambda m: (
+            f"{m[1]}: we couldn't read this DOCX. It may be damaged: open it in Word and save it "
+            "again, or upload it as PDF."
+        ),
+    ),
+    (
+        re.compile(r"(.+) está vacío: no tiene texto\."),
+        lambda m: f"{m[1]} is empty: it has no text.",
+    ),
+    (re.compile(r"(.+) supera los 50 MB\."), lambda m: f"{m[1]} is over 50 MB."),
+    (
+        re.compile(
+            r"(.+): formato no soportado\. Subí \.txt o \.zip de WhatsApp, \.csv o \.json de "
+            r"tickets, o documentos \.md, \.txt, \.docx o \.pdf\."
+        ),
+        lambda m: (
+            f"{m[1]}: this file type can't be read. Upload a PDF, DOCX, TXT, MD or CSV, or a "
+            "chat export (.txt or .zip) or helpdesk tickets (.csv or .json)."
+        ),
+    ),
+    (
+        re.compile(r"No se pudo leer un archivo: (.+)"),
+        lambda m: f"We couldn't read a file: {m[1]}",
+    ),
     (
         re.compile(r"Quién usa el panel de (.+)\."),
         lambda m: f"Who uses {m[1]}'s dashboard.",
@@ -1404,6 +1463,7 @@ _ATTRIBUTE = re.compile(r'\b(placeholder|aria-label|title|data-done)="([^"]*)"')
 
 _VOID = {"br", "input", "meta", "link", "img", "hr", "source", "wbr", "col", "area"}
 _MESSAGE = re.compile(r'\bclass="(?:[^"]*\s)?msg(?:\s[^"]*)?"|\btranslate="no"')
+_KEEP = re.compile(r'\btranslate="no"')
 
 
 def translate_html(markup: str, translate_text: Callable[[str], str] = translate_text) -> str:
@@ -1422,7 +1482,8 @@ def translate_html(markup: str, translate_text: Callable[[str], str] = translate
 
     out: list[str] = []
     skipping: str | None = None
-    open_tags: list[tuple[str, bool]] = []  # (etiqueta, ¿es un mensaje?)
+    # (etiqueta, ¿su texto queda igual?, ¿queda igual todo lo de adentro?)
+    open_tags: list[tuple[str, bool, bool]] = []
     for part in _TOKEN.split(markup):
         if not part:
             continue
@@ -1438,7 +1499,10 @@ def translate_html(markup: str, translate_text: Callable[[str], str] = translate
                 while open_tags and open_tags.pop()[0] != tag:
                     pass
             elif tag and tag not in _VOID and not part.endswith("/>"):
-                open_tags.append((tag, bool(_MESSAGE.search(part))))
+                # `translate="no"` vale para todo lo que tiene adentro; un mensaje, solo para su
+                # propio texto (la etiqueta "Cliente · 14:03" de adentro sí se traduce).
+                keep = (bool(open_tags) and open_tags[-1][2]) or bool(_KEEP.search(part))
+                open_tags.append((tag, keep or bool(_MESSAGE.search(part)), keep))
             if tag in _SKIP and not part.startswith("</") and not part.endswith("/>"):
                 skipping = tag
             out.append(_attributes(part))

@@ -269,3 +269,66 @@ Los 14 casos guionados, sin caché, dos veces por modelo, con 60 s de pausa entr
   - su única falla es la más riesgosa: responder cuando había que derivar, que el CI trata como crítica;
   - cambiarlo obliga a cambiar también el juez de los evals, que hoy es qwen y tiene que ser un modelo distinto del agente (decisión 020).
 - **Si se quiere evaluar a qwen en serio:** correr las 60 conversaciones de calidad con qwen y con 20b, sin caché, y decidir con esa muestra.
+
+## Knowledge: extracción, fragmentos y búsqueda (Hito 13, 23 de noviembre de 2026)
+
+**Qué se mide** (`python evals/knowledge_recall.py [--simulated]`):
+- **Documentos:** los 11 de Acme y los 7 de Northwind (Markdown), más tres de prueba de Acme, ficticios, en `evals/fixtures/knowledge/`:
+  - un PDF de 3 páginas con títulos numerados, listas y 3 tablas;
+  - un DOCX con títulos, listas numeradas y con viñetas y una tabla;
+  - un CSV de 60 productos.
+- **Preguntas:** 46, en lenguaje natural, no copiadas del texto (`questions.json`). 22 son del PDF, 8 del DOCX, 6 del CSV y 10 de los Markdown. Cada una trae su documento, el dato de la respuesta y, en el PDF y el DOCX, su sección.
+- **Métricas**, entre los 3 primeros resultados:
+  - **Fuente@3:** está el documento correcto.
+  - **Respuesta@3:** un fragmento trae el dato.
+  - **Respuesta@1:** el primero lo trae.
+  - **Con su sección:** el fragmento con la respuesta trae también el título de su sección.
+  - **Cortes:** fragmentos que empiezan o terminan a mitad de una oración o de una fila de tabla.
+- **Modelo:** ninguno. Embeddings de Gemini reales (hay clave) y, para comparar, los simulados del CI.
+
+**Antes** (extracción de una página del PDF o de todo el DOCX como un solo párrafo; fragmentos de 700 caracteres cortados por palabras):
+
+| Embeddings | Cortes | Fuente@3 | Respuesta@3 | Respuesta@1 | Con su sección |
+|---|---|---|---|---|---|
+| Gemini | 25 de 48 fragmentos | 46/46 (100%) | 46/46 (100%) | 32/46 (70%) | 38/46 (83%) |
+| Simulados | 25 de 48 | 45/46 (98%) | 44/46 (96%) | 32/46 (70%) | 38/46 (83%) |
+
+**Después** (`app/onboarding/extract.py` y `app/rag/indexer.chunk_text`, decisión 088):
+- **Extracción:**
+  - títulos (de los estilos de Word, de la numeración y el largo de las líneas del PDF, y de `<h1>`…`<h6>`);
+  - listas, un ítem por renglón;
+  - tablas, una fila por renglón con el nombre de cada columna.
+- **Fragmentos:** por sección, con los títulos de la sección al principio; nunca cortan un párrafo, un ítem ni una fila.
+
+| Embeddings | Cortes | Fuente@3 | Respuesta@3 | Respuesta@1 | Con su sección |
+|---|---|---|---|---|---|
+| Gemini | **0 de 48** | 46/46 (100%) | 46/46 (100%) | **35/46 (76%)** | **46/46 (100%)** |
+| Simulados | **0 de 48** | 45/46 (98%) | 40/46 (87%) | 35/46 (76%) | 40/46 (87%) |
+
+**Cómo leerlo:**
+- Con embeddings reales (los de producción), todo queda igual o mejor:
+  - ningún fragmento corta una política;
+  - el que trae la respuesta trae siempre su sección (el agente sabe de qué parte de la política habla);
+  - la respuesta sale primera más seguido.
+- Respuesta@1 no llega a 100% porque los documentos se superponen a propósito. `envios.md` y el manual en PDF hablan de lo mismo, y el primero suele ser el otro documento, que también responde.
+- **Con embeddings simulados**, Respuesta@3 baja de 44 a 40. Los simulados no entienden significado, así que manda la búsqueda por texto.
+  - Esa búsqueda premia los fragmentos largos: antes, una página entera del PDF traía casi cualquier palabra.
+  - Ahora la sección correcta aparece entre las primeras por texto (por ejemplo, 3.ª en "¿En cuántos días llega un pedido a Gran Buenos Aires?"), pero el ruido de los vectores simulados la saca.
+  - Probé normalizar el puntaje del texto por largo y no cambió nada. No fuerzo la búsqueda para el doble de prueba.
+
+**El sitio de una tienda pública real** (`https://www.deathwishcoffee.com/`, 20 páginas, Gemini):
+- **Antes:**
+  - el rastreo leyó colecciones de productos antes que la ayuda;
+  - el menú y el pie de cada página (“Help + FAQ - Refund Policy - Careers…”) salían primeros en las búsquedas.
+
+  A "Do you offer free shipping?" le traía tres fragmentos del pie y de una página de suscripción, y ninguno respondía.
+- **Después:**
+  - el rastreo prioriza las páginas de ayuda, políticas, envíos y contacto;
+  - las líneas que se repiten en la mitad de las páginas o más quedan solo en la de inicio.
+
+  Encontró Help and FAQs, Help - Returns, Help - Shipping & Delivery, Privacy policy y Terms of service.
+  - "Do you offer free shipping?" trae primero *Shipping and delivery › How much will I pay for shipping within the continental US?*.
+  - "What is your return policy?" trae *100% money-back guarantee*, *Refund Policy* y *How do I return an item and receive a refund?*.
+- **Queda pendiente:**
+  - "How much caffeine is in your coffee?" trae el blog y la página del café instantáneo: el dato no estaba entre las 20 páginas leídas;
+  - el límite de páginas por rastreo sigue en 30.

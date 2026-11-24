@@ -1,2 +1,3 @@
 # Los PDF de prueba no son texto: Git no les cambia los saltos de linea.
 *.pdf binary
+*.docx binary

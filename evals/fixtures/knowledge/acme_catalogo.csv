@@ -1,0 +1,61 @@
+sku,nombre,categoria,precio,talles,colores,stock
+AC-100,Campera Norte,Abrigos,$ 45.900,S a XXL,"negro, azul",0
+AC-101,Campera Delta,Abrigos,$ 46.900,S a XXL,"azul, verde",3
+AC-102,Campera Patagonia,Abrigos,$ 47.900,S a XXL,"verde, gris",6
+AC-103,Campera Urbana,Abrigos,$ 48.900,S a XXL,"gris, rojo",9
+AC-104,Campera Andes,Abrigos,$ 49.900,S a XXL,"rojo, blanco",12
+AC-105,Campera Litoral,Abrigos,$ 50.900,S a XXL,blanco,15
+AC-106,Campera Pampa,Abrigos,$ 51.900,S a XXL,"negro, azul",18
+AC-107,Campera Austral,Abrigos,$ 52.900,S a XXL,"azul, verde",21
+AC-108,Campera Río,Abrigos,$ 53.900,S a XXL,"verde, gris",24
+AC-109,Campera Cumbre,Abrigos,$ 54.900,S a XXL,"gris, rojo",2
+AC-200,Buzo Norte,Abrigos,$ 28.900,S a XXL,"azul, verde",7
+AC-201,Buzo Delta,Abrigos,$ 29.900,S a XXL,"verde, gris",10
+AC-202,Buzo Patagonia,Abrigos,$ 30.900,S a XXL,"gris, rojo",13
+AC-203,Buzo Urbana,Abrigos,$ 31.900,S a XXL,"rojo, blanco",16
+AC-204,Buzo Andes,Abrigos,$ 32.900,S a XXL,blanco,19
+AC-205,Buzo Litoral,Abrigos,$ 33.900,S a XXL,"negro, azul",22
+AC-206,Buzo Pampa,Abrigos,$ 34.900,S a XXL,"azul, verde",0
+AC-207,Buzo Austral,Abrigos,$ 35.900,S a XXL,"verde, gris",3
+AC-208,Buzo Río,Abrigos,$ 36.900,S a XXL,"gris, rojo",6
+AC-209,Buzo Cumbre,Abrigos,$ 37.900,S a XXL,"rojo, blanco",9
+AC-300,Remera Norte,Remeras,$ 12.900,S a XXL,"verde, gris",14
+AC-301,Remera Delta,Remeras,$ 13.900,S a XXL,"gris, rojo",17
+AC-302,Remera Patagonia,Remeras,$ 14.900,S a XXL,"rojo, blanco",20
+AC-303,Remera Urbana,Remeras,$ 15.900,S a XXL,blanco,23
+AC-304,Remera Andes,Remeras,$ 16.900,S a XXL,"negro, azul",1
+AC-305,Remera Litoral,Remeras,$ 17.900,S a XXL,"azul, verde",4
+AC-306,Remera Pampa,Remeras,$ 18.900,S a XXL,"verde, gris",7
+AC-307,Remera Austral,Remeras,$ 19.900,S a XXL,"gris, rojo",10
+AC-308,Remera Río,Remeras,$ 20.900,S a XXL,"rojo, blanco",13
+AC-309,Remera Cumbre,Remeras,$ 21.900,S a XXL,blanco,16
+AC-400,Pantalón Norte,Pantalones,$ 32.900,S a XXL,"gris, rojo",21
+AC-401,Pantalón Delta,Pantalones,$ 33.900,S a XXL,"rojo, blanco",24
+AC-402,Pantalón Patagonia,Pantalones,$ 34.900,S a XXL,blanco,2
+AC-403,Pantalón Urbana,Pantalones,$ 35.900,S a XXL,"negro, azul",5
+AC-404,Pantalón Andes,Pantalones,$ 36.900,S a XXL,"azul, verde",8
+AC-405,Pantalón Litoral,Pantalones,$ 37.900,S a XXL,"verde, gris",11
+AC-406,Pantalón Pampa,Pantalones,$ 38.900,S a XXL,"gris, rojo",14
+AC-407,Pantalón Austral,Pantalones,$ 39.900,S a XXL,"rojo, blanco",17
+AC-408,Pantalón Río,Pantalones,$ 40.900,S a XXL,blanco,20
+AC-409,Pantalón Cumbre,Pantalones,$ 41.900,S a XXL,"negro, azul",23
+AC-500,Zapatilla Norte,Calzado,$ 64.900,35 al 44,"rojo, blanco",3
+AC-501,Zapatilla Delta,Calzado,$ 65.900,35 al 44,blanco,6
+AC-502,Zapatilla Patagonia,Calzado,$ 66.900,35 al 44,"negro, azul",9
+AC-503,Zapatilla Urbana,Calzado,$ 67.900,35 al 44,"azul, verde",12
+AC-504,Zapatilla Andes,Calzado,$ 68.900,35 al 44,"verde, gris",15
+AC-505,Zapatilla Litoral,Calzado,$ 69.900,35 al 44,"gris, rojo",18
+AC-506,Zapatilla Pampa,Calzado,$ 70.900,35 al 44,"rojo, blanco",21
+AC-507,Zapatilla Austral,Calzado,$ 71.900,35 al 44,blanco,24
+AC-508,Zapatilla Río,Calzado,$ 72.900,35 al 44,"negro, azul",2
+AC-509,Zapatilla Cumbre,Calzado,$ 73.900,35 al 44,"azul, verde",5
+AC-600,Gorra Norte,Accesorios,$ 9.900,Único,blanco,10
+AC-601,Gorra Delta,Accesorios,$ 10.900,Único,"negro, azul",13
+AC-602,Gorra Patagonia,Accesorios,$ 11.900,Único,"azul, verde",16
+AC-603,Gorra Urbana,Accesorios,$ 12.900,Único,"verde, gris",19
+AC-604,Gorra Andes,Accesorios,$ 13.900,Único,"gris, rojo",22
+AC-605,Gorra Litoral,Accesorios,$ 14.900,Único,"rojo, blanco",0
+AC-606,Gorra Pampa,Accesorios,$ 15.900,Único,blanco,3
+AC-607,Gorra Austral,Accesorios,$ 16.900,Único,"negro, azul",6
+AC-608,Gorra Río,Accesorios,$ 17.900,Único,"azul, verde",9
+AC-609,Gorra Cumbre,Accesorios,$ 18.900,Único,"verde, gris",12

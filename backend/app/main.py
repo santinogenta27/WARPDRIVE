@@ -13,6 +13,7 @@ from app.panel.company_routes import router as company_router
 from app.panel.customers_routes import router as customers_router
 from app.panel.deploy_routes import router as deploy_router
 from app.panel.home_routes import router as home_router
+from app.panel.knowledge_routes import router as knowledge_router
 from app.panel.live_routes import router as live_router
 from app.panel.metrics_routes import router as metrics_router
 from app.panel.nav_routes import router as nav_router
@@ -44,6 +45,7 @@ app.include_router(panel_router)
 app.include_router(company_router)
 app.include_router(home_router)  # Home (decisión 085)
 app.include_router(deploy_router)  # Deploy (decisión 086)
+app.include_router(knowledge_router)  # Knowledge (decisión 088)
 app.include_router(nav_router)  # secciones del panel y direcciones de antes (decisión 085)
 app.include_router(live_router)  # probar y salir en vivo (decisión 056)
 app.include_router(signup_router)  # registro self-service e invitaciones (decisión 058)

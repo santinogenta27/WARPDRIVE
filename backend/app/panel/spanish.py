@@ -500,6 +500,168 @@ PHRASES: dict[str, str] = {
         "español, tu agente escribe en rioplatense (con vos)."
     ),
     "English, for a store in the United States": "Inglés, para una tienda en Estados Unidos",
+    # knowledge (decisión 088)
+    "What your agent knows. It answers only with this.": (
+        "Lo que sabe tu agente. Responde solo con esto."
+    ),
+    "documents ready": "documentos listos",
+    "website pages": "páginas del sitio",
+    "failed": "con error",
+    "Add documents": "Agregá documentos",
+    "Policies, FAQs, product lists and your support history. Your agent answers only with what's "
+    "here.": (
+        "Políticas, preguntas frecuentes, listas de productos y tu historial de atención. Tu "
+        "agente responde solo con lo que está acá."
+    ),
+    "Drag your files here, or click to choose": (
+        "Arrastrá tus archivos acá, o hacé clic para elegir"
+    ),
+    "PDF, DOCX, TXT, MD and CSV (a catalog or FAQs), WhatsApp chat exports (.txt or .zip) and "
+    "helpdesk tickets (.csv or .json). Up to 50 MB.": (
+        "PDF, DOCX, TXT, MD y CSV (un catálogo o preguntas frecuentes), chats exportados de "
+        "WhatsApp (.txt o .zip) y tickets de helpdesk (.csv o .json). Hasta 50 MB."
+    ),
+    "Choose files": "Elegir archivos",
+    "Upload": "Subir",
+    "Uploading WhatsApp chats?": "¿Subís chats de WhatsApp?",
+    "The name your business uses in those chats": (
+        "El nombre con el que figura tu negocio en esos chats"
+    ),
+    "Acme Support, Ana from Acme": "Soporte Acme, Ana de Acme",
+    "So we know which messages are from your team. Separate names with commas, and save them "
+    "before uploading the chats. Personal data in chats is replaced before saving.": (
+        "Así sabemos qué mensajes son de tu equipo. Separá los nombres con comas y guardalos "
+        "antes de subir los chats. Los datos personales de los chats se reemplazan antes de "
+        "guardar."
+    ),
+    "Save names": "Guardar nombres",
+    "Failed": "Con error",
+    "Needs you": "Te necesita",
+    "Already uploaded": "Ya estaba subido",
+    "Processing…": "Procesando…",
+    "The upload failed. Check your connection and try again.": (
+        "La carga falló. Revisá tu conexión y probá de nuevo."
+    ),
+    "It seems to have people's personal data. Review it on this page.": (
+        "Parece tener datos personales de personas. Revisalo en esta página."
+    ),
+    "Your documents": "Tus documentos",
+    "No documents yet": "Todavía no hay documentos",
+    "Upload your policies and FAQs above. It's the first step to go live.": (
+        "Subí tus políticas y preguntas frecuentes arriba. Es el primer paso para salir en vivo."
+    ),
+    "Replacing a document updates what your agent knows right away; removing it takes it out of "
+    "every answer.": (
+        "Reemplazar un documento actualiza lo que sabe tu agente en el momento; borrarlo lo saca "
+        "de todas las respuestas."
+    ),
+    "Document": "Documento",
+    "Status": "Estado",
+    "Updated": "Actualizado",
+    "sections": "secciones",
+    "Replace": "Reemplazar",
+    "Remove this document? Your agent stops using it right away.": (
+        "¿Borrar este documento? Tu agente deja de usarlo en el momento."
+    ),
+    "Ask your knowledge": "Preguntale a tu conocimiento",
+    "Check what your agent would answer and which documents it would use, without opening the "
+    "chat.": ("Mirá qué respondería tu agente y qué documentos usaría, sin abrir el chat."),
+    "Question": "Pregunta",
+    "How long do I have to return a pair of shoes?": (
+        "¿Cuánto tiempo tengo para devolver un calzado?"
+    ),
+    "Ask": "Preguntar",
+    "Here's what your knowledge says about it:": "Esto es lo que dice tu conocimiento:",
+    "Your knowledge doesn't answer this yet. Your agent would pass it to a person. Add a document "
+    "that covers it.": (
+        "Tu conocimiento todavía no responde esto. Tu agente se lo pasaría a una persona. "
+        "Agregá un documento que lo cubra."
+    ),
+    "Sources it used": "Fuentes que usó",
+    "Problems to fix": "Problemas para arreglar",
+    "No problems found": "No encontramos problemas",
+    "We look for documents that contradict each other, questions your agent couldn't answer and "
+    "information that looks old.": (
+        "Buscamos documentos que se contradicen, preguntas que tu agente no pudo responder e "
+        "información que parece vieja."
+    ),
+    "Contradiction": "Contradicción",
+    "Return period": "Plazo de devolución",
+    "Exchange period": "Plazo de cambio",
+    "Warranty": "Garantía",
+    "Delivery time": "Plazo de entrega",
+    "in": "en",
+    "Your agent could give different answers. Fix the document that's wrong, or remove it.": (
+        "Tu agente podría dar respuestas distintas. Corregí el documento que está mal, o borralo."
+    ),
+    "Not covered": "Sin cobertura",
+    "questions your agent couldn't answer": "preguntas que tu agente no pudo responder",
+    "Add a document that explains it.": "Agregá un documento que lo explique.",
+    "May be old": "Puede estar viejo",
+    "Check it's still right, and replace it if it isn't.": (
+        "Revisá que siga siendo correcto, y reemplazalo si no."
+    ),
+    "not updated in over a year": "sin actualizar hace más de un año",
+    "Your website": "Sitio web",
+    "We read your site's pages (up to 30, without leaving your domain) and your agent learns from "
+    "them.": (
+        "Leemos las páginas de tu sitio (hasta 30, sin salir de tu dominio) y tu agente aprende "
+        "de ellas."
+    ),
+    "Website address": "Dirección del sitio",
+    "https://www.yourstore.com": "https://www.tutienda.com",
+    "Find pages": "Buscar páginas",
+    "Last sync:": "Última sincronización:",
+    "never": "nunca",
+    "pages in use. Uncheck the ones your agent shouldn't use.": (
+        "páginas en uso. Desmarcá las que tu agente no tiene que usar."
+    ),
+    "Use selected pages": "Usar las páginas marcadas",
+    "Sync now": "Sincronizar ahora",
+    "Sync every week": "Sincronizar cada semana",
+    "Stop weekly sync": "Dejar de sincronizar cada semana",
+    "Syncs automatically every week.": "Se sincroniza solo cada semana.",
+    "Syncs only when you ask.": "Se sincroniza solo cuando lo pedís.",
+    "Pages saved.": "Páginas guardadas.",
+    "Saved.": "Guardado.",
+    "Documents uploaded.": "Documentos subidos.",
+    "The upload is over 50 MB.": "La carga supera los 50 MB.",
+    "Learn from your support history": "Aprendé de tu historial de atención",
+    "From your past conversations, your agent learns the topics your customers ask about, builds "
+    "its tests and tells you how much it would solve on its own.": (
+        "De tus conversaciones anteriores, tu agente aprende los temas que consultan tus "
+        "clientes, arma sus pruebas y te dice cuánto resolvería solo."
+    ),
+    "File": "Archivo",
+    "Uploaded": "Subido",
+    "Upload WhatsApp chats or helpdesk tickets above to start.": (
+        "Subí chats de WhatsApp o tickets de helpdesk arriba para empezar."
+    ),
+    "Analysis steps": "Pasos del análisis",
+    "Analyze my history": "Analizar mi historial",
+    "Retry from where it stopped": "Reintentar desde donde quedó",
+    "Analyze again (with new files)": "Analizar de nuevo (con los archivos nuevos)",
+    "The analysis is running. This page updates by itself; you can close it and come back later.": (
+        "El análisis está corriendo. Esta página se actualiza sola; podés cerrarla y volver más "
+        "tarde."
+    ),
+    "The analysis finished.": "El análisis terminó.",
+    "See how much your agent would solve in the": "Mirá cuánto resolvería tu agente en el",
+    "readiness report": "reporte de preparación",
+    ", then review and approve what it found:": ", y después revisá y aprobá lo que encontró:",
+    "topics": "temas",
+    "and": "y",
+    "actions": "acciones",
+    ". Nothing is used until you approve it.": ". Nada se usa hasta que lo aprobás.",
+    "← Knowledge": "← Conocimiento",
+    "What your agent learned": "Qué aprendió tu agente",
+    "Your agent searches these sections when it answers. Each one carries its title so it makes "
+    "sense on its own.": (
+        "Tu agente busca en estas secciones cuando responde. Cada una lleva su título, así se "
+        "entiende sola."
+    ),
+    "Full extracted text": "Texto extraído completo",
+    "characters": "caracteres",
     # diagnóstico de la conexión (app/companies/deploy.py)
     "Connected to your store.": "Conectado a tu tienda.",
     "In the Dev Dashboard, open your app → Versions, add them under Scopes and click Release. "
@@ -574,6 +736,24 @@ PATTERNS: list[tuple[re.Pattern[str], Callable[[re.Match[str]], str]]] = [
     ),
     (re.compile(r"(\d+) of (\d+) on"), lambda m: f"{m[1]} de {m[2]} activas"),
     (re.compile(r"Connected to (.+)\."), lambda m: f"Conectado a {m[1]}."),
+    (re.compile(r"(\d+) of (\d+)"), lambda m: f"{m[1]} de {m[2]}"),
+    (
+        re.compile(r"Website synced: (\d+) pages found\."),
+        lambda m: f"Sitio sincronizado: {m[1]} páginas encontradas.",
+    ),
+    (
+        re.compile(r"We couldn't read the site: (.+)"),
+        lambda m: f"No pudimos leer el sitio: {m[1]}",
+    ),
+    (
+        re.compile(r"The last sync failed: (.+)"),
+        lambda m: f"La última sincronización falló: {m[1]}",
+    ),
+    (re.compile(r"mentions (\d{4})"), lambda m: f"menciona {m[1]}"),
+    (
+        re.compile(r"(\d+) conversations to learn from"),
+        lambda m: f"{m[1]} conversaciones para aprender",
+    ),
     (re.compile(r"— The (.+) team"), lambda m: f"— El equipo de {m[1]}"),
     (
         re.compile(r"Messages you send here show up in your Inbox as (.+)'s chat\."),

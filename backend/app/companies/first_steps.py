@@ -67,7 +67,7 @@ STEPS = [
 def steps(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[Step]:
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
-            "select exists (select 1 from documents),"
+            "select exists (select 1 from documents where status = 'ready'),"
             " coalesce(jsonb_strip_nulls(t.settings -> 'rules'), '{}') <> '{}',"
             " exists (select 1 from widget_settings where not auto) or t.settings ? 'brand',"
             " exists (select 1 from web_sessions where messages > 0),"
