@@ -60,6 +60,9 @@ _REVIEW_ES = re.compile(
     r"|reclamo)\b"
     r"|\b(?:est[aá]|qued[aó]|queda|quedar[aá]|pas[oó]|pasa)\s+(?:ya\s+)?(?:en\s+revisi[oó]n"
     r"|a\s+revisi[oó]n|pendiente\s+de\s+(?:aprobaci[oó]n|revisi[oó]n))\b"
+    # "Tu solicitud de reembolso ya fue registrada" (gpt-oss-20b en el QA 2).
+    r"|\b(?:solicitud|pedido\s+de\s+reembolso|reclamo|tr[aá]mite)\s+(?:\w+\s+){0,3}?"
+    r"(?:ya\s+)?(?:fue|qued[oó]|est[aá])\s+(?:ya\s+)?(?:registrad|cargad|iniciad|enviad)[oa]\b"
 )
 _REVIEW_EN = re.compile(
     r"(?i)\b(?:is|are|has\s+been|have\s+been|was)\s+(?:now\s+)?(?:under\s+review"

@@ -22,6 +22,7 @@ REFUND = "Quiero el reembolso del pedido 1005"
         "equipo.",
         "El reembolso está en revisión por nuestro equipo y se acreditará en 5 a 10 días.",
         "Tu pedido quedó pendiente de aprobación.",
+        "Tu pedido 1005 está entregado y tu solicitud de reembolso ya fue registrada.",
     ],
 )
 def test_detecta_revision_afirmada_en_espanol(text: str) -> None:
