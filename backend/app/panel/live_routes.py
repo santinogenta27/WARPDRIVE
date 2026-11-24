@@ -18,6 +18,7 @@ from app.companies.create import chat_slug
 from app.demo import behind
 from app.demo.behind_routes import _session_tenant, render
 from app.panel import english
+from app.panel.home_routes import PAUSE
 from app.panel.html import esc
 from app.panel.routes import Ctx, Deps, Form, enter
 
@@ -33,7 +34,7 @@ def playground(request: Request, deps: Deps) -> Response:
         slug = chat_slug(conn, ctx.tenant_id)
         found = widget.load(conn, ctx.tenant_id)
     if slug is None:
-        return RedirectResponse("/panel/reporte", status_code=303)
+        return RedirectResponse("/panel/test", status_code=303)
     page = render(
         name=found.name,
         slug=slug,
@@ -63,10 +64,10 @@ def readiness_html(ctx: Ctx, found: go_live.Readiness) -> str:
     """La tarjeta del reporte: probar, el umbral y el botón para salir en vivo."""
     en = english.english()
     if found.live:
-        state = "En vivo: el asistente atiende en tu sitio." if not en else "Live on your site."
+        state = "En vivo: el agente atiende en tu sitio." if not en else "Live on your site."
         button = (
-            f'<form method="post" action="/panel/salir-en-vivo"><input type="hidden" name="csrf"'
-            f' value="{ctx.csrf}"><input type="hidden" name="activo" value="no">'
+            f'<form method="post" action="/panel/salir-en-vivo" {PAUSE}><input type="hidden"'
+            f' name="csrf" value="{ctx.csrf}"><input type="hidden" name="activo" value="no">'
             f'<button type="submit">{"Pause" if en else "Pausar"}</button></form>'
         )
     else:
@@ -102,7 +103,7 @@ def readiness_html(ctx: Ctx, found: go_live.Readiness) -> str:
         else f"Para salir hace falta al menos {minimum} de resolución estimada y frenar todos "
         "los ataques."
     )
-    try_it = "Try the assistant" if en else "Probar el asistente"
+    try_it = "Try your agent" if en else "Probar el agente"
     missing = f'<ul class="small">{reasons}</ul>' if reasons else ""
     simulated = (  # la última simulación (decisión 080): informativa
         f'<div class="small">{"Simulation" if en else "Simulación"}: pass^3 '
@@ -126,5 +127,6 @@ def toggle_live(request: Request, form: Form, deps: Deps) -> Response:
         with deps.connection() as conn:
             go_live.set_live(conn, ctx.tenant_id, on)
     except go_live.GoLiveError:
-        return RedirectResponse("/panel/reporte", status_code=303)
-    return RedirectResponse("/panel/reporte", status_code=303)
+        return RedirectResponse("/panel/test", status_code=303)
+    back = form.get("volver", "")
+    return RedirectResponse(back if back.startswith("/panel/") else "/panel/test", status_code=303)

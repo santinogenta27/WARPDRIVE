@@ -94,10 +94,10 @@ def test_un_saludo_despues_de_resolver_no_reabre(stack: SimulatedStack) -> None:
 
 def test_el_conteo_para_el_cobro_sigue_la_regla_de_cierre(stack: SimulatedStack) -> None:
     tenant = stack.seed.tenant_id
-    # 1. Resuelto por el asistente hace más de 7 días, sin reabrir: se cobra.
+    # 1. Resuelto por el agente hace más de 7 días, sin reabrir: se cobra.
     billable = resolved_order_case(stack)
     close_days_ago(stack, billable, 9)
-    # 2. Resuelto por el asistente hace 2 días: todavía puede reabrirse.
+    # 2. Resuelto por el agente hace 2 días: todavía puede reabrirse.
     recent = stack.send("martin", "¿Abren los domingos?").case_id
     stack.send("martin", "gracias")
     close_days_ago(stack, recent, 2)

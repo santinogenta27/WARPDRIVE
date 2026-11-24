@@ -161,7 +161,7 @@ def send_due(conn: psycopg.Connection, mailer: Mailer, now: datetime | None = No
                 if row is None:
                     continue  # ya salió esta semana
                 data = numbers(conn, tenant_id, start, end)
-                subject, body = compose(company, start, data, f"{base}/panel/resultados")
+                subject, body = compose(company, start, data, f"{base}/panel/insights/results")
                 with tenant_scope(conn, tenant_id):
                     conn.execute(
                         "update weekly_reports set summary = %s where id = %s",

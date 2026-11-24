@@ -1,0 +1,111 @@
+[
+  {
+    "opcion": "Idioma inglés",
+    "esperado": "Responde en inglés, sin derivar",
+    "ok": true,
+    "respuesta": "The Acme Store branches are open Monday to Saturday from 10 a.m. to 8 p.m. and are closed on Sundays and holidays. Here are the addresses:\n- Palermo: Av. Santa Fe 3200, Ciudad de Buenos Aires.\n- Rosario: Córdoba 1500, Rosario, Santa Fe.\n- Córdoba: Av. Colón 800, Córdoba capital.\nFeel free to visit any of these locations during the open hours. Let me know if you need anything else!",
+    "pasos": [
+      "classified: {\"case_type\": \"horarios_y_sucursales\"}",
+      "rag_search: {\"query\": \"Are you open on Sundays?\", \"sources\": [\"horarios_y_sucursales\", \"atencion_al_cliente\", \"devoluciones_y_reembolsos\", \"privacidad\", \"guia_de_talles\"], \"chunk_ids\": [\"3c6c1769-221c-498a-a882-da41b1d53961\", \"ee91bbf0-61da-4469-9869-e23be8537a95\", \"908918e5-2441-44da-8ce4-063c81e3b1e5\", \"32b5c",
+      "tool_call: {\"tool\": \"functions.responder\", \"input\": {\"factual\": true, \"fuentes\": [\"horarios_y_sucursales\"], \"mensaje\": \"The Acme Store branches are open from Monday to Saturday, 10 a.m. – 8 p.m. They are closed on Sundays and holidays. If you’d like to visit a store, feel free to come any weekday during those "
+    ]
+  },
+  {
+    "opcion": "Idioma de vuelta a español",
+    "esperado": "Responde en español",
+    "ok": true,
+    "respuesta": "Hola. Los domingos y feriados las sucursales permanecen cerradas. ¿Te puedo ayudar con otra consulta?",
+    "pasos": [
+      "classified: {\"case_type\": \"horarios_y_sucursales\"}",
+      "rag_search: {\"query\": \"¿Abren los domingos?\", \"sources\": [\"horarios_y_sucursales\", \"atencion_al_cliente\", \"cambios_de_talle\", \"guia_de_talles\", \"devoluciones_y_reembolsos\"], \"chunk_ids\": [\"3c6c1769-221c-498a-a882-da41b1d53961\", \"ee91bbf0-61da-4469-9869-e23be8537a95\", \"6c68be04-11ac-4b15-bbf9-1107e2529bc9\", \"c31"
+    ]
+  },
+  {
+    "opcion": "Trato de usted",
+    "esperado": "Sin voseo ni tuteo",
+    "ok": true,
+    "respuesta": "Te paso con una persona del equipo, que te va a responder por este mismo chat.",
+    "pasos": [
+      "classified: {\"case_type\": \"donde_esta_mi_pedido\"}",
+      "rag_search: {\"query\": \"¿Dónde está mi pedido 1001?\", \"sources\": [\"seguimiento_de_pedidos\", \"envios\", \"cancelaciones\", \"privacidad\", \"devoluciones_y_reembolsos\"], \"chunk_ids\": [\"8be5444a-cfdd-4d0c-9fe2-e219b384ee2f\", \"3c184731-3e10-4c4e-9794-61c2d4f2380b\", \"b92e033f-cfa6-44ad-9938-207d0dedeb0f\", \"32b5ce51-ad68-4",
+      "tool_call: {\"tool\": \"consultar_pedido\", \"input\": {\"order_id\": \"1001\"}, \"reason\": \"\", \"result\": {\"ok\": true, \"data\": {\"id\": \"1001\", \"items\": [{\"sku\": \"ZAP-URB-38\", \"name\": \"Zapatillas urbanas\", \"size\": \"38\", \"quantity\": 1, \"unit_price\": 45990}], \"total\": 45990, \"status\": \"shipped\", \"currency\": \"ARS\", \"created_a",
+      "escalated: {\"causa\": {\"tipo\": \"supervisor\", \"detalle\": \"reescribir\"}, \"pasos\": [{\"resultado\": \"executed\", \"parametros\": {\"order_id\": \"1001\"}, \"herramienta\": \"consultar_pedido\"}], \"motivo\": \"Supervisor: La respuesta usa el trato de 'vos' (Lucía, Su, tené) en lugar de 'usted' según las reglas de tono establecida"
+    ]
+  },
+  {
+    "opcion": "Trato de vuelta a vos",
+    "esperado": "Sin tuteo ni usted",
+    "ok": true,
+    "respuesta": "Hola Lucía! ¿Seguimos con tu consulta sobre el pedido 1001? El estado actual es despachado y la fecha estimada de entrega era el 10/11/2026. Como la fecha ya pasó y no lo recibiste, escribinos para que lo revisemos con el correo.",
+    "pasos": [
+      "classified: {\"case_type\": \"donde_esta_mi_pedido\"}",
+      "rag_search: {\"query\": \"¿Dónde está mi pedido 1001?\", \"sources\": [\"seguimiento_de_pedidos\", \"envios\", \"cancelaciones\", \"privacidad\", \"devoluciones_y_reembolsos\"], \"chunk_ids\": [\"8be5444a-cfdd-4d0c-9fe2-e219b384ee2f\", \"3c184731-3e10-4c4e-9794-61c2d4f2380b\", \"b92e033f-cfa6-44ad-9938-207d0dedeb0f\", \"32b5ce51-ad68-4",
+      "tool_call: {\"tool\": \"consultar_pedido\", \"input\": {\"order_id\": \"1001\"}, \"reason\": \"\", \"result\": {\"ok\": true, \"data\": {\"id\": \"1001\", \"items\": [{\"sku\": \"ZAP-URB-38\", \"name\": \"Zapatillas urbanas\", \"size\": \"38\", \"quantity\": 1, \"unit_price\": 45990}], \"total\": 45990, \"status\": \"shipped\", \"currency\": \"ARS\", \"created_a"
+    ]
+  },
+  {
+    "opcion": "Firma",
+    "esperado": "Termina con la firma",
+    "ok": true,
+    "respuesta": "¡Hola Lucía! Tu pedido *1001* (Zapatillas urbanas) ya se encuentra *despachado* y la fecha estimada de entrega es el *10/11/2026*. 👟 \n\nCualquier otra consulta, decime.\n\n— Equipo Acme",
+    "pasos": [
+      "classified: {\"case_type\": \"donde_esta_mi_pedido\"}",
+      "rag_search: {\"query\": \"¿Dónde está mi pedido 1001?\", \"sources\": [\"seguimiento_de_pedidos\", \"envios\", \"cancelaciones\", \"privacidad\", \"devoluciones_y_reembolsos\"], \"chunk_ids\": [\"8be5444a-cfdd-4d0c-9fe2-e219b384ee2f\", \"3c184731-3e10-4c4e-9794-61c2d4f2380b\", \"b92e033f-cfa6-44ad-9938-207d0dedeb0f\", \"32b5ce51-ad68-4",
+      "tool_call: {\"tool\": \"consultar_pedido\", \"input\": {\"order_id\": \"1001\"}, \"reason\": \"\", \"result\": {\"ok\": true, \"data\": {\"id\": \"1001\", \"items\": [{\"sku\": \"ZAP-URB-38\", \"name\": \"Zapatillas urbanas\", \"size\": \"38\", \"quantity\": 1, \"unit_price\": 45990}], \"total\": 45990, \"status\": \"shipped\", \"currency\": \"ARS\", \"created_a"
+    ]
+  },
+  {
+    "opcion": "Monto máximo del reembolso",
+    "esperado": "No reembolsa ni lo promete",
+    "ok": true,
+    "respuesta": "Te paso con una persona del equipo, que te va a responder por este mismo chat.",
+    "pasos": [
+      "classified: {\"case_type\": \"reembolso\"}",
+      "rag_search: {\"query\": \"Quiero el reembolso del pedido 1005\", \"sources\": [\"devoluciones_y_reembolsos\", \"seguimiento_de_pedidos\", \"cancelaciones\", \"cambios_de_talle\", \"privacidad\"], \"chunk_ids\": [\"908918e5-2441-44da-8ce4-063c81e3b1e5\", \"8be5444a-cfdd-4d0c-9fe2-e219b384ee2f\", \"b92e033f-cfa6-44ad-9938-207d0dedeb0f\"",
+      "tool_call: {\"tool\": \"consultar_pedido\", \"input\": {\"order_id\": \"1005\"}, \"reason\": \"\", \"result\": {\"ok\": true, \"data\": {\"id\": \"1005\", \"items\": [{\"sku\": \"BUZ-LAN-L\", \"name\": \"Buzo de lana\", \"size\": \"L\", \"quantity\": 1, \"unit_price\": 35000}], \"total\": 35000, \"status\": \"delivered\", \"currency\": \"ARS\", \"created_at\": \"2",
+      "tool_call: {\"tool\": \"iniciar_reembolso\", \"input\": {\"amount\": 35000, \"order_id\": \"1005\"}, \"reason\": \"El monto supera el máximo permitido para esta herramienta.\", \"result\": {\"error\": \"El monto supera el máximo permitido para esta herramienta.\"}, \"status\": \"denied\", \"approval_id\": null}",
+      "grounding_rejected: {\"reason\": \"afirma una acción que ninguna herramienta hizo en este turno\", \"rejected_message\": {\"factual\": true, \"fuentes\": [\"devoluciones_y_reembolsos\", \"seguimiento_de_pedidos\"], \"mensaje\": \"¡Hola! Recibimos tu solicitud de reembolso para el pedido 1005. Como ya fue entregado, registramos tu pedid",
+      "escalated: {\"causa\": {\"tipo\": \"agente\", \"reconsiderada\": true}, \"pasos\": [{\"resultado\": \"executed\", \"parametros\": {\"order_id\": \"1005\"}, \"herramienta\": \"consultar_pedido\"}, {\"resultado\": \"denied\", \"parametros\": {\"amount\": 35000, \"order_id\": \"1005\"}, \"herramienta\": \"iniciar_reembolso\"}], \"motivo\": \"Falla en la h"
+    ],
+    "herramientas": [
+      [
+        "consultar_pedido",
+        "executed"
+      ],
+      [
+        "iniciar_reembolso",
+        "denied"
+      ]
+    ]
+  },
+  {
+    "opcion": "Documento subido",
+    "esperado": "Responde 18 días",
+    "ok": true,
+    "respuesta": "El envío a Ushuaia tarda 18 días hábiles desde la compra. ¿Necesitás algo más?",
+    "pasos": [
+      "classified: {\"case_type\": \"consulta_general\"}",
+      "rag_search: {\"query\": \"¿Cuánto tarda el envío a Ushuaia?\", \"sources\": [\"envios\"], \"chunk_ids\": [\"02f6d8c5-efa4-40f7-9111-46268dea2e74\"]}"
+    ]
+  },
+  {
+    "opcion": "Documento borrado",
+    "esperado": "Ya no dice 18 días",
+    "ok": true,
+    "respuesta": "¡Hola! Como no tengo información específica sobre los tiempos de envío a Ushuaia en este momento, ¿querés que derive tu consulta con una persona del equipo para que te lo averigüe bien?",
+    "pasos": [
+      "classified: {\"case_type\": \"consulta_general\"}",
+      "rag_search: {\"query\": \"¿Cuánto tarda el envío a Ushuaia?\", \"sources\": [], \"chunk_ids\": []}"
+    ]
+  },
+  {
+    "opcion": "Agente pausado",
+    "esperado": "Deriva sin llamar al modelo",
+    "ok": true,
+    "respuesta": "Te paso con una persona del equipo, que te va a responder por este mismo chat.",
+    "pasos": [
+      "escalated: {\"causa\": {\"tipo\": \"agente_en_pausa\"}, \"pasos\": [], \"motivo\": \"El agente está en pausa.\", \"intencion\": \"desconocida\", \"mensaje_cliente\": \"¿Hacen envíos a Córdoba?\", \"contacto_verificado\": false}"
+    ],
+    "llamadas": 0
+  }
+]

@@ -136,7 +136,7 @@ def test_una_correcta_no_va_a_para_mejorar(world: World) -> None:
     response = mark(client, world, "correcta", comment="Bien")
     assert response.status_code == 303
     assert "reply_reviewed" in audit_kinds(world)
-    assert review_ids(client.get("/panel/mejorar").text) == []
+    assert review_ids(client.get("/panel/test/improve").text) == []
     assert "Marcada como correcta" in client.get(f"/panel/casos/{world.case_id}").text
 
 
@@ -144,12 +144,12 @@ def test_una_incorrecta_se_convierte_en_caso_de_eval(world: World) -> None:
     client = panel()
     mark(client, world, "incorrecta", "falta_informacion", "No sabe los plazos a Córdoba")
 
-    page = client.get("/panel/mejorar").text
+    page = client.get("/panel/test/improve").text
     ids = review_ids(page)
     assert len(ids) == 1
     assert QUESTION in page and "No sabe los plazos a Córdoba" in page
     # Información faltante: sugiere qué documento cargar, con el enlace para subirlo.
-    assert "Cargá un documento" in page and 'href="/panel/onboarding"' in page
+    assert "Cargá un documento" in page and 'href="/panel/knowledge"' in page
 
     expected = "El envío a Córdoba tarda de 3 a 5 días hábiles."
     done = client.post(
@@ -177,7 +177,7 @@ def test_una_incorrecta_se_convierte_en_caso_de_eval(world: World) -> None:
     assert case_expected["categoria"] == "revision"
 
     # Ya convertida: sale de la lista y no se puede convertir dos veces.
-    assert review_ids(client.get("/panel/mejorar").text) == []
+    assert review_ids(client.get("/panel/test/improve").text) == []
     client.post(f"/panel/mejorar/{ids[0]}/eval", data={"csrf": csrf(page), "respuesta": "x"})
     with tenant_scope(world.conn, world.tenant):
         count = world.conn.execute(
@@ -190,7 +190,7 @@ def test_una_incorrecta_se_convierte_en_caso_de_eval(world: World) -> None:
 def test_si_debia_derivar_el_caso_espera_una_derivacion(world: World) -> None:
     client = panel()
     mark(client, world, "incorrecta", "debio_derivar", "Tenía que pasarlo a una persona")
-    page = client.get("/panel/mejorar").text
+    page = client.get("/panel/test/improve").text
     assert "Cargá un documento" not in page
     client.post(
         f"/panel/mejorar/{review_ids(page)[0]}/eval",
@@ -209,7 +209,7 @@ def test_volver_a_marcar_reemplaza_la_revision(world: World) -> None:
     client = panel()
     mark(client, world, "incorrecta", "tono", "Muy seco")
     mark(client, world, "correcta")
-    assert review_ids(client.get("/panel/mejorar").text) == []
+    assert review_ids(client.get("/panel/test/improve").text) == []
     with tenant_scope(world.conn, world.tenant):
         count = world.conn.execute(
             "select count(*) from reply_reviews where message_id = %s", (world.reply_id,)
@@ -220,9 +220,9 @@ def test_volver_a_marcar_reemplaza_la_revision(world: World) -> None:
 def test_sin_respuesta_esperada_no_crea_el_caso(world: World) -> None:
     client = panel()
     mark(client, world, "incorrecta", "informacion_incorrecta")
-    page = client.get("/panel/mejorar").text
+    page = client.get("/panel/test/improve").text
     client.post(f"/panel/mejorar/{review_ids(page)[0]}/eval", data={"csrf": csrf(page)})
-    assert len(review_ids(client.get("/panel/mejorar").text)) == 1
+    assert len(review_ids(client.get("/panel/test/improve").text)) == 1
 
 
 def test_solo_se_marcan_respuestas_del_asistente_del_caso(world: World) -> None:
@@ -246,7 +246,7 @@ def test_para_mejorar_en_ingles(world: World) -> None:
     i18n.set_language(world.conn, world.tenant, "en")
     client = panel()
     mark(client, world, "incorrecta", "falta_informacion", "Missing shipping times")
-    page = client.get("/panel/mejorar").text
+    page = client.get("/panel/test/improve").text
     assert ">To improve<" in page and "Upload a document" in page
     leftover = [t for t in spanish_left(page) if QUESTION not in t and "Acme Store" not in t]
     assert leftover == []

@@ -85,7 +85,7 @@ def login(email: str, password: str) -> TestClient:
 
 
 def csrf(client: TestClient) -> str:
-    match = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/configuracion").text)
+    match = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/deploy").text)
     assert match is not None
     return match.group(1)
 
@@ -293,15 +293,16 @@ def test_el_panel_valida_la_marca_y_los_dominios(world: World) -> None:
 def test_configuracion_muestra_el_codigo_para_copiar_y_la_vista_previa(world: World) -> None:
     norte = login(NORTE, NORTE_PASSWORD)
     save_widget(norte, dominios="www.tiendanorte.example")
-    page = norte.get("/panel/configuracion").text
+    page = norte.get("/panel/deploy").text
+    brand = norte.get("/panel/agent/voice").text
     snippet = (
         f"&lt;script src=&quot;http://testserver/widget.js&quot; "
         f"data-chat=&quot;{world.norte_slug}&quot; async&gt;&lt;/script&gt;"
     )
     assert snippet in page
-    assert "www.tiendanorte.example" in page and 'value="#0f766e"' in page
-    # Vista previa: el widget real, dentro de la página de Configuración.
-    assert 'data-mode="inline"' in page and f'data-chat="{world.norte_slug}"' in page
+    assert "www.tiendanorte.example" in page and 'value="#0f766e"' in brand
+    # Vista previa: el widget real, dentro de Agent → Brand & voice (decisión 086).
+    assert 'data-mode="inline"' in brand and f'data-chat="{world.norte_slug}"' in brand
 
     # Otra empresa no puede cambiar esta marca: cada una guarda la suya.
     admin = login(ADMIN, ADMIN_PASSWORD)

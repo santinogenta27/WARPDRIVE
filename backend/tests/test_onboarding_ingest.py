@@ -118,7 +118,7 @@ def test_lee_documentos_markdown_docx_y_url() -> None:
     with zipfile.ZipFile(docx, "w") as z:
         z.writestr("word/document.xml", body)
     document = read_document(docx.getvalue(), "cambios.docx")
-    assert document.text == "Cambios\nTenés 30 días." and document.source == "cambios"
+    assert document.text == "Cambios\n\nTenés 30 días." and document.source == "cambios"
 
     html = "<html><head><title>FAQ</title><script>x()</script></head><body><h1>FAQ</h1>"
     html += "<p>Abrimos de 10 a 20.</p></body></html>"
@@ -201,11 +201,12 @@ def test_los_pdf_de_acme_salen_del_generador() -> None:
 def test_lee_un_pdf_con_texto() -> None:
     document = read_document(PDF, "garantia.pdf")
     assert document.title == "Garantía de productos" and document.source == "garantia"
-    assert "6 meses de garantía por fallas\nde fabricación" in document.text  # con tildes
+    assert "6 meses de garantía por fallas de fabricación" in document.text  # con tildes
     assert "ayuda@acmestore.example" in document.text
-    # Cada página es un párrafo aparte: así se parte en fragmentos para la búsqueda.
-    first, second = document.text.split("\n\n")
-    assert first.startswith("Garantía de productos") and "3 meses de garantía" in second
+    # El título queda como título y cada párrafo, aparte (decisión 088).
+    blocks = document.text.split("\n\n")
+    assert blocks[0] == "# Garantía de productos" and len(blocks) >= 3
+    assert any("3 meses de garantía" in block for block in blocks[2:])
 
 
 def test_un_pdf_escaneado_avisa_que_no_tiene_texto() -> None:

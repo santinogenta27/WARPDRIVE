@@ -62,6 +62,11 @@ MESSAGES: dict[str, dict[str, str]] = {
         "escalation": (
             "Te paso con una persona del equipo, que te va a responder por este mismo chat."
         ),
+        # El caso ya estaba derivado (decisión 097): no se repite la misma frase en cada mensaje.
+        "escalation_waiting": (
+            "Ya le pasé tu consulta al equipo y te van a responder por este mismo chat. Sumé lo "
+            "que me escribiste para que lo vean."
+        ),
         "refusal": (
             "Perdón, con eso no puedo ayudarte. Sí puedo darte una mano con tus propios pedidos o "
             "con cualquier consulta sobre la tienda."
@@ -183,6 +188,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         ),
         "escalation": (
             "I'm passing you to a member of our team, who will reply right here in this chat."
+        ),
+        "escalation_waiting": (
+            "I've already passed your request to our team, and they'll reply right here in this "
+            "chat. I added your message so they can see it."
         ),
         "refusal": (
             "Sorry, I can't help with that. I'm happy to help with your own orders or any "

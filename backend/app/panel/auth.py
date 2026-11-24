@@ -47,6 +47,15 @@ class Session:
     # Rol en la empresa (decisión 058): `owner` (admin) o `agent` (persona del equipo). Las
     # sesiones de antes no lo traen y valen como admin.
     role: str = "owner"
+    # Preferencias del usuario (decisión 085): idioma del panel y tema.
+    language: str = ""  # "" = no eligió: el idioma por defecto
+    theme: str = "light"
+
+
+# El panel sale en inglés salvo que el usuario elija otro idioma (decisión 085).
+DEFAULT_LANGUAGE = "en"  # "company": el idioma de la empresa (lo usan los tests de antes)
+LANGUAGES = ("en", "es")
+THEMES = ("light", "dark")
 
 
 def _env(name: str) -> str:
@@ -116,6 +125,7 @@ class CompanyUser:
     company: str
     email: str
     role: str = "owner"
+    preferences: dict[str, str] | None = None
 
 
 def company_login(conn: psycopg.Connection, email: str, password: str) -> CompanyUser | None:
@@ -123,7 +133,8 @@ def company_login(conn: psycopg.Connection, email: str, password: str) -> Compan
     ruteo de un webhook: todavía no se sabe de qué empresa es. El índice único garantiza que un
     email con clave pertenece a una sola empresa."""
     row = conn.execute(
-        "select u.id, u.tenant_id, t.name, u.email, u.password_hash, u.role from users u"
+        "select u.id, u.tenant_id, t.name, u.email, u.password_hash, u.role, u.preferences"
+        " from users u"
         " join tenants t on t.id = u.tenant_id"
         " where lower(u.email) = %s and u.password_hash is not null and t.status = 'active'",
         (email.strip().lower(),),
@@ -132,8 +143,37 @@ def company_login(conn: psycopg.Connection, email: str, password: str) -> Compan
     if not verify_password(password, row[4] if row else _DUMMY_HASH) or row is None:
         return None
     return CompanyUser(
-        user_id=row[0], tenant_id=row[1], company=row[2], email=row[3], role=str(row[5])
+        user_id=row[0],
+        tenant_id=row[1],
+        company=row[2],
+        email=row[3],
+        role=str(row[5]),
+        preferences=dict(row[6] or {}),
     )
+
+
+def save_preferences(
+    conn: psycopg.Connection, tenant_id: uuid.UUID, email: str, changes: dict[str, str]
+) -> None:
+    """Guarda el idioma o el tema del usuario de una empresa (decisión 085)."""
+    from psycopg.types.json import Jsonb
+
+    from app.db.connection import tenant_scope
+
+    with tenant_scope(conn, tenant_id):
+        conn.execute(
+            "update users set preferences = preferences || %s where lower(email) = %s",
+            (Jsonb(changes), email.strip().lower()),
+        )
+
+
+def chosen(value: object) -> str:
+    """El idioma que eligió el usuario, o "" si no eligió."""
+    return value if isinstance(value, str) and value in LANGUAGES else ""
+
+
+def language_or_default(value: object) -> str:
+    return chosen(value) or (DEFAULT_LANGUAGE if DEFAULT_LANGUAGE in LANGUAGES else "es")
 
 
 def too_many_failures(email: str, now: float | None = None) -> bool:
@@ -163,6 +203,8 @@ def new_session(
     company: str = "",
     admin: bool = True,
     role: str = "owner",
+    language: str | None = None,
+    theme: str = "light",
 ) -> str:
     """Cookie de sesión. Sin `tenant_id` es la del operador: entra a la empresa de demo."""
     claims = {
@@ -171,6 +213,8 @@ def new_session(
         "c": company,
         "a": admin,
         "r": role,
+        "l": chosen(language),
+        "th": theme if theme in THEMES else "light",
         "x": int((now or time.time()) + SESSION_SECONDS),
     }
     payload = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode()
@@ -196,6 +240,8 @@ def read_claims(token: str | None, now: float | None = None) -> Session | None:
             str(claims.get("c") or ""),
             bool(claims["a"]),
             str(claims.get("r") or "owner"),
+            chosen(claims.get("l")),
+            "dark" if claims.get("th") == "dark" else "light",
         )
     except (ValueError, KeyError, TypeError):
         return None

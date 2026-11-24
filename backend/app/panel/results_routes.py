@@ -71,13 +71,13 @@ def _analysis_html(found: dict[str, Any]) -> str:
         f'<table class="small"><tbody>{reasons}</tbody></table>' if reasons else empty
     }</div>
 <div class="card"><h2>Preguntas sin respuesta</h2>
-<p class="muted small">Lo que el asistente no pudo responder, agrupado por la palabra que más se
+<p class="muted small">Lo que el agente no pudo responder, agrupado por la palabra que más se
 repite. Sirve para saber qué documento cargar. Los ejemplos no tienen datos personales.</p>{
         f'<table class="small"><tbody>{groups}</tbody></table>' if groups else empty
     }</div>"""
 
 
-@router.get("/resultados", response_class=HTMLResponse)
+@router.get("/insights/results", response_class=HTMLResponse)
 def results_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -104,16 +104,16 @@ def results_page(request: Request, deps: Deps) -> Response:
         else ""
     )
     body = f"""{toast(request.query_params.get("aviso"))}<h1>Resultados</h1>
-<p class="lead">Lo que resolvió el asistente, medido de forma auditable, y de qué hablan tus
+<p class="lead">Lo que resolvió el agente, medido de forma auditable, y de qué hablan tus
 clientes.</p>
 <div class="card"><div class="row"><h2 class="grow" style="margin:0">Resolución autónoma</h2>
-<form method="get" action="/panel/resultados" class="row" style="gap:6px;margin:0">
+<form method="get" action="/panel/insights/results" class="row" style="gap:6px;margin:0">
 <input type="month" name="mes" value="{period}" aria-label="Mes" style="max-width:170px">
 <button type="submit">Ver</button></form>
 <a class="button" href="/panel/resultados/export?mes={period}">Exportar CSV</a></div>
 <p class="muted small">Un caso es una resolución autónoma si nunca se derivó, lo resolvió el
-asistente, no se reabrió dentro de las 72 h y el cliente no dijo que no se resolvió. El CSV trae
-un renglón por caso, sin datos del cliente: con el número de caso se audita en Casos.</p>
+agente, no se reabrió dentro de las 72 h y el cliente no dijo que no se resolvió. El CSV trae
+un renglón por caso, sin datos del cliente: con el número de caso se audita en la Bandeja.</p>
 <div class="kpis"><div class="kpi"><div class="n">{report.autonomous}</div>
 <div class="muted">resoluciones autónomas</div></div>
 <div class="kpi"><div class="n">{report.total}</div><div class="muted">casos resueltos</div></div>
@@ -126,7 +126,7 @@ ventana)</div></div></div>
 </span><p class="muted small">Cada lunes, un email a los admins con la semana anterior:
 conversaciones, resoluciones autónomas, derivaciones, CSAT, temas y preguntas sin
 respuesta.</p></div>{toggle}</div></div>"""
-    return HTMLResponse(page("Resultados", body, active="resultados", session=ctx.session))
+    return HTMLResponse(page("Resultados", body, active="insights/results", session=ctx.session))
 
 
 @router.get("/resultados/export")
@@ -154,4 +154,4 @@ def toggle_weekly(request: Request, form: Form, deps: Deps) -> Response:
         return _forbidden("Esta acción es solo para los admins de la empresa.")
     with deps.connection() as conn:
         weekly.set_enabled(conn, ctx.tenant_id, form.get("activo") == "si")
-    return RedirectResponse("/panel/resultados", status_code=303)
+    return RedirectResponse("/panel/insights/results", status_code=303)

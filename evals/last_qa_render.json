@@ -1,0 +1,27 @@
+[
+  {
+    "paso": "Registro: la página en inglés",
+    "ok": true,
+    "detalle": ""
+  },
+  {
+    "paso": "Registro: pide revisar el email",
+    "ok": true,
+    "detalle": "owner-99c025@brightside.example"
+  },
+  {
+    "paso": "Chat en Render: política con fuente",
+    "ok": true,
+    "detalle": "Our return policy lets you return any item within 30 days of delivery for a full refund, as long as it’s unworn, unwashed and still has its original tags. Returns are free – we’ll email you a prepaid return label, and you can drop the package at any UPS location. Refunds go back to the original payment method and take 5‑7 business days to appear. If the refund is $100 or less, it’s issued right away by our assistant; larger refunds are reviewed by a team member, usually within one business day. Items marked \"Final sale\" can’t be returned or refunded.\n\nIs there anything else you’d like to know?"
+  },
+  {
+    "paso": "Chat en Render: productos",
+    "ok": true,
+    "detalle": "Yes, we have the Trail Runner Jacket in size M in Black for $149, with 3 units currently in stock. The Lake Blue and Moss colors in size M are currently out of stock. Would you like me to help you order the Black one?"
+  },
+  {
+    "paso": "Panel en Render: las conversaciones aparecen",
+    "ok": true,
+    "detalle": ""
+  }
+]

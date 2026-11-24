@@ -36,7 +36,7 @@ def _who(ctx: Ctx) -> str:
     return ctx.session.email
 
 
-@router.get("/clientes", response_class=HTMLResponse)
+@router.get("/customers", response_class=HTMLResponse)
 def customers_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -54,7 +54,10 @@ def customers_page(request: Request, deps: Deps) -> Response:
         f"""<table><thead><tr><th>Cliente</th><th>Compras</th><th>Conversaciones</th>
 <th>Última vez</th></tr></thead><tbody>{rows}</tbody></table>"""
         if found
-        else '<div class="card empty">Todavía no hay clientes verificados con memoria.</div>'
+        else '<div class="card empty"><b>Todavía no hay clientes verificados con memoria.</b>'
+        "When a customer confirms who they are, your agent remembers their name, preferences "
+        'and past orders for next time.<br><a class="btn" href="/panel/test/playground">Try your '
+        "agent</a></div>"
     )
     retention = (
         f"""<form method="post" action="/panel/clientes/retencion" class="row" style="gap:8px">
@@ -67,12 +70,12 @@ def customers_page(request: Request, deps: Deps) -> Response:
         else f"<p><span>Meses de retención:</span> {months}</p>"
     )
     body = f"""{toast(request.query_params.get("aviso"))}<h1>Clientes</h1>
-<p class="lead">Lo que el asistente recuerda de cada cliente verificado: nombre, conversaciones
+<p class="lead">Lo que el agente recuerda de cada cliente verificado: nombre, conversaciones
 anteriores, preferencias y compras. Solo lo usa después de verificar la identidad y nunca guarda
 datos de pago.</p>
 <div class="card"><h2>Retención</h2>{retention}</div>
 <div class="card">{table}</div>"""
-    return HTMLResponse(page("Clientes", body, active="clientes", session=ctx.session))
+    return HTMLResponse(page("Clientes", body, active="customers", session=ctx.session))
 
 
 @router.post("/clientes/retencion")
@@ -94,8 +97,8 @@ def save_retention(request: Request, form: Form, deps: Deps) -> Response:
                 {"meses": months, "por": _who(ctx)},
             )
     except ValueError:
-        return RedirectResponse("/panel/clientes?aviso=retencion-invalida", status_code=303)
-    return RedirectResponse("/panel/clientes?aviso=retencion-guardada", status_code=303)
+        return RedirectResponse("/panel/customers?aviso=retencion-invalida", status_code=303)
+    return RedirectResponse("/panel/customers?aviso=retencion-guardada", status_code=303)
 
 
 def _section(title: str, items: list[str]) -> str:
@@ -129,7 +132,7 @@ def customer_page(memory_id: uuid.UUID, request: Request, deps: Deps) -> Respons
     title = esc(found.name) or "<span>Sin nombre</span>"
     saved = esc(chr(10).join(found.preferences))
     body = f"""{toast(request.query_params.get("aviso"))}
-<p><a href="/panel/clientes">← Clientes</a></p><h1>{title}</h1>
+<p><a href="/panel/customers">← Clientes</a></p><h1>{title}</h1>
 <p class="muted"><span>Última vez:</span> {local_time(found.last_seen_at)}</p>
 <div class="card">{_section("Compras", purchases) or "<p>Sin compras registradas.</p>"}
 {_section("Conversaciones anteriores", history)}</div>
@@ -143,11 +146,13 @@ def customer_page(memory_id: uuid.UUID, request: Request, deps: Deps) -> Respons
 <p class="muted small">Una preferencia con datos de pago no se guarda.</p>
 <p><button class="primary" type="submit">Guardar cambios</button></p></form></div>
 <div class="card"><h2>Borrar la memoria</h2>
-<p>El asistente deja de recordar a este cliente. Sus conversaciones siguen en Casos.</p>
-<form method="post" action="/panel/clientes/{found.id}/borrar">
+<p>El agente deja de recordar a este cliente. Sus conversaciones siguen en la Bandeja.</p>
+<form method="post" action="/panel/clientes/{found.id}/borrar"
+ data-confirm="Delete everything your agent remembers about this customer? It can't be undone."
+ data-confirm-ok="Delete">
 <input type="hidden" name="csrf" value="{ctx.csrf}">
 <button class="danger" type="submit">Borrar la memoria de este cliente</button></form></div>"""
-    return HTMLResponse(page("Cliente", body, active="clientes", session=ctx.session))
+    return HTMLResponse(page("Cliente", body, active="customers", session=ctx.session))
 
 
 @router.post("/clientes/{memory_id}")
@@ -186,4 +191,4 @@ def forget_customer(memory_id: uuid.UUID, request: Request, form: Form, deps: De
             "customer_memory_deleted",
             {"memoria": str(memory_id), "por": _who(ctx)},
         )
-    return RedirectResponse("/panel/clientes?aviso=memoria-borrada", status_code=303)
+    return RedirectResponse("/panel/customers?aviso=memoria-borrada", status_code=303)

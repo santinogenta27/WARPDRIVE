@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import psycopg
 from fastapi import APIRouter, Depends, Request
@@ -26,7 +26,6 @@ from app.audit import log as audit_log
 from app.cases import assist, feedback, refund_confirmation, supervision
 from app.cases.archive import archive_cases
 from app.cases.closing import close_inactive
-from app.companies import first_steps
 from app.companies.connection import ClientFactory, http_client
 from app.db.connection import connect, tenant_scope
 from app.llm.client import LLMClient
@@ -35,15 +34,17 @@ from app.mailer import Mailer, mailer_from_env
 from app.panel import auth, english
 from app.panel.html import (
     ADMIN_ONLY,
+    DEMO,
     PENDING,
     RESOLVED_BY,
+    auth_card,
     esc,
     local_time,
     page,
     status_badge,
     toast,
 )
-from app.panel.labels import action_label, money, type_label
+from app.panel.labels import action_label, money, refund_confirm, type_label
 from app.panel.notify import notify_customer
 from app.panel.privacy import mask_codes, summary
 from app.policy.approvals import ApprovalError, ApprovalOutcome, decide
@@ -68,7 +69,7 @@ def _no_embedder(conn: psycopg.Connection) -> Embedder:
 
 
 def _team_llm(conn: psycopg.Connection, tenant_id: uuid.UUID) -> LLMClient | None:
-    """El modelo del asistente para el equipo (decisión 082): la key propia de la empresa o la
+    """El modelo del copiloto del equipo (decisión 082): la key propia de la empresa o la
     de la plataforma. None sin ninguna: la tarjeta se arma en código."""
     from app.companies.agent import shared_provider
     from app.llm.client import PostgresUsageRecorder
@@ -87,7 +88,7 @@ def _team_llm(conn: psycopg.Connection, tenant_id: uuid.UUID) -> LLMClient | Non
 class PanelDeps:
     connection: Callable[[], AbstractContextManager[psycopg.Connection]]
     tenant_id: uuid.UUID | None  # la empresa de demo (Acme): a la que entra el operador
-    # El guardián de la empresa de la sesión: sus herramientas llegan a su propio sistema.
+    # El guardián de la empresa de la sesión: sus acciones llegan a su propio sistema.
     guardian: Callable[[psycopg.Connection, uuid.UUID], Guardian]
     report_tenant: uuid.UUID | None = None  # reporte de Acme del hito 4 (otro tenant)
     # "Reiniciar demo" también devuelve los pedidos de la API simulada a su estado inicial.
@@ -101,7 +102,7 @@ class PanelDeps:
     mailer: Callable[[], Mailer] = mailer_from_env
     # La entrega de un borrador aprobado del modo supervisado por su canal (decisión 072).
     deliver: supervision.Deliver = supervision.deliver
-    # El modelo del asistente para el equipo en los casos derivados (decisión 082).
+    # El modelo del copiloto del equipo en los casos derivados (decisión 082).
     # Por defecto sin modelo (como el embedder): la configuración de producción le pasa el suyo.
     team_llm: Callable[[psycopg.Connection, uuid.UUID], LLMClient | None] = lambda c, t: None
 
@@ -188,13 +189,20 @@ def _to_login() -> RedirectResponse:
 
 
 def _forbidden(message: str = "El formulario venció. Volvé a cargar la página.") -> HTMLResponse:
-    body = f'<div class="card empty">{esc(message)}</div>'
+    body = (
+        f'<div class="card empty" role="alert"><b>{esc(message)}</b>'
+        '<a class="btn" href="/panel/home">Go to Home</a></div>'
+    )
     return HTMLResponse(page("Sin permiso", body), status_code=403)
 
 
 def _not_found(what: str, session: auth.Session) -> HTMLResponse:
     """La misma respuesta si no existe o si es de otra empresa: no se revela cuál de las dos."""
-    body = f'<div class="card empty">{esc(what)} no existe.</div>'
+    body = (
+        f'<div class="card empty" role="alert"><b>{esc(what)} no existe.</b>'
+        "It may have been deleted, or the link is wrong."
+        '<br><a class="btn" href="/panel/home">Go to Home</a></div>'
+    )
     return HTMLResponse(page("No existe", body, session=session), status_code=404)
 
 
@@ -220,8 +228,9 @@ class Ctx:
 def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None) -> Ctx | Response:
     """Puerta de entrada de cada ruta del panel. Sin sesión, va al login. Con `form` (un POST
     que cambia algo), exige además el token anti-CSRF. Devuelve la empresa de la sesión."""
-    english.set_language("es")
     session = _session(request, deps)
+    english.set_language(auth.language_or_default(session.language if session else ""))
+    english.THEME.set(session.theme if session else "light")
     if session is None:
         return _to_login()
     if form is not None and not auth.valid_csrf(session.token, form.get("csrf", "")):
@@ -235,9 +244,13 @@ def enter(request: Request, deps: PanelDeps, form: dict[str, str] | None = None)
     active, language, demo, pending = _company(deps, session.tenant_id)
     if not session.admin and not active:
         return _to_login()  # la empresa fue borrada: su sesión deja de servir
-    # El panel habla el idioma de la empresa (decisión 037): vale para todo este pedido.
-    english.set_language(language)
+    # El idioma del panel es el que eligió el usuario (decisión 085) o, si no eligió, el del
+    # producto (inglés). El de la empresa es el que habla su agente con los clientes; los tests
+    # de antes lo usan también para el panel (`DEFAULT_LANGUAGE = "company"`).
+    if not session.language and auth.DEFAULT_LANGUAGE == "company":
+        english.set_language(language)
     PENDING.set(pending)  # el contador del menú
+    DEMO.set(demo)
     return Ctx(session, session.tenant_id, auth.csrf_token(session.token), demo=demo)
 
 
@@ -262,66 +275,58 @@ def _money(value: Any) -> str:
 
 
 # -- login -----------------------------------------------------------------------------------
+LANG_COOKIE = "panel_lang"  # el último idioma elegido: el login sale en ese idioma
+
+
 def _login_page(error: str = "") -> str:
     note = (
         ""
         if auth.configured()
         else '<p class="muted small">Falta configurar PANEL_EMAIL y PANEL_PASSWORD.</p>'
     )
-    alert = f'<p style="color:var(--bad)">{esc(error)}</p>' if error else ""
-    # Antes de entrar no se sabe la empresa: el idioma se elige acá (decisión 037).
+    alert = f'<div class="note" role="alert">{esc(error)}</div>' if error else ""
+    # Antes de entrar no se sabe quién es: el idioma se elige acá (decisión 085).
     other = (
-        '<a href="/panel/login">Español</a>'
+        '<a href="/panel/login?lang=es" lang="es" translate="no">Español</a>'
         if english.english()
-        else '<a href="/panel/login?lang=en">English</a>'
+        else '<a href="/panel/login?lang=en" lang="en" translate="no">English</a>'
     )
-    body = f"""<div class="card" style="max-width:400px;margin:40px auto">
-<div class="row"><h1 class="grow">Ingresar al panel</h1><span class="small">{other}</span></div>
-<p class="lead">Panel del equipo de atención.</p>{alert}{note}
+    body = f"""<div class="row"><h1 class="grow">Sign in</h1>
+<span class="small">{other}</span></div>
+<p class="muted">Manage your AI agent, conversations and results.</p>{alert}{note}
 <form method="post" action="/panel/login">
 <input type="hidden" name="lang" value="{"en" if english.english() else "es"}">
 <label for="email">Email</label><input id="email" name="email" type="email" required
  autocomplete="username">
-<label for="password">Clave</label><input id="password" name="password" type="password" required
- autocomplete="current-password">
-<p><button class="primary" type="submit" style="width:100%">Ingresar</button></p></form>
-<p class="muted small">¿Tu empresa no tiene cuenta? <a href="/registro">Creala acá</a>.</p></div>"""
-    return page("Ingresar", body, logged_in=False)
+<label for="password">Password</label><input id="password" name="password" type="password"
+ required autocomplete="current-password">
+<p><button class="primary" type="submit" style="width:100%">Sign in</button></p></form>
+<p class="muted small">New here? <a href="/registro">Create your account</a></p>"""
+    return page("Sign in", auth_card(body), logged_in=False)
 
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request, deps: Deps) -> Response:
-    return RedirectResponse("/panel/casos" if _session(request, deps) else "/panel/login", 303)
+def root(request: Request, deps: Deps) -> Response:
+    return RedirectResponse("/panel/home" if _session(request, deps) else "/panel/login", 303)
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_form(lang: str = "") -> HTMLResponse:
-    english.set_language(lang)
-    return HTMLResponse(_login_page())
+def login_form(request: Request, lang: str = "") -> HTMLResponse:
+    english.set_language(auth.language_or_default(lang or request.cookies.get(LANG_COOKIE)))
+    english.THEME.set("light")
+    response = HTMLResponse(_login_page())
+    if auth.chosen(lang):  # eligió el idioma acá: vale también para el panel
+        response.set_cookie(LANG_COOKIE, lang, max_age=365 * 86400, samesite="lax", path="/")
+    return response
 
 
-@router.post("/login")
-def login(request: Request, form: Form, deps: Deps) -> Response:
-    english.set_language(form.get("lang", ""))
-    email, password = form.get("email", "").strip().lower(), form.get("password", "")
-    if auth.too_many_failures(email):
-        message = "Demasiados intentos. Probá de nuevo en unos minutos."
-        return HTMLResponse(_login_page(message), status_code=429)
-    if auth.configured() and auth.check_credentials(email, password):
-        token = auth.new_session(email)  # operador de la plataforma: entra a la demo
-    else:
-        with deps.connection() as conn:
-            user = auth.company_login(conn, email, password)
-        if user is None:
-            auth.record_failure(email)
-            return HTMLResponse(_login_page("Email o clave incorrectos."), status_code=401)
-        token = auth.new_session(
-            user.email, tenant_id=user.tenant_id, company=user.company, admin=False, role=user.role
-        )
-    auth.clear_failures(email)
-    response = RedirectResponse("/panel/casos", status_code=303)
-    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+def _secure(request: Request) -> bool:
+    return request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+
+
+def _set_session(request: Request, response: Response, token: str, language: str) -> None:
+    secure = _secure(request)
     response.set_cookie(
         auth.COOKIE,
         token,
@@ -331,6 +336,46 @@ def login(request: Request, form: Form, deps: Deps) -> Response:
         secure=secure,
         path="/panel",
     )
+    if language:
+        response.set_cookie(
+            LANG_COOKIE, language, max_age=365 * 86400, samesite="lax", secure=secure, path="/"
+        )
+
+
+@router.post("/login")
+def login(request: Request, form: Form, deps: Deps) -> Response:
+    picked = auth.chosen(request.cookies.get(LANG_COOKIE))  # lo eligió antes, en este navegador
+    english.set_language(auth.language_or_default(form.get("lang") or picked))
+    english.THEME.set("light")
+    email, password = form.get("email", "").strip().lower(), form.get("password", "")
+    if auth.too_many_failures(email):
+        message = "Demasiados intentos. Probá de nuevo en unos minutos."
+        return HTMLResponse(_login_page(message), status_code=429)
+    language, theme = picked, "light"
+    if auth.configured() and auth.check_credentials(email, password):
+        # Operador de la plataforma: entra a la demo. Sus preferencias viven en la cookie.
+        token = auth.new_session(email, language=language)
+    else:
+        with deps.connection() as conn:
+            user = auth.company_login(conn, email, password)
+        if user is None:
+            auth.record_failure(email)
+            return HTMLResponse(_login_page("Email o clave incorrectos."), status_code=401)
+        saved = user.preferences or {}
+        language = auth.chosen(saved.get("language")) or picked
+        theme = "dark" if saved.get("theme") == "dark" else "light"
+        token = auth.new_session(
+            user.email,
+            tenant_id=user.tenant_id,
+            company=user.company,
+            admin=False,
+            role=user.role,
+            language=language,
+            theme=theme,
+        )
+    auth.clear_failures(email)
+    response = RedirectResponse("/panel/home", status_code=303)
+    _set_session(request, response, token, language)
     return response
 
 
@@ -338,6 +383,41 @@ def login(request: Request, form: Form, deps: Deps) -> Response:
 def logout() -> Response:
     response = _to_login()
     response.delete_cookie(auth.COOKIE, path="/panel")
+    return response
+
+
+@router.post("/preferences")
+def save_preferences(request: Request, form: Form, deps: Deps) -> Response:
+    """Idioma del panel o tema del usuario (decisión 085). Vale desde la próxima página, en
+    todas sus sesiones: queda en su usuario y en la sesión actual."""
+    ctx = enter(request, deps, form)
+    if isinstance(ctx, Response):
+        return ctx
+    session = ctx.session
+    changes: dict[str, str] = {}
+    if form.get("lang") in auth.LANGUAGES:
+        changes["language"] = form["lang"]
+    if form.get("theme") in auth.THEMES:
+        changes["theme"] = form["theme"]
+    language = changes.get("language", session.language)
+    theme = changes.get("theme", session.theme)
+    if changes and not session.admin:
+        with deps.connection() as conn:
+            auth.save_preferences(conn, ctx.tenant_id, session.email, changes)
+    token = auth.new_session(
+        session.email,
+        tenant_id=None if session.admin else session.tenant_id,
+        company="" if session.admin else session.company,
+        admin=session.admin,
+        role=session.role,
+        language=language,
+        theme=theme,
+    )
+    # De vuelta a la misma pantalla (solo una dirección del panel).
+    referer = urlsplit(request.headers.get("referer", ""))
+    back = referer.path if referer.path.startswith("/panel/") else "/panel/home"
+    response = RedirectResponse(back + (f"?{referer.query}" if referer.query else ""), 303)
+    _set_session(request, response, token, language)
     return response
 
 
@@ -369,7 +449,8 @@ def _approval_cards(rows: list[tuple[Any, ...]], csrf: str, *, back: str) -> str
 <form method="post" action="/panel/aprobaciones/{approval_id}" class="row">
 <input type="hidden" name="csrf" value="{csrf}"><input type="hidden" name="volver" value="{back}">
 <button class="danger" name="decision" value="rechazar">Rechazar</button>
-<button class="primary" name="decision" value="aprobar">Aprobar</button></form></div></div>"""
+<button class="primary" name="decision" value="aprobar"
+ {refund_confirm(tool)}>Aprobar</button></form></div></div>"""
         )
     return "".join(cards)
 
@@ -389,7 +470,7 @@ def _pending(
         ).fetchall()
 
 
-@router.get("/aprobaciones", response_class=HTMLResponse)
+@router.get("/inbox/approvals", response_class=HTMLResponse)
 def approvals_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -404,8 +485,10 @@ def approvals_page(request: Request, deps: Deps) -> Response:
                 " left join users u on u.id = a.decided_by"
                 " where a.status <> 'pending' order by a.decided_at desc nulls last limit 10"
             ).fetchall()
-    cards = _approval_cards(pending, ctx.csrf, back="/panel/aprobaciones") or (
-        '<div class="card empty">No hay pedidos esperando aprobación.</div>'
+    cards = _approval_cards(pending, ctx.csrf, back="/panel/inbox/approvals") or (
+        '<div class="card empty"><b>No hay pedidos esperando aprobación.</b>High-risk actions, '
+        "like a refund, wait here until a person approves them."
+        '<br><a class="btn" href="/panel/agent/actions">Review your actions</a></div>'
     )
     history = "".join(
         f"""<div class="card row"><span class="badge {
@@ -419,10 +502,10 @@ def approvals_page(request: Request, deps: Deps) -> Response:
     )
     body = f"""{toast(request.query_params.get("aviso"))}
 <h1>Aprobaciones</h1><p class="lead">Las acciones de riesgo alto (como un reembolso)
-no se ejecutan hasta que una persona las aprueba. Al aprobar, se ejecuta por el guardián y el
+no se ejecutan hasta que una persona las aprueba. Al aprobar, se ejecuta y el
 cliente recibe el aviso en el chat.</p>{cards}
 {f"<h2>Decididas</h2>{history}" if history else ""}"""
-    return HTMLResponse(page("Aprobaciones", body, active="aprobaciones", session=ctx.session))
+    return HTMLResponse(page("Aprobaciones", body, active="inbox/approvals", session=ctx.session))
 
 
 def _approval_message(
@@ -461,7 +544,7 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
             )
         except ApprovalError:
             # Ya decidida (doble clic o reenvío): no se ejecuta ni se avisa de nuevo.
-            return RedirectResponse("/panel/aprobaciones", status_code=303)
+            return RedirectResponse("/panel/inbox/approvals", status_code=303)
         notice = "rechazado" if not approve else "aprobado"
         if approve and outcome.status != "executed":
             notice = "fallo"
@@ -487,7 +570,7 @@ def decide_approval(approval_id: uuid.UUID, request: Request, form: Form, deps: 
                 "already_sent": "reembolso-email",
                 "failed": "reembolso-sin-email",
             }.get(mailed, "reembolso")
-    target = back if back.startswith("/panel/") else "/panel/aprobaciones"
+    target = back if back.startswith("/panel/") else "/panel/inbox/approvals"
     target += ("&" if "?" in target else "?") + f"aviso={notice}"
     return RedirectResponse(target, status_code=303)
 
@@ -502,7 +585,7 @@ CASE_LABEL = (
 )
 
 
-@router.get("/casos", response_class=HTMLResponse)
+@router.get("/inbox", response_class=HTMLResponse)
 def inbox(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -511,8 +594,6 @@ def inbox(request: Request, deps: Deps) -> Response:
         # Regla de cierre: los que llevan 24 h sin respuesta del cliente quedan resueltos.
         close_inactive(conn, ctx.tenant_id)
         rows = _inbox_rows(conn, ctx.tenant_id)
-        steps = _first_steps_html(conn, ctx)
-        drafts = _draft_cards(conn, ctx.tenant_id, ctx.csrf, back="/panel/casos")
         waiting: dict[Any, tuple[Any, ...]] = {}  # caso -> su primera aprobación pendiente
         for approval in _pending(conn, ctx.tenant_id):
             waiting.setdefault(approval[3], approval)
@@ -559,9 +640,10 @@ style="text-decoration:none;color:inherit;min-width:0">{head}
 <div class="ellipsis muted small" style="margin-top:2px">{text}</div></a>
 <form method="post" action="/panel/aprobaciones/{approval_id}" class="row">
 <input type="hidden" name="csrf" value="{ctx.csrf}">
-<input type="hidden" name="volver" value="/panel/casos">
+<input type="hidden" name="volver" value="/panel/inbox">
 <button class="danger" name="decision" value="rechazar">Rechazar</button>
-<button class="primary" name="decision" value="aprobar">Aprobar</button></form></div>"""
+<button class="primary" name="decision" value="aprobar"
+ {refund_confirm(tool)}>Aprobar</button></form></div>"""
         return f"""<a class="card row" href="/panel/casos/{case_id}" style="text-decoration:none;
 color:inherit"><div class="grow">{head}
 <div class="ellipsis" style="margin-top:6px">{text}
@@ -570,16 +652,18 @@ color:inherit"><div class="grow">{head}
 </div></a>"""
 
     items = "".join(item(*row) for row in rows) or (
-        '<div class="card empty">Todavía no hay conversaciones.</div>'
+        '<div class="card empty"><b>Todavía no hay conversaciones.</b>When customers write to '
+        "your agent, the conversations show up here, the ones that need you first."
+        '<br><a class="btn primary" href="/panel/test/playground">Try your agent</a></div>'
     )
     reset = '<a class="btn" href="/panel/reiniciar">Reiniciar demo</a>' if ctx.can_reset else ""
-    body = f"""{toast(request.query_params.get("aviso"))}{steps}
+    body = f"""{toast(request.query_params.get("aviso"))}
 <div class="row"><h1 class="grow">Casos</h1>{reset}</div>
 <p class="lead">Conversaciones con su estado: primero las derivadas
 a una persona, después las que esperan una aprobación. Un caso se resuelve cuando el cliente
 confirma o pasan 24 h sin respuesta.</p><div class="kpis">{kpis}</div>
-{drafts}{items}"""
-    return HTMLResponse(page("Casos", body, active="casos", session=ctx.session))
+{items}"""
+    return HTMLResponse(page("Casos", body, active="inbox", session=ctx.session))
 
 
 @router.get("/reiniciar", response_class=HTMLResponse)
@@ -600,9 +684,9 @@ def reset_form(request: Request, deps: Deps) -> Response:
 inserción y no se borra.</p>
 <form method="post" action="/panel/reiniciar" class="row">
 <input type="hidden" name="csrf" value="{ctx.csrf}">
-<a class="btn" href="/panel/casos">Cancelar</a>
+<a class="btn" href="/panel/inbox">Cancelar</a>
 <button class="primary" type="submit">Reiniciar demo</button></form></div>"""
-    return HTMLResponse(page("Reiniciar demo", body, active="casos", session=ctx.session))
+    return HTMLResponse(page("Reiniciar demo", body, active="inbox", session=ctx.session))
 
 
 @router.post("/reiniciar")
@@ -615,34 +699,7 @@ def reset_demo(request: Request, form: Form, deps: Deps) -> Response:
     with deps.connection() as conn:
         archive_cases(conn, ctx.tenant_id, _user_id(conn, ctx.tenant_id, ctx.session.email))
     deps.reset_sandbox()
-    return RedirectResponse("/panel/casos", status_code=303)
-
-
-def _first_steps_html(conn: psycopg.Connection, ctx: Ctx) -> str:
-    """Primeros pasos (decisión 074): el progreso real de la empresa hasta salir en vivo. No se
-    muestra en las demos ni a las personas del equipo; desaparece cuando está todo hecho."""
-    if ctx.demo or ctx.session.admin or ctx.session.role == "agent":
-        return ""
-    found = first_steps.steps(conn, ctx.tenant_id)
-    done = sum(s.done for s in found)
-    if done == len(found):
-        return ""
-    items = "".join(
-        f"""<li class="row" style="gap:10px;align-items:flex-start;margin:8px 0">
-<span class="badge {"resolved" if s.done else ""}" aria-hidden="true">{"✓" if s.done else i}</span>
-<div class="grow"><a href="{s.link}"{' style="text-decoration:line-through"' if s.done else ""}>
-{esc(s.title)}</a><div class="muted small">{esc(s.detail)}</div></div>
-<span class="small muted">{"Hecho" if s.done else "Pendiente"}</span></li>"""
-        for i, s in enumerate(found, start=1)
-    )
-    percent = round(100 * done / len(found))
-    return f"""<div class="card attention"><div class="row"><h2 class="grow" style="margin:0">
-Primeros pasos</h2><span class="muted"><span>{done}/{len(found)}</span> <span>pasos hechos</span>
-</span></div><div role="progressbar" aria-valuenow="{percent}" aria-valuemin="0"
-aria-valuemax="100" style="height:6px;border-radius:3px;background:var(--line, #e5e7eb);
-margin:10px 0"><div style="width:{percent}%;height:100%;border-radius:3px;
-background:var(--ok, #16a34a)"></div></div><ol style="list-style:none;padding:0;margin:0">
-{items}</ol></div>"""
+    return RedirectResponse("/panel/inbox", status_code=303)
 
 
 def _inbox_rows(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[tuple[Any, ...]]:
@@ -678,7 +735,7 @@ VERIFICATION = {
 }
 TOOL_STATUS = {
     "executed": "ejecutada",
-    "denied": "negada por el guardián",
+    "denied": "bloqueada por las reglas",
     "approval_required": "necesita aprobación",
     "failed": "falló",
 }
@@ -712,7 +769,7 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     if kind == "tool_call":
         status = TOOL_STATUS.get(str(p.get("status")), esc(p.get("status")))
         reason = f" · {esc(p.get('reason'))}" if p.get("reason") else ""
-        return "Usó una herramienta", (
+        return "Usó una acción", (
             f"<span class=mono>{esc(p.get('tool'))}</span> "
             f"<span class=mono>{esc(json.dumps(p.get('input'), ensure_ascii=False))}</span>"
             f" → {status}{reason}"
@@ -759,7 +816,7 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
                 ("modelo_ms", "modelo"),
                 ("base_ms", "base de datos"),
                 ("busqueda_ms", "búsqueda"),
-                ("herramientas_ms", "herramientas"),
+                ("herramientas_ms", "acciones"),
             )
         )
         return "Tiempo de la respuesta", f"{_seconds(p.get('total_ms'))} en total · {parts}"
@@ -793,7 +850,7 @@ def _describe(kind: str, p: dict[str, Any]) -> tuple[str, str]:
     return kind, esc(json.dumps(p, ensure_ascii=False))
 
 
-ROLES = {"customer": "Cliente", "agent": "Asistente"}
+ROLES = {"customer": "Cliente", "agent": "Agente"}
 
 
 @router.get("/casos/{case_id}", response_class=HTMLResponse)
@@ -825,7 +882,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         drafts = _draft_cards(
             conn, tenant_id, ctx.csrf, back=f"/panel/casos/{case_id}", case_id=case_id
         )
-        # Asistente para el equipo (decisión 082): en un caso derivado o con borrador.
+        # Copiloto del equipo (decisión 082): en un caso derivado o con borrador.
         helper = (
             assist.for_case(conn, tenant_id, case_id, deps.team_llm(conn, tenant_id))
             if assist.needed(str(case[0]), bool(drafts))
@@ -836,7 +893,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
     csrf = ctx.csrf
     roles = {**ROLES, "human": f"Equipo de {company}"}
 
-    # Cada respuesta del asistente se puede marcar como correcta o incorrecta (decisión 073).
+    # Cada respuesta del agente se puede marcar como correcta o incorrecta (decisión 073).
     from app.panel.review_routes import review_form
 
     chat = (
@@ -882,7 +939,7 @@ def case_detail(case_id: uuid.UUID, request: Request, deps: Deps) -> Response:
         else f'<span class="badge escalated">Cadena rota en el evento {verdict.broken_at}: '
         f"{esc(verdict.reason)}</span>"
     )
-    body = f"""{toast(request.query_params.get("aviso"))}<p><a href="/panel/casos">← Casos</a></p>
+    body = f"""{toast(request.query_params.get("aviso"))}<p><a href="/panel/inbox">← Casos</a></p>
 <div class="row"><h1 class="grow">Caso {esc(type_label(type_name))}</h1>
 {status_badge(status, resolved_by, reopened)}</div>
 <p class="lead mono">{case_id} · abierto el {local_time(created, "%d/%m/%Y %H:%M")}</p>
@@ -904,7 +961,7 @@ modelo · {tokens} tokens</div></div><div class="kpi"><div class="n">{len(events
 <div class="card"><div class="row"><h2 class="grow" style="margin:0">Auditoría paso a paso</h2>
 {chain}</div><p class="muted small">Costo total: USD {cost:.6f}</p>
 <ol class="audit">{steps}</ol></div>"""
-    return HTMLResponse(page("Caso", body, active="casos", session=ctx.session))
+    return HTMLResponse(page("Caso", body, active="inbox", session=ctx.session))
 
 
 @router.post("/casos/{case_id}/responder")
@@ -941,7 +998,7 @@ def reply(case_id: uuid.UUID, request: Request, form: Form, deps: Deps) -> Respo
                     detail={
                         "by": str(user_id),
                         "envio": sending,
-                        # Salió de la respuesta sugerida por el asistente (decisión 082).
+                        # Salió de la respuesta sugerida por el agente (decisión 082).
                         **({"sugerida": True} if form.get("origen") == "sugerida" else {}),
                     },
                 )
@@ -969,13 +1026,13 @@ def _notices_card(notices: list[promises.Notice]) -> str:
     )
     return (
         '<div class="card"><h2 style="margin-top:0">Avisos programados</h2>'
-        '<p class="muted small">El asistente solo puede prometerle un aviso al cliente si '
+        '<p class="muted small">El agente solo puede prometerle un aviso al cliente si '
         "hay uno de estos pendiente.</p>"
         f'<ul class="small">{items}</ul></div>'
     )
 
 
-# -- asistente para el equipo (decisión 082) ------------------------------------------------
+# -- copiloto del equipo (decisión 082) ------------------------------------------------
 def _assist_card(helper: assist.Assist | None, case_id: uuid.UUID, csrf: str) -> str:
     if helper is None:
         return ""
@@ -996,11 +1053,11 @@ def _assist_card(helper: assist.Assist | None, case_id: uuid.UUID, csrf: str) ->
         '<p class="muted small">La respuesta sugerida está abajo, en “Responder como persona '
         "del equipo”: revisala y editala antes de enviarla.</p>"
         if helper.reply
-        else '<p class="muted small">Sin respuesta sugerida: el asistente no está '
+        else '<p class="muted small">Sin respuesta sugerida: el agente no está '
         "disponible ahora.</p>"
     )
     return f"""<div class="card attention"><div class="row">
-<h2 class="grow" style="margin:0">Asistente para el equipo</h2>
+<h2 class="grow" style="margin:0">Copiloto del equipo</h2>
 <form method="post" action="/panel/casos/{case_id}/asistente" style="margin:0">
 <input type="hidden" name="csrf" value="{csrf}">
 <button type="submit">Volver a sugerir</button></form></div>
@@ -1032,7 +1089,7 @@ def _draft_cards(
     back: str,
     case_id: uuid.UUID | None = None,
 ) -> str:
-    """Las respuestas del asistente que esperan a una persona: texto editable, Enviar y
+    """Las respuestas del agente que esperan a una persona: texto editable, Enviar y
     Rechazar. En la bandeja (todas) y en el detalle de un caso (las suyas)."""
     drafts = supervision.pending(conn, tenant_id, case_id)
     if not drafts:
@@ -1045,7 +1102,7 @@ def _draft_cards(
 {"" if case_id else f'<a class="small" href="/panel/casos/{d.case_id}">ver caso</a>'}</div>
 <form method="post" action="/panel/borradores/{d.id}" style="margin-top:8px">
 <input type="hidden" name="csrf" value="{csrf}"><input type="hidden" name="volver" value="{back}">
-<label for="borrador-{d.id}">Respuesta del asistente (podés editarla antes de enviarla)</label>
+<label for="borrador-{d.id}">Respuesta del agente (podés editarla antes de enviarla)</label>
 <textarea id="borrador-{d.id}" name="texto"
  maxlength="{MAX_REPLY}" required>{esc(d.text)}</textarea>
 <div class="row" style="justify-content:flex-end">
@@ -1063,7 +1120,7 @@ def decide_draft(draft_id: uuid.UUID, request: Request, form: Form, deps: Deps) 
     if isinstance(ctx, Response):
         return ctx
     back = form.get("volver", "")
-    target = back if back.startswith("/panel/") else "/panel/casos"
+    target = back if back.startswith("/panel/") else "/panel/inbox"
     with deps.connection() as conn:
         user_id = _user_id(conn, ctx.tenant_id, ctx.session.email)
         try:
@@ -1096,7 +1153,7 @@ def _tone(value: float) -> str:
     return "ok" if value >= 0.8 else "warn" if value >= 0.5 else "bad"
 
 
-@router.get("/reporte", response_class=HTMLResponse)
+@router.get("/test", response_class=HTMLResponse)
 def report_page(request: Request, deps: Deps) -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -1110,13 +1167,11 @@ def report_page(request: Request, deps: Deps) -> Response:
     finished = None
     from app.companies import go_live
     from app.panel.live_routes import readiness_html
-    from app.panel.simulation_routes import simulation_card
 
     with deps.connection() as conn:
-        # Probar y salir en vivo (decisión 056): arriba de todo. Después, las simulaciones
-        # (decisión 080).
+        # Probar y salir en vivo (decisión 056): arriba de todo. Las simulaciones (decisión
+        # 080) tienen su pestaña.
         live = readiness_html(ctx, go_live.readiness(conn, ctx.tenant_id))
-        live += simulation_card(ctx, conn)
         for source in sources:
             with tenant_scope(conn, source):
                 row = conn.execute(
@@ -1129,11 +1184,11 @@ def report_page(request: Request, deps: Deps) -> Response:
     if report is None:
         body = (
             f'<h1>Reporte de preparación</h1>{live}<div class="card empty">Todavía no hay un '
-            'onboarding terminado. Empezá en <a href="/panel/onboarding">Onboarding</a>.</div>'
+            'reporte de preparación. Empezá en <a href="/panel/knowledge">Conocimiento</a>.</div>'
         )
-        return HTMLResponse(page("Reporte", body, active="reporte", session=ctx.session))
+        return HTMLResponse(page("Reporte", body, active="test", session=ctx.session))
     body = _report_body(report, finished, ctx.session.company).replace("</h1>", f"</h1>{live}", 1)
-    return HTMLResponse(page("Reporte de preparación", body, active="reporte", session=ctx.session))
+    return HTMLResponse(page("Reporte de preparación", body, active="test", session=ctx.session))
 
 
 def _report_body(report: dict[str, Any], finished: Any, company: str) -> str:
@@ -1169,7 +1224,7 @@ def _report_body(report: dict[str, Any], finished: Any, company: str) -> str:
         rows.append(
             f"""<div class="card"><div class="type"><div><b>{esc(type_label(t.get("nombre")))}</b>
 <div class="muted small">{esc(t.get("objetivo"))}</div>
-<div class="muted small">Herramientas: {tools}</div></div>
+<div class="muted small">Acciones: {tools}</div></div>
 <div><div class="row small"><span class="grow muted">Volumen</span><b>{volume}</b>
 <span class="muted">({_pct(volume / total if total else 0)})</span></div>
 <div class="track"><div class="fill" style="width:{volume / top * 100:.0f}%"></div></div></div>
@@ -1186,23 +1241,23 @@ def _report_body(report: dict[str, Any], finished: Any, company: str) -> str:
     gaps_html = "".join(f"<li>{g}</li>" for g in gaps) or "<li>Nada pendiente.</li>"
     when = f" · {local_time(finished, '%d/%m/%Y')}" if finished else ""
     return f"""<h1>Reporte de preparación</h1>
-<p class="lead">Qué parte de la atención de {esc(company)} resolvería el asistente por su cuenta,
+<p class="lead">Qué parte de la atención de {esc(company)} resolvería el agente por su cuenta,
 medido con su propio historial{when}.</p>
 <div class="kpis"><div class="kpi big"><div class="n">{_pct(estimate)}</div><div class="muted">del
 volumen lo resolvería solo</div></div><div class="kpi"><div class="n">{total}</div>
 <div class="muted">conversaciones analizadas</div></div><div class="kpi"><div class="n">
-{len(types)}</div><div class="muted">tipos de caso detectados</div></div><div class="kpi">
+{len(types)}</div><div class="muted">temas detectados</div></div><div class="kpi">
 <div class="n">{esc(adversarial.get("superados", 0))} de {esc(adversarial.get("total", 0))}</div>
 <div class="muted">ataques y pedidos indebidos frenados</div></div></div>
-<h2>Tipos de caso</h2>{"".join(rows)}
+<h2>Temas</h2>{"".join(rows)}
 <h2>Qué falta para resolver más</h2><div class="card"><ul>{gaps_html}</ul>
 {
         f'<p class="muted small">Ataques no frenados:</p><ul class="small">{adversarial_fails}</ul>'
         if adversarial_fails
         else ""
     }</div>
-<p class="muted small">Cómo se mide: el historial se anonimiza y se agrupa en tipos de caso; por
+<p class="muted small">Cómo se mide: el historial se anonimiza y se agrupa en temas; por
 cada tipo se generan casos de prueba a partir de conversaciones reales ({evals} en total) y el
-asistente los resuelve contra una copia de prueba del sistema, sin tocar datos reales. El
+agente los resuelve contra una copia de prueba del sistema, sin tocar datos reales. El
 porcentaje pondera cada tipo por su volumen. Los reembolsos cuentan como resueltos cuando el
-asistente prepara el pedido de aprobación: la decisión siempre es de una persona.</p>"""
+agente prepara el pedido de aprobación: la decisión siempre es de una persona.</p>"""

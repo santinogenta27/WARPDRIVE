@@ -52,6 +52,20 @@ def _weekly_reports() -> None:
         logger.exception("El informe semanal falló")
 
 
+def _site_syncs() -> None:
+    """Los sitios con sincronización semanal (decisión 088). Idempotente."""
+    from app.companies import knowledge
+    from app.db.connection import connect
+    from app.llm.client import PostgresUsageRecorder
+    from app.llm.factory import embedder_from_env
+
+    try:
+        with connect() as conn:
+            knowledge.sync_due(conn, lambda c: embedder_from_env(PostgresUsageRecorder(c)))
+    except Exception:  # noqa: BLE001 — el hilo no se cae por un sitio
+        logger.exception("La sincronización de sitios falló")
+
+
 def _loop() -> None:
     while True:
         try:
@@ -66,6 +80,7 @@ def _loop() -> None:
         except Exception:  # noqa: BLE001 — el hilo no se cae: lo intenta en la próxima vuelta
             logger.exception("El worker del onboarding falló")
         _weekly_reports()
+        _site_syncs()
         _wake.wait(IDLE_SECONDS)
         _wake.clear()
 

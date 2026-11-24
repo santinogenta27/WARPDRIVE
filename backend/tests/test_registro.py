@@ -114,17 +114,17 @@ def test_de_punta_a_punta_registro_invitacion_y_roles(
     response = public.get(
         f"/registro/confirmar?token={_token(panel.sent[-1])}", follow_redirects=False
     )
-    assert response.status_code == 303 and response.headers["location"] == "/panel/configuracion"
+    assert response.status_code == 303 and response.headers["location"] == "/panel/home"
 
     owner = TestClient(app)
     owner.post(
         "/panel/login", data={"email": "duena@tiendasur.example", "password": "clave-sur-123"}
     )
-    assert "Equipo" in owner.get("/panel/equipo").text
+    assert "Equipo" in owner.get("/panel/settings").text
     owner.post(
         "/panel/equipo/invitar",
         data={
-            "csrf": _csrf(owner, "/panel/equipo"),
+            "csrf": _csrf(owner, "/panel/settings"),
             "email": "beto@tiendasur.example",
             "rol": "agent",
         },
@@ -141,8 +141,8 @@ def test_de_punta_a_punta_registro_invitacion_y_roles(
         follow_redirects=False,
     )
     assert response.status_code == 303
-    assert agent.get("/panel/casos").status_code == 200
-    assert agent.get("/panel/aprobaciones").status_code == 200
+    assert agent.get("/panel/inbox").status_code == 200
+    assert agent.get("/panel/inbox/approvals").status_code == 200
     assert agent.get("/panel/configuracion").status_code == 403
-    assert agent.get("/panel/onboarding").status_code == 403
-    assert agent.get("/panel/equipo").status_code == 403
+    assert agent.get("/panel/knowledge").status_code == 403
+    assert agent.get("/panel/settings").status_code == 403

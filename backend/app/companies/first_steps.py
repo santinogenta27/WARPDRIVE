@@ -11,6 +11,7 @@ import psycopg
 from app.db.connection import tenant_scope
 
 WIDGET_SEEN = "widget_seen_at"
+WIDGET_HOST = "widget_seen_host"  # desde qué dominio cargó (decisión 086)
 
 
 @dataclass(frozen=True)
@@ -26,39 +27,39 @@ class Step:
 STEPS = [
     (
         "documentos",
-        "Cargá tus documentos",
-        "Políticas, preguntas frecuentes o tu historial: el asistente responde con ellos.",
-        "/panel/onboarding",
+        "Cargá tu conocimiento",
+        "Políticas, preguntas frecuentes o tu historial: el agente responde con ellos.",
+        "/panel/knowledge",
     ),
     (
         "reglas",
         "Definí las reglas de atención",
-        "El horario del equipo y a quién avisar cuando el asistente deriva.",
-        "/panel/configuracion#reglas",
+        "El horario del equipo y a quién avisar cuando el agente deriva.",
+        "/panel/agent",
     ),
     (
         "marca",
-        "Configurá tu marca",
+        "Elegí cómo se ve tu chat",
         "El nombre, el color y el logo del chat.",
-        "/panel/configuracion#widget",
+        "/panel/agent/voice",
     ),
     (
         "playground",
-        "Probá el asistente en el playground",
+        "Probá tu agente",
         "Escribile como un cliente y mirá cada paso que da.",
-        "/panel/probar",
+        "/panel/test/playground",
     ),
     (
         "widget",
-        "Instalá el widget en tu sitio",
+        "Agregá el chat a tu sitio",
         "Pegá la línea del script en tu sitio, en uno de tus dominios.",
-        "/panel/configuracion#widget",
+        "/panel/deploy#widget",
     ),
     (
         "en_vivo",
         "Salí en vivo",
-        "Cuando el reporte de preparación da el visto bueno, el asistente atiende en tu sitio.",
-        "/panel/reporte",
+        "Cuando el reporte de preparación da el visto bueno, el agente atiende en tu sitio.",
+        "/panel/test",
     ),
 ]
 
@@ -66,9 +67,9 @@ STEPS = [
 def steps(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[Step]:
     with tenant_scope(conn, tenant_id):
         row = conn.execute(
-            "select exists (select 1 from documents),"
+            "select exists (select 1 from documents where status = 'ready'),"
             " coalesce(jsonb_strip_nulls(t.settings -> 'rules'), '{}') <> '{}',"
-            " exists (select 1 from widget_settings) or t.settings ? 'brand',"
+            " exists (select 1 from widget_settings where not auto) or t.settings ? 'brand',"
             " exists (select 1 from web_sessions where messages > 0),"
             " t.settings ? %s,"
             " coalesce((t.settings ->> 'live')::boolean, false)"
@@ -97,7 +98,19 @@ def note_widget_seen(
         return
     with tenant_scope(conn, tenant_id):
         conn.execute(
-            "update tenants set settings = settings || jsonb_build_object(%s::text, now())"
-            " where id = %s and not settings ? %s",
-            (WIDGET_SEEN, tenant_id, WIDGET_SEEN),
+            "update tenants set settings = settings || jsonb_build_object(%s::text, now(),"
+            " %s::text, %s::text) where id = %s and not settings ? %s",
+            (WIDGET_SEEN, WIDGET_HOST, site, tenant_id, WIDGET_SEEN),
         )
+
+
+def widget_seen(conn: psycopg.Connection, tenant_id: uuid.UUID) -> str:
+    """El dominio desde el que cargó el chat por primera vez, o "" si todavía no cargó."""
+    with tenant_scope(conn, tenant_id):
+        row = conn.execute(
+            "select settings ? %s, settings ->> %s from tenants where id = %s",
+            (WIDGET_SEEN, WIDGET_HOST, tenant_id),
+        ).fetchone()
+    if not row or not row[0]:
+        return ""
+    return str(row[1] or "your site")

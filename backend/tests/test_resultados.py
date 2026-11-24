@@ -168,7 +168,7 @@ def test_el_informe_del_mes_se_exporta_sin_datos_del_cliente(world: World) -> No
     client = TestClient(app)
     client.post("/panel/login", data={"email": ADMIN, "password": ADMIN_PASSWORD})
     month = current_time().strftime("%Y-%m")
-    page = client.get(f"/panel/resultados?mes={month}")
+    page = client.get(f"/panel/insights/results?mes={month}")
     assert page.status_code == 200 and "Resolución autónoma" in page.text
     response = client.get(f"/panel/resultados/export?mes={month}")
     assert response.headers["content-type"].startswith("text/csv")
@@ -297,7 +297,7 @@ def test_la_empresa_de_demo_no_lo_recibe(world: World) -> None:
 def test_el_panel_desactiva_el_informe_semanal(world: World) -> None:
     client = TestClient(app)
     client.post("/panel/login", data={"email": ADMIN, "password": ADMIN_PASSWORD})
-    page = client.get("/panel/resultados").text
+    page = client.get("/panel/insights/results").text
     assert "Informe semanal" in page and "Temas principales" in page
     token = re.search(r'name="csrf" value="([^"]+)"', page)
     assert token is not None

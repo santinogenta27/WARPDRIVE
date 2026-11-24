@@ -7,6 +7,7 @@ pasos) → una de cuatro acciones: responder, ejecutar, pedir_aprobacion o deriv
 """
 
 import json
+import logging
 import re
 import uuid
 from collections.abc import Callable
@@ -41,12 +42,13 @@ from app.agent.voseo import to_voseo
 from app.audit import log as audit_log
 from app.cases import billing, closing, csat, team_notify
 from app.channels.whatsapp.format import to_whatsapp
-from app.companies import rules
+from app.companies import go_live, rules
 from app.db.connection import tenant_scope
 from app.identity import email_code
 from app.llm import spending
 from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
+from app.llm.errors import QuotaExhausted
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
 from app.mailer import Mailer, MailError, mailer_from_env
@@ -260,6 +262,8 @@ HANDOFF_CORRECTIONS = {
         "derivar again."
     ),
 }
+logger = logging.getLogger(__name__)
+
 # Por qué se derivó un caso (decisión 045): va en la auditoría como `causa` ({"tipo": ...,
 # "detalle": ...}), sin datos del cliente, y "Behind the scenes" lo muestra en una línea.
 HANDOFF_CAUSES = (
@@ -273,6 +277,8 @@ HANDOFF_CAUSES = (
     "accion_sin_herramienta",
     "cobro_afirmado",  # dijo que cobró o compró (decisión 060)
     "tope_de_gasto",
+    "agente_en_pausa",  # la empresa pausó el agente desde el panel (decisión 090)
+    "modelo_no_disponible",  # sin cuota en ningún proveedor (decisión 098)
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
     "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
@@ -431,6 +437,7 @@ class Agent:
         self._mailer = mailer or mailer_from_env()
         self._assistant = ""  # nombre del asistente de la empresa del turno (decisión 052)
         self._supervisor_on = True  # supervisor de respuestas de la empresa (decisión 079)
+        self._live_off = False  # la empresa la pausó (decisión 090)
         self._voice = voice.Voice()  # voz de marca de la empresa del turno (decisión 081)
 
     # -- entrada ---------------------------------------------------------------------------
@@ -508,8 +515,10 @@ class Agent:
             return rated
         # Tope de gasto mensual alcanzado (decisión 049): deriva sin llamar al modelo.
         capped = spending.over(self._conn, tenant_id)
+        # Agente en pausa (decisión 090): cada mensaje pasa a una persona, sin llamar al modelo.
+        paused = self._live_off and go_live.is_paused(self._conn, tenant_id)
         case_id, classification = self._open_case(
-            tenant_id, contact_id, company, text, lang, classify_reopen=not capped
+            tenant_id, contact_id, company, text, lang, classify_reopen=not (capped or paused)
         )
         self._save_message(tenant_id, case_id, "customer", text)
         turn = _Turn(
@@ -521,6 +530,8 @@ class Agent:
             return self._escalate(
                 turn, "Tope de gasto mensual alcanzado.", {"tipo": "tope_de_gasto"}
             )
+        if paused:
+            return self._escalate(turn, "El agente está en pausa.", {"tipo": "agente_en_pausa"})
         if not contact.verified and self._asks_about_someone_else(turn, company):
             # Privacidad (decisión 069): el email de otra persona nunca recibe un código.
             self._audit(turn, "classified", {"case_type": NOT_ALLOWED})
@@ -683,6 +694,17 @@ class Agent:
         return str(row[0]) if row else ""
 
     def _respond(self, turn: _Turn, company: str, tone: str) -> AgentResult:
+        """Sin ningún modelo disponible (la cuota agotada en todos los proveedores), el mensaje
+        no se pierde: el caso se deriva a una persona con el mensaje fijo (decisión 098)."""
+        try:
+            return self._respond_with_model(turn, company, tone)
+        except QuotaExhausted as error:
+            logger.warning("Sin modelo disponible: se deriva el caso %s (%s)", turn.case_id, error)
+            return self._escalate(
+                turn, "No hay un modelo disponible.", {"tipo": "modelo_no_disponible"}
+            )
+
+    def _respond_with_model(self, turn: _Turn, company: str, tone: str) -> AgentResult:
         tenant_id, case_id, contact, text = turn.tenant_id, turn.case_id, turn.contact, turn.text
         if LEGAL_THREAT.search(text) or LEGAL_THREAT_EN.search(text):
             # Una amenaza de denuncia o de acción legal la atiende una persona, siempre: no
@@ -1040,10 +1062,17 @@ class Agent:
                         continue
                     # "Reembolsado" con la aprobación pendiente tampoco vale (decisión 048).
                     if (
-                        not self._acted(turn) and _check(conduct.claims_action, said, turn.lang)
-                    ) or (
-                        not self._executed(turn)
-                        and _check(conduct.claims_completion, said, turn.lang)
+                        (not self._acted(turn) and _check(conduct.claims_action, said, turn.lang))
+                        or (
+                            not self._executed(turn)
+                            and _check(conduct.claims_completion, said, turn.lang)
+                        )
+                        or (
+                            # "Quedó en revisión" sin ninguna aprobación (decisión 091).
+                            not self._acted(turn)
+                            and _check(conduct.claims_review, said, turn.lang)
+                            and not self._pending_approval(turn)
+                        )
                     ):
                         self._audit(
                             turn,
@@ -1161,7 +1190,8 @@ class Agent:
                         and self._supervisor_on
                         and supervisor.needs_review(final_input, bool(turn.decisions))
                     ):
-                        review = self._supervise(turn, said)
+                        quoted: Any = final_input.get("fuentes") or []  # decisión 092
+                        review = self._supervise(turn, said, [str(s) for s in quoted])
                         if review.verdict == supervisor.REWRITE and turn.supervisor_retries == 0:
                             self._audit(
                                 turn,
@@ -1387,6 +1417,14 @@ class Agent:
             d.side_effect and d.status in ("executed", "approval_required") for d in turn.decisions
         )
 
+    def _pending_approval(self, turn: _Turn) -> bool:
+        """El caso tiene una aprobación pendiente de un turno anterior."""
+        row = self._conn.execute(
+            "select exists (select 1 from approvals where case_id = %s and status = 'pending')",
+            (turn.case_id,),
+        ).fetchone()
+        return bool(row and row[0])
+
     @staticmethod
     def _executed(turn: _Turn) -> bool:
         """En este turno una herramienta modificó algo con éxito (no solo pidió aprobación)."""
@@ -1480,7 +1518,9 @@ class Agent:
             return False
         return not promises.pending(self._conn, turn.tenant_id, turn.case_id)
 
-    def _supervise(self, turn: _Turn, answer: str) -> supervisor.Review:
+    def _supervise(
+        self, turn: _Turn, answer: str, cited: list[str] | None = None
+    ) -> supervisor.Review:
         """Revisión del supervisor (decisión 079), con su costo y su latencia en la auditoría."""
         documents: dict[str, str] = {}
         for doc in turn.documents:
@@ -1510,6 +1550,7 @@ class Agent:
                 if part
             ),
             avoid=list(self._voice.evitar),
+            cited=cited,
         )
         if found.response is not None:
             self._audit_model_call(turn, supervisor.ROLE, found.response)
@@ -1581,13 +1622,18 @@ class Agent:
             "motivo": reason,
         }
         with tenant_scope(self._conn, turn.tenant_id):
+            before = self._conn.execute(
+                "select status from cases where id = %s", (turn.case_id,)
+            ).fetchone()
             self._conn.execute(
                 "update cases set status = 'escalated', escalation = %s, updated_at = now()"
                 " where id = %s",
                 (json.dumps(summary, ensure_ascii=False), turn.case_id),
             )
         self._audit(turn, "escalated", {**summary, "causa": cause})
-        message = turn.say("escalation")
+        # Ya estaba esperando a una persona (decisión 097): otra frase, no la misma de nuevo.
+        waiting = before is not None and before[0] == "escalated"
+        message = turn.say("escalation_waiting" if waiting else "escalation")
         # Fuera del horario del equipo, cuándo responden (decisión 051).
         note = rules.closed_note(self._conn, turn.tenant_id, turn.lang)
         return self._finish(
@@ -1684,6 +1730,8 @@ class Agent:
         # El nombre que eligió la empresa para el asistente (decisión 052), para el prompt.
         self._assistant = str((settings.get("brand") or {}).get("assistant") or "")
         self._supervisor_on = settings.get(supervisor.SETTING) is not False
+        # La pausa (decisión 090) se confirma con otra consulta solo si `live` está en false.
+        self._live_off = settings.get("live") is False
         # Voz de marca (decisión 081): en español, el trato elegido manda sobre el tono.
         self._voice = voice.from_settings(settings)
         if lang == "es":

@@ -33,8 +33,8 @@ STAGE_LABELS = {
     "ingesta": "Ingesta",
     "anonimizacion": "Anonimización",
     "descubrimiento": "Descubrimiento de casos",
-    "evals": "Generación de evals",
-    "herramientas": "Generación de herramientas",
+    "evals": "Generación de pruebas",
+    "herramientas": "Generación de acciones",
     "reporte": "Reporte de preparación",
 }
 
@@ -241,9 +241,9 @@ def _detail(stage: str, info: dict[str, Any]) -> str:
     if stage == "anonimizacion":
         return f"{result.get('marcadores', 0)} datos personales reemplazados, 0 en claro"
     if stage == "descubrimiento":
-        return f"{len(result)} tipos de caso"
+        return f"{len(result)} temas"
     if stage == "evals":
         return f"{result.get('creados', 0)} casos de prueba"
     if stage == "herramientas":
-        return f"{len(result)} herramientas" if result else "sin OpenAPI: solo información"
+        return f"{len(result)} acciones" if result else "sin OpenAPI: solo información"
     return f"resolvería solo el {round(float(result.get('resolucion_estimada') or 0) * 100)}%"

@@ -376,7 +376,7 @@ def test_de_punta_a_punta_prueba_piloto_y_contacto(
         "/panel/login",
         data={"email": "santino@plataforma.example", "password": "clave-del-operador"},
     )
-    listing = operator.get("/panel/pruebas")
+    listing = operator.get("/panel/operator/trials")
     assert listing.status_code == 200, listing.text
     assert "tienda-sol.example" in listing.text and EMAIL in listing.text
     assert "Convertida" in listing.text and "Pidió hablar" in listing.text

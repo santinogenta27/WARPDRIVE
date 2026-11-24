@@ -799,6 +799,246 @@ Rama `h12-promesas`.
   - **Evals.** Caso nuevo `22_promesa_sin_aviso` y falla crítica `promesa_sin_aviso` en el runner, con la misma regla.
 - **Validado con Gemini real** (unas 15 llamadas). Gemini prometió "ni bien despachemos te vamos a enviar un email con el seguimiento". El control lo frenó, pero era un falso positivo: lo dice el documento de seguimiento de pedidos y lo manda la tienda. Ahora, si cita ese documento, la promesa vale. Además, la reescritura mostró una forma que no se detectaba ("cuando eso pase, te enviamos un email") y la agregué.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_promesas.py`.
+
+## Hito 13 — El panel desde los ojos del cliente (desde el 23 de noviembre de 2026)
+
+Rama de integración `hito-13` (sale de `main`). Una rama y un PR por tarea contra `hito-13`, mergeados con el CI en verde. Las pruebas locales corren contra `DATABASE_URL_STAGING`; la suite completa la corre el CI (unos 2 minutos).
+
+### Tarea 1 — Identidad y navegación (decisión 085)
+
+Rama `h13-navegacion`, PR #50.
+
+- **Hecho:**
+  - **Identidad:** "Enterprise Data AI · AI Support & Sales Agent" arriba de la barra lateral; la empresa del cliente es una etiqueta. Fuera "Panel del equipo" y los avisos de demo.
+  - **Barra lateral con 9 secciones** (Home, Inbox, Customers, Agent, Knowledge, Deploy, Test & Improve, Insights, Settings), con pestañas donde hace falta. La página de Configuración de ~7000 px se repartió en Agent (Rules, Actions, Topics, Brand & voice, Sales, Language), Deploy y Settings (Team, Usage & model, Your data).
+  - **Zona de operador** aparte (Companies, Trials, Billing, Behind the scenes), solo para el operador; una empresa de demo nuestra ve "Behind the scenes". Un cliente recibe 403.
+  - **Direcciones de antes** (`/panel/casos`, `/panel/configuracion`…) redirigen a la nueva con sus parámetros; sin sesión, al login.
+  - **Idioma y tema por usuario** (`users.preferences`, migración 0035): inglés por defecto, selector English/Español y tema oscuro en el pie de la barra lateral. Lo nuevo se escribe en inglés y `spanish.py` lo traduce; lo de antes sigue en español con `english.py`.
+  - **Tus datos:** el admin de una empresa exporta sus datos y borra su empresa escribiendo el nombre.
+- **Tests:** `test_panel_navegacion.py` (aceptación). Los de antes corren con el idioma de la empresa como idioma por defecto (`conftest.py`) y miran las direcciones nuevas.
+- **Ojo:** una corrida local de este test usó por error `DATABASE_URL` (la base de la demo) en vez de la de staging, así que la migración 0035 ya está aplicada ahí. Es aditiva (`add column if not exists`) y no cambia nada para la demo.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_navegacion.py`; `make api` y entrar a `/panel`.
+
+### Tarea 2 — Idioma y textos claros (decisión 085)
+
+Rama `h13-idioma`, PR #51.
+
+- **Hecho:**
+  - **Inglés por defecto** para todos, con selector English/Español por usuario. Vale en el panel, el login, el registro y la invitación (la cookie del idioma ahora llega a `/registro`). Un usuario sin preferencia ve el panel en inglés; el idioma de la empresa sigue siendo el del agente con sus clientes.
+  - **Vocabulario sin jerga**, en los dos idiomas: agente (no "asistente"), acciones (no "herramientas"), temas (no "tipos de caso"), pruebas (no "evals"), "Conocimiento" (no "Onboarding"), instrucciones (no "prompt"), sin "guardián". El "asistente para el equipo" pasó a "Copiloto del equipo".
+  - Los datos de la empresa (descripciones de acciones, nombres de temas) se marcan como datos y no se traducen; el nombre del producto tampoco.
+- **Test de aceptación:** `test_panel_idioma.py` recorre las 22 pantallas y el detalle de un caso en inglés y en español: falla si queda texto del otro idioma o jerga (tenant, RAG, guardián, embeddings, evals, onboarding, tipo de caso, herramienta, asistente, prompt).
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_idioma.py`; en el panel, el botón "Español"/"English" del pie de la barra lateral.
+
+### Tarea 3 — Home
+
+Rama `h13-home`, PR #52.
+
+- **Hecho** (`app/panel/home_routes.py`), en dos columnas en la computadora y una en el celular:
+  - **Get started:** los 6 primeros pasos con su progreso real, empezando por "Add your knowledge"; el paso actual resaltado y un botón para empezar cada uno. Desaparece cuando todo está hecho, y no se muestra en las demos ni a las personas del equipo.
+  - **Needs your attention:** aprobaciones (con Approve y Reject, que vuelven a Home), casos derivados que esperan al equipo (Reply) y borradores por revisar (Review). Vacío: "You're all caught up".
+  - **Last 7 days:** conversaciones, resueltas por el agente, derivadas, ventas atribuidas y costo de IA.
+  - **Agent status:** Live, Paused o Setting up (pausado = salió en vivo y lo pausaron), con el botón para pausar, y el estado del chat del sitio, WhatsApp y la tienda.
+  - Los primeros pasos tienen nombres más claros ("Add your knowledge", "Choose how your chat looks", "Add the chat to your website").
+- **Test de aceptación:** `test_panel_home.py`.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_home.py`; en el panel, `/panel/home`.
+- **Ojo:** el PR #52 se mergeó con el lint en rojo (dos líneas largas): encadené el merge sin mirar el resultado del CI. Lo arreglé enseguida con el PR #53 (CI en verde). Desde ahí, el merge solo corre si el check pasa.
+
+### Tarea 4 — Deploy (decisión 086)
+
+Rama `h13-deploy`.
+
+- **Hecho:** `/panel/deploy` es una sola pantalla con cinco pasos y el estado de cada uno (`app/companies/deploy.py`, `app/panel/deploy_routes.py`):
+  1. **Connect your store:** Shopify (Install with Shopify si está la app de la plataforma; app del Dev Dashboard; token legacy), Tiendanube u otra con su OpenAPI. Conectar prueba la conexión en el momento. Si falla, dice **qué falta** (un permiso, una credencial, la tienda o el sistema) y **qué hacer**. Tiendanube tiene su propia prueba (`GET /store`).
+  2. **Choose what your agent can do:** las acciones con su estado y un link a Agent → Actions para los límites.
+  3. **Add the chat to your website:**
+     - los dominios de la tienda conectada se agregan solos a los permitidos (migración 0036);
+     - el código para copiar;
+     - guías completas para Shopify (`theme.liquid`), WordPress (sin plugin y con WPCode), Tiendanube (Google Tag Manager en Configuración → Códigos externos, o Editar el código de diseño) y cualquier sitio;
+     - **Check installation** confirma que el chat cargó desde el dominio, o dice si el código no está.
+  4. **Connect WhatsApp:** guía nueva en lenguaje simple (decisión 068).
+  5. **Go live:** el reporte de preparación, salir en vivo y pausar.
+- **Verificado en la documentación oficial** (23/11/2026): Dev Dashboard de Shopify, app embeds, Tiendanube y Meta. Lo que no se pudo verificar está en la decisión 086.
+- **Verificación contra Shopify real:** `python evals/shopify_e2e.py [--write]`. **No la pude correr:** en `.env` no están `SHOPIFY_TEST_STORE`, `SHOPIFY_TEST_CLIENT_ID` ni `SHOPIFY_TEST_CLIENT_SECRET`. El script dice exactamente qué crear en Shopify:
+  1. Una tienda de desarrollo creada desde **Dev stores** del Dev Dashboard, con un producto y un pedido pagado.
+  2. Una app del Dev Dashboard con los scopes `read_customers,write_orders,read_products,read_inventory,write_discounts`, publicada (Release) e instalada en esa tienda.
+  3. Su Client ID y Client secret en `.env`.
+- **Test de aceptación:** `test_panel_deploy.py`.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_deploy.py`; en el panel, `/panel/deploy`.
+- Mergeada en `hito-13` con el PR #54.
+
+### Tarea 5 — Agent: configurar sin miedo (decisión 087)
+
+Rama `h13-agent`.
+
+- **Hecho** (`app/panel/agent_forms.py`):
+  - En las seis pestañas (Rules, Actions, Topics, Brand & voice, Sales, Language), **cada opción** tiene una línea de ayuda en lenguaje simple y un ejemplo. Los interruptores tienen la misma forma: estado y Turn on/Turn off.
+  - **Brand & voice** muestra la marca del chat y la voz del agente al lado de una **vista previa del chat real**. Se actualiza al escribir y agrega una respuesta de ejemplo con el trato, los emojis y la firma.
+  - **"Saved":** al guardar aparece un aviso flotante que se va solo, en todo el panel.
+  - Actions y Topics, reescritas sin jerga: aprobar, identidad verificada, aprobación de una persona, topes e instrucciones.
+- **Test de aceptación:** `test_panel_agent.py`. Falla si un control de Agent queda sin ayuda o sin ejemplo.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_agent.py`; en el panel, `/panel/agent/voice`: cambiá la firma o los emojis y mirá la vista previa.
+- Mergeada en `hito-13` con el PR #55. Un reintento del CI: `test_memoria_cliente` falló una vez por el orden de dos eventos con la misma hora. Es inestable y no lo toca esta tarea; al reintentar pasó.
+
+### Tarea 6 — Knowledge (decisión 088)
+
+Rama `h13-knowledge`.
+
+- **Todo lo de Onboarding sigue, más claro:**
+  - lectura de PDF, DOCX y CSV;
+  - el sitio;
+  - la anonimización;
+  - los documentos con datos personales que esperan confirmación;
+  - el análisis del historial: temas, pruebas, acciones y reporte de preparación;
+  - el aviso de que terminó, con links para aprobar temas y acciones.
+- **Lo nuevo:**
+  - **Subir arrastrando** con el estado de cada archivo (Processing, Ready, Failed con el motivo exacto y qué hacer, o Needs you).
+  - **Qué aprendió** de cada documento: sus secciones y el texto extraído.
+  - **Reemplazar** reindexa, aunque el archivo nuevo tenga otro nombre; **borrar** lo saca en el momento.
+  - **Ask your knowledge**, con las fuentes exactas.
+  - **Problemas:** contradicciones de plazos, temas sin cobertura (de Insights) e información vieja.
+  - **El sitio**, con sus páginas: elegir cuáles usar, sincronizar a mano o cada semana (el worker; idempotente), con la fecha de la última sincronización.
+- **Calidad (medida en `docs/calidad.md`):**
+  - La extracción conserva títulos, listas y tablas (`app/onboarding/extract.py`).
+  - Los fragmentos van por sección, con su título, y nunca cortan un párrafo ni una fila.
+  - Con embeddings de Gemini: 0 fragmentos cortados (antes 25 de 48), y la respuesta en el fragmento con su sección en 46 de 46 (antes 38).
+  - Contra el sitio de una tienda real, el rastreo ahora prioriza las páginas de ayuda y políticas y saca el menú y el pie repetidos: las preguntas de envíos y devoluciones traen la sección correcta.
+- **Documentos de prueba** (Acme, ficticios) en `evals/fixtures/knowledge/`:
+  - un PDF de 3 páginas con tablas;
+  - un DOCX con títulos, listas y tabla;
+  - un CSV de 60 productos;
+  - 46 preguntas.
+
+  Se arman con `build.py`.
+- **Migración 0037** (aditiva): columnas nuevas en `documents`, y las tablas `sites` y `site_pages` con RLS.
+- **Tests:**
+  - `test_panel_knowledge.py` (aceptación);
+  - los `test_onboarding_*.py` pasan. Tres aserciones cambiaron a la forma nueva: los párrafos del PDF unidos y los del DOCX separados.
+- Mergeada en `hito-13` con el PR #56. Los 25 tests de `test_onboarding_*.py` pasan en el CI y contra staging.
+- **Cómo probarlo:**
+  - `python -m pytest backend/tests/test_panel_knowledge.py backend/tests/test_onboarding_*.py`;
+  - `python evals/knowledge_recall.py` (con `--simulated` sin claves);
+  - en el panel, `/panel/knowledge`.
+
+### Tarea 7 — Calidad visual y de uso (decisión 089)
+
+Rama `h13-diseno`.
+
+- **Hecho:**
+  - **Un solo sistema de diseño:** tokens de color, tipografía, botones, badges, tablas, avisos y diálogos. Tema claro por defecto y oscuro por usuario. Se sacaron los colores fijos en línea.
+  - **Confirmación antes de lo peligroso**, con un diálogo propio y traducido: aprobar un reembolso, pausar el agente, borrar documentos, la memoria de un cliente o la empresa, quitar un producto, desactivar WhatsApp y volver al modo de prueba.
+  - **Estados vacíos** con explicación y botón (Inbox, Approvals, Drafts, Customers, To improve, Knowledge, Home), y **páginas de error** con salida a Home.
+  - **"Procesando"** en el botón mientras se envía un formulario.
+  - **Insights** sin lo técnico para el cliente: latencias, proveedores, trazas e historial de pruebas quedan para el operador.
+  - En Knowledge, el selector de archivos queda oculto cuando hay zona para arrastrar.
+- **Test de aceptación:** `test_panel_diseno.py`. Revisa la accesibilidad de las 22 pantallas (un `<h1>`, etiquetas, botones con texto, foco visible), las confirmaciones, los estados vacíos, el tema oscuro e Insights.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_diseno.py`; en el panel, "Dark theme" en el pie de la barra lateral.
+
+- Mergeada en `hito-13` con el PR #57.
+
+### Tarea 8 — Verificación final
+
+Rama `h13-verificacion`.
+
+- **Recorrido headless como cliente nuevo** (`evals/panel_tour.py`). Corre en Chrome, en computadora y en celular, contra staging en una transacción revertida y sin modelos. Hace:
+  1. registro y confirmación del email;
+  2. Home;
+  3. Knowledge: sube el PDF, el DOCX y el CSV arrastrables, mira qué aprendió y pregunta;
+  4. Deploy, Agent, Test y Settings;
+  5. con una empresa con conversaciones: Home con pendientes, Inbox, Approvals e Insights.
+
+  Sacó 39 capturas en `docs/img/panel/despues/`. Las de antes (de `main`) están en `docs/img/panel/antes/`. Qué cambió y por qué, en `docs/panel.md`.
+- **Lo que encontró**, arreglado y con test:
+  - subir arrastrando no arrancaba, porque el JSON para JavaScript iba escapado como HTML;
+  - contradicciones falsas en "Problems to fix";
+  - el detalle de un documento contaba fragmentos en vez de secciones.
+- Playwright no es una dependencia del proyecto: el script lo pide aparte, porque es una herramienta para mirar el panel.
+- **Cómo probarlo:** `pip install playwright` en un entorno aparte, y después `python evals/panel_tour.py`.
+
+### Hito 13 — Pendientes
+
+- **Correr `evals/shopify_e2e.py` contra una tienda de desarrollo real.** No están `SHOPIFY_TEST_STORE`, `SHOPIFY_TEST_CLIENT_ID` ni `SHOPIFY_TEST_CLIENT_SECRET`, y el script dice qué crear.
+- Probar con Meta los nombres de menú que no se pudieron verificar (decisión 086).
+- El app embed de Shopify (decisión 086).
+- OCR para PDF escaneados.
+- `test_memoria_cliente` es inestable: falla a veces por el orden de dos eventos con la misma hora.
+- La migración 0035 quedó aplicada también en la base de la demo (ver la tarea 1). Las 0036 y 0037 solo en staging y en el CI.
+- **Modelo real:** 0 llamadas en todo el hito. Las embeddings de Gemini se usaron para medir Knowledge, en `evals/knowledge_recall.py` y en el sitio de una tienda real.
+
+## Hito QA 2 — Verificar de punta a punta antes de vender (desde el 24 de noviembre de 2026)
+
+Sobre `hito-13` y la base `DATABASE_URL_STAGING`. Cada arreglo, en su rama y su PR contra
+`hito-13`, mergeado con el CI en verde.
+
+### Etapa 1 — Matriz configuración → comportamiento (hecha)
+
+- `backend/tests/test_qa_configuracion.py`: 22 opciones de Agent, Knowledge y Deploy. Cada una se
+  cambia desde el panel, se verifica en lo que se arma antes del modelo y se vuelve atrás. Tabla:
+  `docs/qa-configuracion.md`.
+- `evals/qa_config_real.py`: la muestra con el modelo real gratuito (gpt-oss-20b en Groq, Gemini
+  de respaldo y embeddings de Gemini). Resultado: 9/9 después de los arreglos.
+- Fallas encontradas y arregladas:
+  | Falla | Arreglo | PR |
+  |---|---|---|
+  | Pausar no hacía que el agente dejara de responder: solo sacaba el widget del sitio | En pausa, cada mensaje se deriva sin llamar al modelo y el widget sigue (decisión 090) | #60 |
+  | Con el reembolso negado por el tope, el modelo decía "está en revisión por nuestro equipo" | Control en código: "en revisión", "iniciamos el proceso" y "solicitud registrada" necesitan una aprobación (decisión 091) | #61 |
+  | Una empresa nueva derivaba las preguntas que su documento respondía: el supervisor pedía "citar la fuente" en el texto | El supervisor recibe las fuentes citadas aparte (decisión 092) | #62 |
+  | En inglés, "10 a.m. to 8 p.m." y "24/7" se rechazaban contra "de 10 a 20 hs" y "24 horas, todos los días" | El control de fundamento compara horas en 24 y acepta 24/7 con respaldo (decisión 093) | #63 |
+- Riesgo que queda: con trato de usted, gpt-oss-20b a veces mezcla formas de vos. El supervisor lo
+  frena y, si insiste, deriva. Pasó en 1 de 3 corridas.
+- Modelo real usado: unas 160 llamadas a Groq (4 corridas de la muestra) y embeddings de Gemini.
+
+### Etapa 2 — Cliente nuevo de punta a punta (hecha)
+
+- Contra `hito-13` levantado con uvicorn y staging (decisión 094): `evals/qa_e2e.py` y el navegador
+  `evals/qa_e2e_browser.py`. **27/27**: registro y email, Knowledge con PDF, DOCX y CSV de la tienda
+  inventada (`evals/fixtures/brightside/`), Agent, la tienda con la API simulada de Northwind, el
+  widget en una página HTML de prueba, política con fuente, pedido verificado, cupón del 25 % negado,
+  reembolso aprobado desde Inbox, derivación con el asistente del equipo, venta con link, y todo en
+  Home, Inbox, Customers e Insights.
+- Contra Render (`main`): `evals/qa_render.py`, **5/5**. La confirmación del email en Render necesita
+  una casilla real.
+- Arreglos: el asistente se presenta una sola vez (095, #65), y los emails del registro y de las
+  invitaciones salen en el idioma del panel (096, #66).
+
+### Etapa 3 — Calidad con el modelo real gratuito (a medias: se agotó la cuota del día)
+
+- Simulaciones (`evals/qa_simulations.py`): **Acme 9/10 (90 %)**. Northwind: 6 de 10 hechas, 4 pasaron
+  (cambio de dirección: no confirmó la fecha, que el sandbox devolvía vacía; shopping: derivó en vez
+  de decir que no tenía el producto).
+- Evals (`evals/runner.py --fallback`): la primera corrida se cortó porque el juez de Groq no tiene
+  equivalente en Gemini (arreglado en #70). No se pudieron volver a correr: el 24/11 se agotaron la
+  cuota diaria de Groq (gpt-oss-20b) y la de Gemini.
+- Arreglos: un caso ya derivado no repite la misma frase (097, #69), y sin ningún modelo disponible el
+  caso se deriva en lugar de perder el mensaje (098, #71).
+
+**Para retomar mañana** (PowerShell, desde la raíz del repo; el avance queda en `evals/.cache/`):
+
+```
+$env:DATABASE_URL = (Select-String -Path .env -Pattern '^DATABASE_URL_STAGING=(.*)$').Matches[0].Groups[1].Value
+$env:ANTHROPIC_API_KEY = ''; $env:VOYAGE_API_KEY = ''; $env:LLM_PROVIDER = 'groq'
+$env:PYTHONPATH = 'backend;evals;mocks/acme-api;mocks/northwind-api'
+.venv\Scripts\python evals/qa_simulations.py --company northwind --size 10
+.venv\Scripts\python evals/runner.py --real --fallback --no-cache --company acme --report evals/last_qa_evals-acme.json
+.venv\Scripts\python evals/runner.py --real --fallback --no-cache --company northwind --report evals/last_qa_evals-northwind.json
+```
+
+Cada comando sigue desde donde quedó. Si vuelve a agotarse la cuota, corta con código 2 y el mismo
+comando retoma al día siguiente.
+
+### Etapa 4 — Aislamiento y seguridad (hecha)
+
+- `backend/tests/test_qa_seguridad.py`, **11/11**: dos empresas no se ven en el chat ni en el panel,
+  el cliente no entra al panel, el dueño no entra a la zona del operador, sin verificar no hay datos
+  y la manipulación en el chat y en un PDF subido no cambia nada.
+- `evals/qa_seguridad_real.py`, **7/7** con el modelo real: el PDF malicioso, falso gerente, datos de
+  otro email y pedir el prompt.
+
+### Etapa 5 — Informe (hecho)
+
+`docs/listo-para-vender.md`: qué funciona, las 9 fallas arregladas, lo pendiente con su riesgo y lo
+que tenés que hacer antes del primer cliente.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.

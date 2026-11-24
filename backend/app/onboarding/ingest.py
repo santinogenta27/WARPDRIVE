@@ -24,7 +24,6 @@ import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from html.parser import HTMLParser
 from pathlib import PurePath
 from typing import Any, Literal
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -37,7 +36,7 @@ import pypdf
 from app import net
 from app.db.connection import tenant_scope
 from app.llm.embedder import Embedder
-from app.onboarding import sensitive
+from app.onboarding import extract, sensitive
 from app.onboarding.anonymize import Anonymizer
 from app.rag.indexer import index_document
 
@@ -252,24 +251,23 @@ def _title(text: str, fallback: str) -> str:
 def read_document(data: bytes, name: str) -> Document:
     stem = PurePath(name).stem
     suffix = PurePath(name).suffix.lower()
+    # Títulos, listas y tablas se conservan (decisión 088): ver `extract`.
     if suffix == ".docx":
-        with zipfile.ZipFile(io.BytesIO(data)) as bundle:
-            root = ElementTree.fromstring(bundle.read("word/document.xml"))
-        ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-        paragraphs = ["".join(t.text or "" for t in p.iter(f"{ns}t")) for p in root.iter(f"{ns}p")]
-        text = "\n".join(p for p in paragraphs if p.strip())
-        return Document(title=paragraphs[0].strip() if paragraphs else stem, source=stem, text=text)
+        try:
+            text = extract.docx_text(data)
+        except (zipfile.BadZipFile, KeyError, ElementTree.ParseError) as error:
+            raise UnreadableDocument(
+                f"{PurePath(name).name}: no se pudo leer el DOCX. Puede estar dañado: abrilo en "
+                "Word y guardalo de nuevo, o subilo como PDF."
+            ) from error
+        if not text.strip():
+            raise UnreadableDocument(f"{PurePath(name).name} está vacío: no tiene texto.")
+        return Document(title=_title(text, stem), source=stem, text=text)
     if suffix == ".pdf":
         text = _pdf_text(data, PurePath(name).name)
-        first = text.splitlines()[0]
-        return Document(title=first if len(first) <= 120 else stem, source=stem, text=text)
-    if suffix == ".csv":  # una tabla (catálogo, envíos): una línea por fila, "columna: valor"
-        reader = csv.DictReader(io.StringIO(data.decode("utf-8-sig")))
-        lines = [
-            " · ".join(f"{k.strip()}: {(v or '').strip()}" for k, v in row.items() if k and v)
-            for row in reader
-        ]
-        return Document(title=stem, source=stem, text="\n".join(line for line in lines if line))
+        return Document(title=_title(text, stem), source=stem, text=text)
+    if suffix == ".csv":  # una tabla (catálogo, envíos): una fila por renglón, "columna: valor"
+        return Document(title=stem, source=stem, text=extract.csv_text(data))
     # Saltos de línea de Windows: sin esto el texto no se parte en párrafos ni en fragmentos.
     text = data.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
     return Document(title=_title(text, stem), source=stem, text=text)
@@ -282,7 +280,12 @@ def _pdf_text(data: bytes, name: str) -> str:
         locked = reader.is_encrypted and not reader.decrypt("")
         count = 0 if locked else len(reader.pages)
         skip = locked or count > MAX_PDF_PAGES
-        extracted = [] if skip else [page.extract_text() or "" for page in reader.pages]
+        # En columnas (layout): así se reconocen las tablas, las listas y los títulos.
+        extracted = (
+            []
+            if skip
+            else [page.extract_text(extraction_mode="layout") or "" for page in reader.pages]
+        )
     except Exception as error:  # noqa: BLE001 — un PDF dañado puede fallar de muchas formas
         raise UnreadableDocument(
             f"{name}: no se pudo leer el PDF. Puede estar dañado. Probá exportarlo de nuevo, o "
@@ -296,47 +299,13 @@ def _pdf_text(data: bytes, name: str) -> str:
         raise UnreadableDocument(
             f"{name} tiene {count} páginas y el máximo es {MAX_PDF_PAGES}. Subilo en partes."
         )
-    pages = []
-    for page in extracted:
-        lines = [line.strip() for line in page.replace("\x00", "").splitlines()]
-        pages.append("\n".join(line for line in lines if line))
-    text = "\n\n".join(page for page in pages if page)
+    text = extract.pdf_layout_text(extracted)
     if not any(char.isalpha() for char in text):
         raise UnreadableDocument(
             f"{name} es un PDF escaneado: son imágenes, sin texto para leer. Subí una versión con "
             "texto (exportada desde Word o Google Docs), o pasalo a DOCX o Markdown."
         )
     return text
-
-
-class _TextExtractor(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.parts: list[str] = []
-        self.links: list[str] = []
-        self.title = ""
-        self._skip = 0
-        self._in_title = False
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in ("script", "style", "noscript"):
-            self._skip += 1
-        self._in_title = tag == "title"
-        if tag == "a":
-            href = dict(attrs).get("href")
-            if href:
-                self.links.append(href)
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in ("script", "style", "noscript") and self._skip:
-            self._skip -= 1
-        self._in_title = False
-
-    def handle_data(self, data: str) -> None:
-        if self._in_title:
-            self.title += data
-        elif not self._skip and data.strip():
-            self.parts.append(data.strip())
 
 
 def fetch_url(url: str, http: httpx.Client | None = None) -> Document:
@@ -346,12 +315,12 @@ def fetch_url(url: str, http: httpx.Client | None = None) -> Document:
     )
     response = client.get(url)
     response.raise_for_status()
-    parser = _TextExtractor()
+    parser = extract.HtmlText()
     parser.feed(response.text)
     return Document(
         title=html.unescape(parser.title.strip()) or url,
         source=_slug(url),
-        text="\n".join(html.unescape(p) for p in parser.parts),
+        text=parser.text(),
     )
 
 
@@ -408,11 +377,11 @@ def crawl(
         elif response.status_code == 200 and "html" in response.headers.get(
             "content-type", "text/html"
         ):
-            parser = _TextExtractor()
+            parser = extract.HtmlText()
             parser.feed(response.text)
             if on_page is not None:
                 on_page(current, response.text)
-            text = "\n".join(html.unescape(p) for p in parser.parts)
+            text = parser.text()
             if text.strip():
                 title = " ".join(html.unescape(parser.title).split()) or current
                 pages.append(Document(title=title, source=_slug(current), text=text))

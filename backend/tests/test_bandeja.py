@@ -72,7 +72,7 @@ def test_una_aprobacion_pendiente_avisa_con_el_enlace_a_aprobaciones(
     result = stack.send("martin", "Quiero el reembolso del pedido 1005")
     assert result.action == "pedir_aprobacion"
     assert [e.to for e in outbox.sent] == ["soporte@acme.example"]
-    assert "https://panel.example/panel/aprobaciones" in outbox.sent[0].body
+    assert "https://panel.example/panel/inbox/approvals" in outbox.sent[0].body
 
 
 def test_sin_email_de_derivacion_avisa_a_los_usuarios_y_la_demo_a_nadie(

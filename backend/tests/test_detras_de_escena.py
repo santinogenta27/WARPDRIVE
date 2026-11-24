@@ -211,7 +211,7 @@ def test_se_activa_y_desactiva_desde_el_panel(web: TestClient, stack: SimulatedS
         follow_redirects=False,
     )
     assert login.status_code == 303
-    settings = web.get("/panel/configuracion").text
+    settings = web.get("/panel/operator/behind").text
     assert "Behind the scenes" in settings and f"/demo/{SLUG}" in settings
     token = re.search(r'name="csrf" value="([^"]+)"', settings)
     assert token is not None

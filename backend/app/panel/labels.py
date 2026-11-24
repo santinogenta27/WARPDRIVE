@@ -1,12 +1,12 @@
-"""Nombres legibles para el panel: tipos de caso ("Dónde está mi pedido") y acciones de las
-herramientas ("Reembolso · Pedido 1005 · $35.000")."""
+"""Nombres legibles para el panel: temas ("Dónde está mi pedido") y acciones de las
+acciones ("Reembolso · Pedido 1005 · $35.000")."""
 
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from app.panel import english
 
-# Etiquetas del clasificador que no son tipos de caso de la empresa.
+# Etiquetas del clasificador que no son temas de la empresa.
 SPECIAL = {
     "conversacion_general": "Conversación general",
     "consulta_general": "Consulta general",
@@ -42,7 +42,7 @@ ACCENTS = {
 }
 
 
-# Acciones de las herramientas conocidas; el resto se arma desde el nombre.
+# Acciones de las acciones conocidas; el resto se arma desde el nombre.
 ACTIONS = {
     "iniciar_reembolso": "Reembolso",
     "cancelar_pedido": "Cancelación",
@@ -50,7 +50,7 @@ ACTIONS = {
     "consultar_pedido": "Consulta de pedido",
     "cancelar_pendiente": "Cancelación de lo pendiente",  # decisión 040
 }
-# Verbos con los que suele empezar una herramienta que crea algo: "crear_nota" -> "Nota".
+# Verbos con los que suele empezar una acción que crea algo: "crear_nota" -> "Nota".
 _LEADING_VERBS = ("iniciar_", "crear_", "generar_", "registrar_", "emitir_")
 _AMOUNTS = {"amount", "monto", "importe", "total"}
 _ORDERS = {"order_id", "pedido_id", "id_pedido", "numero_de_pedido"}
@@ -106,7 +106,7 @@ def money(value: object) -> str:
 
 
 def tool_label(name: str | None) -> str:
-    """Nombre legible de una herramienta: `iniciar_reembolso` -> `Reembolso`."""
+    """Nombre legible de una acción: `iniciar_reembolso` -> `Reembolso`."""
     en = english.english()
     if not name:
         return "Action" if en else "Acción"
@@ -118,6 +118,19 @@ def tool_label(name: str | None) -> str:
         if name.startswith(verb) and len(name) > len(verb):
             return type_label(name[len(verb) :])
     return type_label(name)
+
+
+REFUND_TOOLS = {"iniciar_reembolso", "reembolsar", "refund"}
+
+
+def refund_confirm(tool: str) -> str:
+    """Los atributos del botón Aprobar de un reembolso: pide confirmación (decisión 089)."""
+    if tool not in REFUND_TOOLS and "reembols" not in tool and "refund" not in tool:
+        return ""
+    return (
+        "data-confirm=\"Approve this refund? The money goes back to the customer and it can't "
+        'be undone." data-confirm-ok="Approve refund"'
+    )
 
 
 def action_label(tool: str | None, params: dict[str, Any] | None) -> str:

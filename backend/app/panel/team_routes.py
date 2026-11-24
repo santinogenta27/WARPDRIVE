@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from app.companies import signup
 from app.mailer import mailer_from_env
+from app.panel import english
 from app.panel.html import esc, page
 from app.panel.routes import Deps, Form, enter
 from app.panel.signup_routes import _base
@@ -14,7 +15,7 @@ from app.panel.signup_routes import _base
 router = APIRouter(prefix="/panel", include_in_schema=False)
 
 
-@router.get("/equipo", response_class=HTMLResponse)
+@router.get("/settings", response_class=HTMLResponse)
 def team_page(request: Request, deps: Deps, ok: str = "", error: str = "") -> Response:
     ctx = enter(request, deps)
     if isinstance(ctx, Response):
@@ -44,7 +45,7 @@ def team_page(request: Request, deps: Deps, ok: str = "", error: str = "") -> Re
 <p class="muted small">Un admin ve y cambia todo. Una persona del equipo atiende Casos y
 Aprobaciones, pero no cambia la configuración.</p>
 <button class="primary" type="submit">Enviar invitación</button></form></div>"""
-    return HTMLResponse(page("Equipo", body, active="equipo", session=ctx.session))
+    return HTMLResponse(page("Equipo", body, active="settings", session=ctx.session))
 
 
 @router.post("/equipo/invitar")
@@ -62,7 +63,8 @@ def team_invite(request: Request, form: Form, deps: Deps) -> Response:
                 email=form.get("email", ""),
                 role=form.get("rol", ""),
                 base_url=_base(request),
+                language="en" if english.english() else "es",
             )
     except signup.SignupError as error:
-        return RedirectResponse(f"/panel/equipo?error={quote(str(error))}", status_code=303)
-    return RedirectResponse("/panel/equipo?ok=" + quote("Invitación enviada."), status_code=303)
+        return RedirectResponse(f"/panel/settings?error={quote(str(error))}", status_code=303)
+    return RedirectResponse("/panel/settings?ok=" + quote("Invitación enviada."), status_code=303)
