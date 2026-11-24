@@ -108,7 +108,9 @@ def _upload_texts() -> str:
 
     texts = {key: _t(label) for key, (_, label) in STATUS.items()}
     texts["network"] = _t("The upload failed. Check your connection and try again.")
-    return f'<script type="application/json" id="upload-texts">{esc(json.dumps(texts))}</script>'
+    # JSON tal cual (no HTML escapado: adentro de un <script> no se decodifica); sin "</".
+    data = json.dumps(texts).replace("</", "<\\/")
+    return f'<script type="application/json" id="upload-texts">{data}</script>'
 
 
 # -- la pantalla ---------------------------------------------------------------------------------
@@ -493,7 +495,7 @@ it makes sense on its own.</p>{views}</div>
     origin = esc(doc.file_name or doc.source)
     body = f"""{KNOWLEDGE_CSS}<p><a href="/panel/knowledge">← Knowledge</a></p>
 {head(doc.title, "")}<p class="muted small"><span class="mono">{origin}</span> ·
-<span>{doc.sections}</span> <span>sections</span> · <span>{doc.chars}</span>
+<span>{len(sections)}</span> <span>sections</span> · <span>{doc.chars}</span>
 <span>characters</span> · {local_time(doc.updated_at)}</p>{content}"""
     return HTMLResponse(page(doc.title, body, active="knowledge", session=ctx.session))
 

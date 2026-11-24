@@ -48,7 +48,11 @@ def documents(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[Doc]:
     with tenant_scope(conn, tenant_id):
         rows = conn.execute(
             "select d.id, d.title, coalesce(d.source, ''), coalesce(d.file_name, ''), d.status,"
-            " coalesce(d.error, ''), count(c.id), coalesce(length(d.text), 0),"
+            # Secciones: cada fragmento trae una o más, cada una con su título ("## …").
+            " coalesce(d.error, ''),"
+            " coalesce(sum(case when c.id is null then 0 else greatest(1, (length(c.text)"
+            "  - length(replace(c.text, chr(10) || '## ', ''))) / 4) end), 0)::int,"
+            " coalesce(length(d.text), 0),"
             " coalesce(d.updated_at, d.created_at), d.site_id"
             " from documents d left join chunks c on c.document_id = d.id"
             " group by d.id order by d.status = 'ready', d.site_id is not null, d.title"
@@ -233,20 +237,17 @@ def ask(
 
 
 # -- problemas -----------------------------------------------------------------------------------
+# Temas con un plazo general, que no debería cambiar de un documento a otro. (Los de entrega
+# dependen de la zona: no se comparan.)
 TOPICS = {
-    "return": (
-        r"devoluci|devolver|reembols|arrepent|return|refund",
-        "Return period",
-        "Plazo de devolución",
-    ),
-    "exchange": (r"cambio|cambiar|exchange", "Exchange period", "Plazo de cambio"),
-    "warranty": (r"garant|warranty", "Warranty", "Garantía"),
-    "shipping": (r"env[ií]o|despach|entreg|shipping|deliver", "Delivery time", "Plazo de entrega"),
+    "return": (r"devoluci[oó]n|devolver|arrepent|return", "Return period", "Plazo de devolución"),
+    "exchange": (r"cambios?\b|cambiar|exchange", "Exchange period", "Plazo de cambio"),
+    "warranty": (r"garant[ií]a|warranty", "Warranty", "Garantía"),
 }
 PERIOD = re.compile(
-    r"(\d+)\s*(d[ií]as?|days?|horas?|hours?|semanas?|weeks?|mes(?:es)?|months?|años?|years?)",
-    re.IGNORECASE,
+    r"(\d+)\s*(d[ií]as?|days?|semanas?|weeks?|mes(?:es)?|months?|años?|years?)", re.IGNORECASE
 )
+NEAR = 40  # el plazo y el tema, a menos de esta cantidad de caracteres
 UNIT = {"d": "days", "h": "hours", "s": "weeks", "w": "weeks", "m": "months", "a": "years",
         "y": "years"}  # fmt: skip
 
@@ -272,6 +273,17 @@ def _sentences(text: str) -> list[str]:
     return [s for s in re.split(r"(?<=[.!?])\s+|\n", text) if s.strip()]
 
 
+def _near(pattern: str, sentence: str) -> re.Match[str] | None:
+    """El plazo de la oración que está pegado al tema ("30 días para devolver", "el plazo de
+    devolución es de 15 días"); uno lejos es de otra cosa ("10 días para responder… y el
+    reembolso")."""
+    topics = [m.start() for m in re.finditer(pattern, sentence, re.IGNORECASE)]
+    for period in PERIOD.finditer(sentence):
+        if any(abs(period.start() - at) <= NEAR for at in topics):
+            return period
+    return None
+
+
 def conflicts(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[Conflict]:
     """Documentos que dan plazos distintos para lo mismo (por ejemplo, dos plazos de
     devolución). Compara el plazo general de cada documento: la primera oración de cada tema
@@ -290,7 +302,7 @@ def conflicts(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[Conflict]:
                     continue
                 if " · " in sentence:  # una fila de tabla: el plazo de un caso puntual
                     continue
-                period = PERIOD.search(sentence)
+                period = _near(pattern, sentence)
                 if period:
                     unit = UNIT.get(period.group(2)[0].lower(), period.group(2))
                     values.setdefault(f"{period.group(1)} {unit}", title)

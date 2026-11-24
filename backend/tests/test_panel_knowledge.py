@@ -343,3 +343,22 @@ def test_los_fragmentos_no_cortan_una_politica_a_la_mitad() -> None:
     table = next(c for c in sections if "Zona: CABA" in c)
     assert table.startswith("## 1. Envíos a domicilio › 1.1 Costos y plazos por zona")
     assert "Zona: Tierra del Fuego" in table  # la tabla entera, en un fragmento
+
+
+def test_los_textos_de_la_carga_son_json_valido(world: World) -> None:
+    """El JavaScript de la carga los lee con JSON.parse: escapados como HTML, no arrancaba."""
+    import json
+
+    page = world.client.get("/panel/knowledge").text
+    found = re.search(r'<script type="application/json" id="upload-texts">(.*?)</script>', page)
+    assert found is not None
+    texts = json.loads(found.group(1))
+    assert texts["ready"] == "Ready" and texts["failed"] == "Failed"
+
+
+def test_sin_contradicciones_falsas(world: World) -> None:
+    """Un plazo que no está pegado al tema es de otra cosa: "10 días hábiles para responder… y
+    el reembolso" no es un plazo de devolución."""
+    upload(world, "politicas.pdf", (KNOWLEDGE / "acme_manual_de_politicas.pdf").read_bytes())
+    upload(world, "atencion.docx", (KNOWLEDGE / "acme_manual_de_atencion.docx").read_bytes())
+    assert knowledge.conflicts(world.conn, world.tenant) == []

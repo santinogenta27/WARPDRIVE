@@ -934,6 +934,37 @@ Rama `h13-diseno`.
 - **Test de aceptación:** `test_panel_diseno.py`. Revisa la accesibilidad de las 22 pantallas (un `<h1>`, etiquetas, botones con texto, foco visible), las confirmaciones, los estados vacíos, el tema oscuro e Insights.
 - **Cómo probarlo:** `python -m pytest backend/tests/test_panel_diseno.py`; en el panel, "Dark theme" en el pie de la barra lateral.
 
+- Mergeada en `hito-13` con el PR #57.
+
+### Tarea 8 — Verificación final
+
+Rama `h13-verificacion`.
+
+- **Recorrido headless como cliente nuevo** (`evals/panel_tour.py`). Corre en Chrome, en computadora y en celular, contra staging en una transacción revertida y sin modelos. Hace:
+  1. registro y confirmación del email;
+  2. Home;
+  3. Knowledge: sube el PDF, el DOCX y el CSV arrastrables, mira qué aprendió y pregunta;
+  4. Deploy, Agent, Test y Settings;
+  5. con una empresa con conversaciones: Home con pendientes, Inbox, Approvals e Insights.
+
+  Sacó 39 capturas en `docs/img/panel/despues/`. Las de antes (de `main`) están en `docs/img/panel/antes/`. Qué cambió y por qué, en `docs/panel.md`.
+- **Lo que encontró**, arreglado y con test:
+  - subir arrastrando no arrancaba, porque el JSON para JavaScript iba escapado como HTML;
+  - contradicciones falsas en "Problems to fix";
+  - el detalle de un documento contaba fragmentos en vez de secciones.
+- Playwright no es una dependencia del proyecto: el script lo pide aparte, porque es una herramienta para mirar el panel.
+- **Cómo probarlo:** `pip install playwright` en un entorno aparte, y después `python evals/panel_tour.py`.
+
+### Hito 13 — Pendientes
+
+- **Correr `evals/shopify_e2e.py` contra una tienda de desarrollo real.** No están `SHOPIFY_TEST_STORE`, `SHOPIFY_TEST_CLIENT_ID` ni `SHOPIFY_TEST_CLIENT_SECRET`, y el script dice qué crear.
+- Probar con Meta los nombres de menú que no se pudieron verificar (decisión 086).
+- El app embed de Shopify (decisión 086).
+- OCR para PDF escaneados.
+- `test_memoria_cliente` es inestable: falla a veces por el orden de dos eventos con la misma hora.
+- La migración 0035 quedó aplicada también en la base de la demo (ver la tarea 1). Las 0036 y 0037 solo en staging y en el CI.
+- **Modelo real:** 0 llamadas en todo el hito. Las embeddings de Gemini se usaron para medir Knowledge, en `evals/knowledge_recall.py` y en el sitio de una tienda real.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
