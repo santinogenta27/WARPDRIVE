@@ -1458,7 +1458,9 @@ def translate_text(text: str) -> str:
 
 _TOKEN = re.compile(r"(<!--.*?-->|<[^>]+>)", re.S)
 _SKIP = {"script", "style", "textarea", "pre"}
-_ATTRIBUTE = re.compile(r'\b(placeholder|aria-label|title|data-done)="([^"]*)"')
+_ATTRIBUTE = re.compile(
+    r'\b(placeholder|aria-label|title|data-done|data-confirm|data-confirm-ok)="([^"]*)"'
+)
 
 
 _VOID = {"br", "input", "meta", "link", "img", "hr", "source", "wbr", "col", "area"}

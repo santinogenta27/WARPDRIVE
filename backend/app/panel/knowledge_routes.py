@@ -41,6 +41,7 @@ KNOWLEDGE_CSS = """<style>
 background:var(--sunken);transition:border-color .15s,background .15s;cursor:pointer}
 .drop.over{border-color:var(--brand);background:var(--brand-soft)}
 .drop b{display:block;font-size:15px;margin-bottom:4px}
+.js-on #archivos{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
 .uploads{list-style:none;padding:0;margin:12px 0 0}.uploads li{display:flex;gap:10px;
 align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}
 .uploads .msg2{color:var(--muted);font-size:13px}
@@ -58,7 +59,8 @@ font-size:13.5px}
 </style>"""
 
 # Sube los archivos de a uno y muestra el estado de cada uno mientras se procesan.
-UPLOAD_JS = """(function(){var zone=document.getElementById("drop"),input=document.getElementById(
+UPLOAD_JS = """(function(){document.documentElement.classList.add("js-on");
+var zone=document.getElementById("drop"),input=document.getElementById(
 "archivos"),list=document.getElementById("uploads");if(!zone||!input||!window.fetch)return;
 var csrf=document.querySelector('#upload-form input[name=csrf]').value;var T=JSON.parse(
 document.getElementById("upload-texts").textContent);

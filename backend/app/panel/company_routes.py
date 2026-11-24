@@ -437,7 +437,9 @@ def delete_company_page(tenant_id: uuid.UUID, request: Request, deps: Deps) -> R
 <p>También se borran sus usuarios, su chat, la conexión con su sistema y sus credenciales. Sus
 usuarios no van a poder entrar más. En el registro del operador queda quién la borró y cuándo,
 sin datos de la empresa.</p>
-<form method="post" action="/panel/empresas/{tenant_id}/borrar">{_csrf(ctx)}
+<form method="post" action="/panel/empresas/{tenant_id}/borrar"
+ data-confirm="Delete this company and all its data? It can't be undone."
+ data-confirm-ok="Delete everything">{_csrf(ctx)}
 <label for="nombre">Para confirmar, escribí el nombre de la empresa: {esc(name)}</label>
 <input id="nombre" name="nombre" required autocomplete="off">
 <p class="row"><button class="danger" type="submit">Borrar la empresa y todos sus datos</button>
@@ -520,7 +522,8 @@ def _whatsapp_html(ctx: Ctx, request: Request, found: whatsapp.WhatsAppSetup | N
                 f"</b> {esc(found.last_test.get('detalle'))}</div>"
             )
         toggle = (
-            f'<form method="post" action="/panel/configuracion/whatsapp/desactivar">{_csrf(ctx)}'
+            f'<form method="post" action="/panel/configuracion/whatsapp/desactivar"'
+            f' data-confirm="Turn off WhatsApp? Your agent stops answering there.">{_csrf(ctx)}'
             f'<button type="submit">{t("Desactivar", "Deactivate")}</button></form>'
             if active
             else f'<form method="post" action="/panel/configuracion/whatsapp/activar">'
@@ -730,7 +733,7 @@ def _model_html(ctx: Ctx, conn: Any) -> str:
         ]
     )
     tope = esc(str(spending._setting(conn, ctx.tenant_id) or ""))
-    warn = ' style="color:#b45309"' if used >= spending.WARN_AT else ""
+    warn = ' style="color:var(--warn)"' if used >= spending.WARN_AT else ""
     return f"""<div class="card"><p><strong>Key en uso:</strong> {chosen}</p>
 <p{warn}><strong>Gasto del mes:</strong> <span class="mono">USD {spent.usd:.2f} ·
 {used:.0%}</span> · {cap}{calls}</p>
@@ -986,7 +989,9 @@ rules and settings) as a .zip file. Passwords and keys are never included.</p>
 <div class="card alert"><h2>Delete your company</h2>
 <p>This permanently deletes {company} and all its data: conversations, customers, knowledge,
 users and connections. <b>It can't be undone.</b></p>
-<form method="post" action="/panel/settings/data/delete">{_csrf(ctx)}
+<form method="post" action="/panel/settings/data/delete"
+ data-confirm="Delete your company and all its data? It can't be undone."
+ data-confirm-ok="Delete everything">{_csrf(ctx)}
 <label for="nombre">Type <b>{company}</b> to confirm</label>
 <input id="nombre" name="nombre" required autocomplete="off">
 <p><button class="danger solid" type="submit">Delete company and all data</button></p>

@@ -662,6 +662,59 @@ PHRASES: dict[str, str] = {
     ),
     "Full extracted text": "Texto extraído completo",
     "characters": "caracteres",
+    # diseño (decisión 089): confirmaciones, estados vacíos y errores
+    "Cancel": "Cancelar",
+    "Confirm": "Confirmar",
+    "Delete": "Borrar",
+    "Delete everything": "Borrar todo",
+    "Approve refund": "Aprobar el reembolso",
+    "Approve this refund? The money goes back to the customer and it can't be undone.": (
+        "¿Aprobar este reembolso? La plata vuelve al cliente y no se puede deshacer."
+    ),
+    "Pause your agent? Customers will be told that a person will reply.": (
+        "¿Pausar tu agente? A los clientes se les va a decir que les responde una persona."
+    ),
+    "Delete everything your agent remembers about this customer? It can't be undone.": (
+        "¿Borrar todo lo que tu agente recuerda de este cliente? No se puede deshacer."
+    ),
+    "Delete your company and all its data? It can't be undone.": (
+        "¿Borrar tu empresa y todos sus datos? No se puede deshacer."
+    ),
+    "Delete this company and all its data? It can't be undone.": (
+        "¿Borrar esta empresa y todos sus datos? No se puede deshacer."
+    ),
+    "Turn off WhatsApp? Your agent stops answering there.": (
+        "¿Desactivar WhatsApp? Tu agente deja de atender ahí."
+    ),
+    "Stop suggesting this product?": "¿Dejar de sugerir este producto?",
+    "Go back to test mode? Your agent stops using your real store.": (
+        "¿Volver al modo de prueba? Tu agente deja de usar tu tienda real."
+    ),
+    "Go to Home": "Ir al inicio",
+    "It may have been deleted, or the link is wrong.": (
+        "Puede haberse borrado, o el link está mal."
+    ),
+    "When customers write to your agent, the conversations show up here, the ones that need you "
+    "first.": (
+        "Cuando los clientes le escriben a tu agente, las conversaciones aparecen acá, primero "
+        "las que te necesitan."
+    ),
+    "Try your agent": "Probá tu agente",
+    "High-risk actions, like a refund, wait here until a person approves them.": (
+        "Las acciones de riesgo alto, como un reembolso, esperan acá hasta que una persona las "
+        "aprueba."
+    ),
+    "Review your actions": "Revisar tus acciones",
+    "When a customer confirms who they are, your agent remembers their name, preferences and "
+    "past orders for next time.": (
+        "Cuando un cliente confirma quién es, tu agente recuerda su nombre, sus preferencias y "
+        "sus pedidos para la próxima vez."
+    ),
+    "In a conversation, mark an answer as incorrect and write the right one: it shows up here and "
+    "becomes a test.": (
+        "En una conversación, marcá una respuesta como incorrecta y escribí la correcta: aparece "
+        "acá y se convierte en una prueba."
+    ),
     # diagnóstico de la conexión (app/companies/deploy.py)
     "Connected to your store.": "Conectado a tu tienda.",
     "In the Dev Dashboard, open your app → Versions, add them under Scopes and click Release. "

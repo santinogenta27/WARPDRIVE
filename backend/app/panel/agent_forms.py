@@ -322,7 +322,8 @@ def sales_html(csrf: str, found: list[upsell.Rule], kinds: list[str]) -> str:
         f"<tr><td>{esc(r.product)}</td>"
         f'<td class="data">{esc(", ".join(type_label(k) for k in r.case_types))}</td>'
         f'<td class="num">{r.max_discount:g} %</td><td>'
-        f'<form method="post" action="/panel/configuracion/ventas/{r.id}/borrar">'
+        f'<form method="post" action="/panel/configuracion/ventas/{r.id}/borrar"'
+        ' data-confirm="Stop suggesting this product?">'
         f'<input type="hidden" name="csrf" value="{csrf}">'
         '<button type="submit" class="danger">Remove</button></form></td></tr>'
         for r in found

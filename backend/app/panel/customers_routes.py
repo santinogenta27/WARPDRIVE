@@ -54,7 +54,10 @@ def customers_page(request: Request, deps: Deps) -> Response:
         f"""<table><thead><tr><th>Cliente</th><th>Compras</th><th>Conversaciones</th>
 <th>Última vez</th></tr></thead><tbody>{rows}</tbody></table>"""
         if found
-        else '<div class="card empty">Todavía no hay clientes verificados con memoria.</div>'
+        else '<div class="card empty"><b>Todavía no hay clientes verificados con memoria.</b>'
+        "When a customer confirms who they are, your agent remembers their name, preferences "
+        'and past orders for next time.<br><a class="btn" href="/panel/test/playground">Try your '
+        "agent</a></div>"
     )
     retention = (
         f"""<form method="post" action="/panel/clientes/retencion" class="row" style="gap:8px">
@@ -144,7 +147,9 @@ def customer_page(memory_id: uuid.UUID, request: Request, deps: Deps) -> Respons
 <p><button class="primary" type="submit">Guardar cambios</button></p></form></div>
 <div class="card"><h2>Borrar la memoria</h2>
 <p>El agente deja de recordar a este cliente. Sus conversaciones siguen en la Bandeja.</p>
-<form method="post" action="/panel/clientes/{found.id}/borrar">
+<form method="post" action="/panel/clientes/{found.id}/borrar"
+ data-confirm="Delete everything your agent remembers about this customer? It can't be undone."
+ data-confirm-ok="Delete">
 <input type="hidden" name="csrf" value="{ctx.csrf}">
 <button class="danger" type="submit">Borrar la memoria de este cliente</button></form></div>"""
     return HTMLResponse(page("Cliente", body, active="customers", session=ctx.session))

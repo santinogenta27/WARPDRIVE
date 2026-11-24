@@ -69,7 +69,10 @@ def _table(headers: list[str], rows: list[list[str]], empty: str) -> str:
     return f"<table><tr>{head}</tr>{body}</table>"
 
 
-def render(data: dict[str, Any], company: str) -> str:
+def render(data: dict[str, Any], company: str, technical: bool = True) -> str:
+    """Las métricas. `technical` (el operador): además, latencia, errores y respaldos entre
+    proveedores, costo por modelo y por caso, y el historial de pruebas (decisión 089). A una
+    empresa no le sirven: ve resolución, derivación, satisfacción, ventas y costo."""
     cases, latency, model = data["casos"], data["latencia"], data["modelo"]
     billing, errors = data["cobro"], data["errores"]
     steps = latency["promedio_ms"]
@@ -142,12 +145,26 @@ def render(data: dict[str, Any], company: str) -> str:
         ]
         for c in rated["comentarios"]
     ]
-    return f"""<h1>Métricas</h1><p class="lead">Cómo viene atendiendo el agente de
+    billing_line = (
+        f"<p><b>Para el cobro:</b> {billing['cobrables']} cobrables · {billing['en_ventana']} "
+        "dentro de los 7 días (todavía pueden reabrirse) · "
+        f"{billing['con_persona']} con una persona · {billing['reabiertos']} reabiertos.</p>"
+        if technical
+        else ""
+    )
+    # Lo técnico, solo para el operador: se envuelve en un comentario que se saca después.
+    technical_start, technical_end = ("", "") if technical else ("<!--tech", "tech-->")
+    return _strip_technical(f"""<h1>Métricas</h1><p class="lead">Cómo viene atendiendo el agente de
 {esc(company)} en los últimos {days} días.</p>
 <div class="kpis">{_kpi(_pct(cases["tasa_resolucion"]), "resueltos por el agente", True)}
 {_kpi(_pct(cases["tasa_derivacion"]), "derivados a una persona")}
-{_kpi(_seconds(latency["p50_ms"]), "latencia p50 por respuesta")}
-{_kpi(_seconds(latency["p95_ms"]), "latencia p95 por respuesta")}</div>
+{
+        _kpi(_seconds(latency["p50_ms"]), "latencia p50 por respuesta")
+        + _kpi(_seconds(latency["p95_ms"]), "latencia p95 por respuesta")
+        if technical
+        else _kpi(str(cases["total"]), "casos")
+        + _kpi(_pct(rated["satisfaccion"]), "dijeron que se resolvió")
+    }</div>
 
 <h2>Resolución y derivación</h2><div class="card">
 <div class="kpis" style="margin:0">{_kpi(str(cases["total"]), "casos")}
@@ -157,9 +174,7 @@ def render(data: dict[str, Any], company: str) -> str:
 {_kpi(str(cases["reabiertos"]), "reabiertos")}</div>
 <p class="muted small">Resolución: de los casos ya resueltos, los que cerró el agente sin una
 persona. Derivación: de todos los casos, los que pasaron a una persona.</p>
-<p><b>Para el cobro:</b> {billing["cobrables"]} cobrables · {billing["en_ventana"]} dentro de los
-7 días (todavía pueden reabrirse) · {billing["con_persona"]} con una persona ·
-{billing["reabiertos"]} reabiertos.</p></div>
+{billing_line}</div>
 
 <h2>Satisfacción (CSAT)</h2><div class="card">
 <div class="kpis" style="margin:0">{_kpi(_pct(rated["satisfaccion"]), "dijeron que se resolvió")}
@@ -175,7 +190,9 @@ una persona.</p>
         )
     }</div>
 
-<h2>Latencia</h2><div class="card"><p>{latency["turnos"]} respuestas medidas. La mitad tarda
+{technical_start}<h2>Latencia</h2><div class="card"><p>{
+        latency["turnos"]
+    } respuestas medidas. La mitad tarda
 menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
 <b>{_seconds(latency["p95_ms"])}</b>.</p>
 <p class="muted small">Promedio por paso: {esc(step_row)}.
@@ -191,7 +208,7 @@ menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
 {_table(["Error", ">Veces", "Último"], error_rows, "Ninguna respuesta se cortó por un error.")}
 </div>
 
-<h2>Tokens y costo</h2><div class="card"><p>Costo por caso: promedio
+{technical_end}<h2>Tokens y costo</h2><div class="card"><p>Costo por caso: promedio
 <b>{_usd(data["costo_por_caso"]["promedio_usd"])}</b>, máximo
 <b>{_usd(data["costo_por_caso"]["maximo_usd"])}</b>.</p>
 <h3>Por día (últimos 14)</h3>
@@ -202,7 +219,7 @@ menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
             "Todavía no hay uso.",
         )
     }
-<h3>Por modelo</h3>
+{technical_start}<h3>Por modelo</h3>
 {
         _table(
             ["Modelo", "Uso", ">Llamadas", ">Tokens de entrada", ">Tokens de salida", ">Costo"],
@@ -217,9 +234,9 @@ menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
             case_rows,
             "Todavía no hay casos con uso.",
         )
-    }
+    }{technical_end}
 </div>
-
+{technical_start}
 <h2>Historial de pruebas</h2><div class="card">
 {
         _table(
@@ -229,7 +246,13 @@ menos de <b>{_seconds(latency["p50_ms"])}</b> y el 95%, menos de
         )
     }
 <p class="muted small">Cada corrida de las pruebas queda con la versión de las instrucciones y el
-modelo que respondió: así se ve si un cambio mejoró o empeoró.</p></div>"""
+modelo que respondió: así se ve si un cambio mejoró o empeoró.</p></div>{technical_end}""")
+
+
+def _strip_technical(markup: str) -> str:
+    import re
+
+    return re.sub(r"<!--tech.*?tech-->", "", markup, flags=re.S)
 
 
 def _money(currency: str, amount: Decimal) -> str:
@@ -264,7 +287,11 @@ def metrics_page(request: Request, deps: Deps) -> Response:
     with deps.connection() as conn:
         data = metrics.collect(conn, ctx.tenant_id)
         sold = attribution.totals(conn, ctx.tenant_id)
-    body = _notice(request) + render(data, ctx.session.company) + sales_html(sold, _csrf(ctx))
+    body = (
+        _notice(request)
+        + render(data, ctx.session.company, technical=ctx.session.admin)
+        + sales_html(sold, _csrf(ctx))
+    )
     return HTMLResponse(page("Métricas", body, active="insights", session=ctx.session))
 
 

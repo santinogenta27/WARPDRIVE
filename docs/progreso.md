@@ -914,10 +914,25 @@ Rama `h13-knowledge`.
 - **Tests:**
   - `test_panel_knowledge.py` (aceptación);
   - los `test_onboarding_*.py` pasan. Tres aserciones cambiaron a la forma nueva: los párrafos del PDF unidos y los del DOCX separados.
+- Mergeada en `hito-13` con el PR #56. Los 25 tests de `test_onboarding_*.py` pasan en el CI y contra staging.
 - **Cómo probarlo:**
   - `python -m pytest backend/tests/test_panel_knowledge.py backend/tests/test_onboarding_*.py`;
   - `python evals/knowledge_recall.py` (con `--simulated` sin claves);
   - en el panel, `/panel/knowledge`.
+
+### Tarea 7 — Calidad visual y de uso (decisión 089)
+
+Rama `h13-diseno`.
+
+- **Hecho:**
+  - **Un solo sistema de diseño:** tokens de color, tipografía, botones, badges, tablas, avisos y diálogos. Tema claro por defecto y oscuro por usuario. Se sacaron los colores fijos en línea.
+  - **Confirmación antes de lo peligroso**, con un diálogo propio y traducido: aprobar un reembolso, pausar el agente, borrar documentos, la memoria de un cliente o la empresa, quitar un producto, desactivar WhatsApp y volver al modo de prueba.
+  - **Estados vacíos** con explicación y botón (Inbox, Approvals, Drafts, Customers, To improve, Knowledge, Home), y **páginas de error** con salida a Home.
+  - **"Procesando"** en el botón mientras se envía un formulario.
+  - **Insights** sin lo técnico para el cliente: latencias, proveedores, trazas e historial de pruebas quedan para el operador.
+  - En Knowledge, el selector de archivos queda oculto cuando hay zona para arrastrar.
+- **Test de aceptación:** `test_panel_diseno.py`. Revisa la accesibilidad de las 22 pantallas (un `<h1>`, etiquetas, botones con texto, foco visible), las confirmaciones, los estados vacíos, el tema oscuro e Insights.
+- **Cómo probarlo:** `python -m pytest backend/tests/test_panel_diseno.py`; en el panel, "Dark theme" en el pie de la barra lateral.
 
 ## Qué significa "simulado"
 

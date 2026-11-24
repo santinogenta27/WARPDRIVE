@@ -25,7 +25,7 @@ from app.companies import first_steps, go_live
 from app.db.connection import tenant_scope
 from app.panel import english
 from app.panel.html import esc, local_time, page, toast
-from app.panel.labels import action_label, money
+from app.panel.labels import action_label, money, refund_confirm
 from app.panel.privacy import summary
 from app.panel.routes import Ctx, Deps, _pending, enter
 from app.sales import attribution
@@ -150,7 +150,8 @@ def _attention_html(
 <input type="hidden" name="csrf" value="{ctx.csrf}">
 <input type="hidden" name="volver" value="/panel/home">
 <button class="danger" name="decision" value="rechazar">Reject</button>
-<button class="primary" name="decision" value="aprobar">Approve</button></form></li>"""
+<button class="primary" name="decision" value="aprobar"
+ {refund_confirm(tool)}>Approve</button></form></li>"""
         )
     for case_id, updated, texts in escalated:
         rows.append(
@@ -213,6 +214,10 @@ def _week_html(found: Week) -> str:
 <div class="kpis week">{kpis}</div></section>"""
 
 
+PAUSE = (
+    'data-confirm="Pause your agent? Customers will be told that a person will reply." '
+    'data-confirm-ok="Pause agent"'
+)
 STATE = {
     "live": ("live", "Live", "Your agent is answering your customers."),
     "paused": (
@@ -228,7 +233,7 @@ def _status_html(ctx: Ctx, state: str, found: Channels) -> str:
     css, label, help_text = STATE[state]
     toggle = ""
     if state == "live":
-        toggle = f"""<form method="post" action="/panel/salir-en-vivo">
+        toggle = f"""<form method="post" action="/panel/salir-en-vivo" {PAUSE}>
 <input type="hidden" name="csrf" value="{ctx.csrf}"><input type="hidden" name="activo" value="no">
 <input type="hidden" name="volver" value="/panel/home">
 <button type="submit">Pause agent</button></form>"""
