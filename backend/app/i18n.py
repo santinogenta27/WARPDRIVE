@@ -64,8 +64,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         ),
         # El caso ya estaba derivado (decisión 097): no se repite la misma frase en cada mensaje.
         "escalation_waiting": (
-            "Ya le pasé tu consulta al equipo y te van a responder por este mismo chat. Sumé lo que "
-            "me escribiste para que lo vean."
+            "Ya le pasé tu consulta al equipo y te van a responder por este mismo chat. Sumé lo "
+            "que me escribiste para que lo vean."
         ),
         "refusal": (
             "Perdón, con eso no puedo ayudarte. Sí puedo darte una mano con tus propios pedidos o "
