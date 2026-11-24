@@ -12,7 +12,7 @@ Agent y las acciones de la tienda se prueban sobre Acme. Knowledge, dominios, Ch
 pausa, sobre una empresa nueva (no de demo).
 
 Resultado: **22 de 22 opciones pasan** después de un arreglo (la pausa, decisión 090). La muestra
-con el modelo real está al final.
+con el modelo real, al final, encontró tres fallas más, que también se arreglaron.
 
 ## Agent
 
@@ -66,5 +66,21 @@ La conexión de una tienda real de Shopify sigue pendiente de credenciales (ver
 
 ## Muestra con el modelo real
 
-Ver la sección siguiente, que se completa al correr la muestra con Groq y Gemini (sin modelos
-pagos).
+`python evals/qa_config_real.py`: gpt-oss-20b en Groq con Gemini de respaldo (sin Claude) y
+embeddings de Gemini, en una transacción revertida de staging. La primera corrida encontró tres
+fallas que el modelo simulado no ve. Las tres se arreglaron, y la última corrida da **9/9**.
+
+| Opción | Qué se cambió | Qué se esperaba | Qué pasó (última corrida) | Resultado |
+|---|---|---|---|---|
+| Idioma | Español → inglés | Responde en inglés | "The Acme Store branches are open Monday to Saturday from 10 a.m. to 8 p.m.…". **Antes del arreglo derivaba:** el control de fundamento no aceptaba "8 p.m." contra "20 hs" ni "24/7" (decisión 093) | ✅ |
+| Idioma | Inglés → español | Responde en español | "Los domingos y feriados las sucursales permanecen cerradas…" | ✅ |
+| Trato | Usted | Sin voseo ni tuteo | En 2 de 3 corridas, "Su pedido 1001 se encuentra en estado despachado… quedo a su disposición". En 1, mezcló "tené" y el supervisor lo derivó (riesgo anotado) | ✅ con riesgo |
+| Trato | De vuelta a vos | Voseo | "…Si tenés alguna otra duda, avisame." | ✅ |
+| Firma | — Equipo Acme | Termina con la firma | Termina con "— Equipo Acme" | ✅ |
+| Regla de monto | Reembolso hasta 1000; pedido de 35.000 | Ni reembolsa ni lo promete | El guardián lo niega. **Antes del arreglo** el modelo decía "El reembolso está en revisión por nuestro equipo" (decisión 091); ahora el control lo frena y deriva | ✅ |
+| Documento subido | Empresa nueva con su política de envíos | Responde con el documento | "El envío a Ushuaia tarda 18 días hábiles desde la compra." **Antes del arreglo derivaba:** el supervisor pedía citar la fuente en el texto (decisión 092) | ✅ |
+| Documento borrado | Se borra desde Knowledge | Ya no lo usa | "Como no tengo información específica sobre los tiempos de envío a Ushuaia…, ¿querés que derive tu consulta?" | ✅ |
+| Agente pausado | Pausa desde Deploy | Deriva sin llamar al modelo | "Te paso con una persona del equipo…", con 0 llamadas al modelo | ✅ |
+
+El detalle de cada corrida, con la traza de auditoría de cada caso, queda en
+`evals/last_qa_config_real.json`.
