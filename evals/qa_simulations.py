@@ -82,7 +82,7 @@ def main() -> int:
             turns, evidence, error = sim._converse(
                 conn, tenant, stack.llm, factory, runtime, company, persona, args.max_turns
             )
-            if error == "QuotaExhausted":
+            if error.endswith("QuotaExhausted"):  # también GeminiQuotaExhausted
                 raise QuotaExhausted("cuota agotada durante la conversación", daily=True)
             verdict = (
                 {**{k: False for k in sim.JUDGE_KEYS}, "motivo": f"La conversación falló: {error}."}

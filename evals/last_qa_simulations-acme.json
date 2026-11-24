@@ -1,0 +1,534 @@
+{
+  "resumen": {
+    "clientes": 10,
+    "corridas": 10,
+    "pass3": 0.9,
+    "pass1": 0.9,
+    "tipos": [
+      {
+        "tipo": "cambiar_direccion",
+        "clientes": 2,
+        "pass3": 1.0,
+        "pass1": 1.0
+      },
+      {
+        "tipo": "cambio_por_talle",
+        "clientes": 2,
+        "pass3": 1.0,
+        "pass1": 1.0
+      },
+      {
+        "tipo": "cancelar_pedido",
+        "clientes": 1,
+        "pass3": 1.0,
+        "pass1": 1.0
+      },
+      {
+        "tipo": "donde_esta_mi_pedido",
+        "clientes": 1,
+        "pass3": 1.0,
+        "pass1": 1.0
+      },
+      {
+        "tipo": "facturacion",
+        "clientes": 1,
+        "pass3": 0.0,
+        "pass1": 0.0
+      },
+      {
+        "tipo": "horarios_y_sucursales",
+        "clientes": 1,
+        "pass3": 1.0,
+        "pass1": 1.0
+      },
+      {
+        "tipo": "medios_de_pago_y_cuotas",
+        "clientes": 1,
+        "pass3": 1.0,
+        "pass1": 1.0
+      },
+      {
+        "tipo": "reembolso",
+        "clientes": 1,
+        "pass3": 1.0,
+        "pass1": 1.0
+      }
+    ]
+  },
+  "personas": [
+    {
+      "tipo_de_caso": "cambiar_direccion",
+      "idioma": "es",
+      "tono": "enojado",
+      "objetivo": "Actualizar la dirección de envío de un pedido no despachado",
+      "primer_mensaje": "Hola, necesito ayuda: actualizar la dirección de envío de un pedido no despachado.",
+      "id": "c1"
+    },
+    {
+      "tipo_de_caso": "cambio_por_talle",
+      "idioma": "es",
+      "tono": "confundido",
+      "objetivo": "Explicar cómo cambiar un producto por otro talle",
+      "primer_mensaje": "Hola, necesito ayuda: explicar cómo cambiar un producto por otro talle.",
+      "id": "c2"
+    },
+    {
+      "tipo_de_caso": "cancelar_pedido",
+      "idioma": "es",
+      "tono": "apurado",
+      "objetivo": "Cancelar un pedido del cliente antes de que sea despachado",
+      "primer_mensaje": "Hola, necesito ayuda: cancelar un pedido del cliente antes de que sea despachado.",
+      "id": "c3"
+    },
+    {
+      "tipo_de_caso": "donde_esta_mi_pedido",
+      "idioma": "es",
+      "tono": "enojado",
+      "objetivo": "Informar el estado y la fecha estimada de entrega de un pedido del cliente",
+      "primer_mensaje": "Hola, necesito ayuda: informar el estado y la fecha estimada de entrega de un pedido del cliente.",
+      "id": "c4"
+    },
+    {
+      "tipo_de_caso": "facturacion",
+      "idioma": "es",
+      "tono": "confundido",
+      "objetivo": "Explicar tipos de factura, cómo pedirla y cómo corregirla",
+      "primer_mensaje": "Hola, necesito ayuda: explicar tipos de factura, cómo pedirla y cómo corregirla.",
+      "id": "c5"
+    },
+    {
+      "tipo_de_caso": "horarios_y_sucursales",
+      "idioma": "es",
+      "tono": "apurado",
+      "objetivo": "Informar direcciones y horarios de las sucursales",
+      "primer_mensaje": "Hola, necesito ayuda: informar direcciones y horarios de las sucursales.",
+      "id": "c6"
+    },
+    {
+      "tipo_de_caso": "medios_de_pago_y_cuotas",
+      "idioma": "es",
+      "tono": "enojado",
+      "objetivo": "Informar medios de pago, cuotas y promociones vigentes",
+      "primer_mensaje": "Hola, necesito ayuda: informar medios de pago, cuotas y promociones vigentes.",
+      "id": "c7"
+    },
+    {
+      "tipo_de_caso": "reembolso",
+      "idioma": "es",
+      "tono": "confundido",
+      "objetivo": "Iniciar el reembolso de un pedido entregado",
+      "primer_mensaje": "Hola, necesito ayuda: iniciar el reembolso de un pedido entregado.",
+      "id": "c8"
+    },
+    {
+      "tipo_de_caso": "cambiar_direccion",
+      "idioma": "es",
+      "tono": "apurado",
+      "objetivo": "Actualizar la dirección de envío de un pedido no despachado",
+      "primer_mensaje": "Hola, necesito ayuda: actualizar la dirección de envío de un pedido no despachado.",
+      "id": "c9"
+    },
+    {
+      "tipo_de_caso": "cambio_por_talle",
+      "idioma": "es",
+      "tono": "enojado",
+      "objetivo": "Explicar cómo cambiar un producto por otro talle",
+      "primer_mensaje": "Hola, necesito ayuda: explicar cómo cambiar un producto por otro talle.",
+      "id": "c10"
+    }
+  ],
+  "conversaciones": [
+    {
+      "cliente": "c1",
+      "tipo": "cambiar_direccion",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: actualizar la dirección de envío de un pedido no despachado."
+        },
+        {
+          "rol": "agente",
+          "texto": "¡Hola! Qué bueno saludarte. Para poder cambiar la dirección de envío, ¿me pasás el número de pedido y la nueva dirección completa (calle, número y ciudad)?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "¡El número de pedido es 12345 y la nueva dirección es Av. Corrientes 1234, CABA! ¡Más vale que lo cambien rápido porque ya me pasó esto antes y llegó a cualquier lado!"
+        },
+        {
+          "rol": "agente",
+          "texto": "Entiendo perfectamente tu enojo y lamento los inconvenientes previos. Ya actualizamos la dirección de envío de tu pedido 12345 a Av. Corrientes 1234, CABA. Como el pedido está pago, lo vamos a despachar dentro de las 48 horas hábiles y te enviaremos el número de seguimiento por email con la fecha estimada de entrega.",
+          "accion": "ejecutar"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El agente cumplió con todas las reglas, validó que el pedido no estuviera despachado usando las herramientas correspondientes, actualizó la dirección y utilizó el tono de voz adecuado con voseo rioplatense."
+      },
+      "paso": true
+    },
+    {
+      "cliente": "c2",
+      "tipo": "cambio_por_talle",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: explicar cómo cambiar un producto por otro talle."
+        },
+        {
+          "rol": "agente",
+          "texto": "¡Hola! Podés cambiar un producto por otro talle o color dentro de los *30 días corridos* desde que lo recibiste. Recordá que el producto tiene que estar sin uso, con las etiquetas originales y en su bolsa o caja.\n\nEl primer cambio es *gratis*: podés hacerlo en cualquier sucursal o pedir que lo retiremos por tu domicilio. Los cambios siguientes tienen el costo de un envío. Si el talle que buscás no tiene stock, te damos una nota de crédito por el valor del producto, válida por 6 meses.\n\n¿Te puedo ayudar con algo más para iniciar tu cambio?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Ah, entiendo. ¿Y cómo hago exactamente para pedir que lo pasen a retirar por mi casa?"
+        },
+        {
+          "rol": "agente",
+          "texto": "Para pedir que retiremos el producto por tu domicilio, escribinos por este medio con los datos de tu pedido y coordinamos el retiro. Recordá que tenés un plazo de *30 días corridos* desde que lo recibiste y que el producto debe estar sin uso, con sus etiquetas y en su bolsa o caja original.",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Ah, buenísimo. El número de pedido es el #12345 y quiero cambiar una remera que me quedó chica por un talle más. ¿Me dicen qué día pasan?"
+        },
+        {
+          "rol": "agente",
+          "texto": "¡Hola! Pasanos por favor una franja horaria o el día que te quede bien para que coordinemos el retiro por tu domicilio. Recordá que el producto tiene que estar sin uso, con sus etiquetas originales y en su bolsa o caja. ¿Te podemos ayudar con algo más?",
+          "accion": "responder"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El asistente cumplió con el objetivo de explicar el cambio por talle, respetó las reglas y la política de cambios, utilizó correctamente el tono rioplatense con voseo y no inventó información."
+      },
+      "paso": true
+    },
+    {
+      "cliente": "c3",
+      "tipo": "cancelar_pedido",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: cancelar un pedido del cliente antes de que sea despachado."
+        },
+        {
+          "rol": "agente",
+          "texto": "Hola! ¿Me pasás el número de pedido que querés cancelar? Así lo reviso.",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Sí, es el #45892, por favor apurate que no quiero que lo manden."
+        },
+        {
+          "rol": "agente",
+          "texto": "Listo, ya cancelamos tu pedido #45892 antes de que sea despachado. El dinero se va a reintegrar por el mismo medio de pago según los plazos habituales.",
+          "accion": "ejecutar"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El asistente cumplió con el objetivo de cancelar el pedido antes de ser despachado, utilizó las herramientas correspondientes, respetó el tono de español rioplatense con voseo y siguió todas las reglas establecidas."
+      },
+      "paso": true
+    },
+    {
+      "cliente": "c4",
+      "tipo": "donde_esta_mi_pedido",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: informar el estado y la fecha estimada de entrega de un pedido del cliente."
+        },
+        {
+          "rol": "agente",
+          "texto": "¡Hola! Para poder ayudarte con el estado y la fecha estimada de entrega, ¿me pasás el número de pedido?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "¡¿Cómo que no sabés?! El número es #45892. ¡Exijo saber dónde está mi paquete, ya pasó una semana y nadie me dice nada!"
+        },
+        {
+          "rol": "agente",
+          "texto": "Entiendo tu molestia por la demora. Revisé tu pedido 45892 y figura en estado *pagado*. Los pedidos se despachan dentro de las 48 horas hábiles, y una vez despachados te enviamos el número de seguimiento y la fecha estimada de entrega por email. ¡Ya falta poco para que salga!",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "¡¿Cómo que \"ya falta poco\"?! ¡Eso no me dice nada! ¡Exijo una fecha exacta de entrega ahora mismo o cancelo la compra!"
+        },
+        {
+          "rol": "agente",
+          "texto": "Lamento la frustración con la demora. El pedido 45892 sigue en estado *pagado* y todavía no fue despachado, por lo que el sistema no genera una fecha exacta de entrega hasta que el correo lo recibe y se emite el seguimiento. Despachamos dentro de las 48 horas hábiles de acreditado el pago, y a partir de ahí demora de 3 a 7 días hábiles según la provincia. Como todavía no fue despachado, si preferís podés cancelar la compra directamente. ¿Querés que avancemos con eso?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "¡No quiero cancelar, quiero que me manden el maldito pedido de una vez! ¡Es una falta de respeto!"
+        },
+        {
+          "rol": "agente",
+          "texto": "Comprendo perfectamente tu enojo por la demora en el envío. El pedido 45892 sigue en estado pagado y estamos trabajando para despacharlo dentro de las 48 horas hábiles correspondientes. En cuanto el correo lo retire, te vamos a mandar por email el número de seguimiento y la fecha estimada de entrega. ¡Quedate atent@ que sale enseguida!",
+          "accion": "responder"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El asistente cumplió con el objetivo de informar el estado del pedido, utilizó la herramienta correctamente, mantuvo el tono rioplatense con voseo de manera consistente y manejó la situación de enojo del cliente con empatía y claridad según las reglas."
+      },
+      "paso": true
+    },
+    {
+      "cliente": "c5",
+      "tipo": "facturacion",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: explicar tipos de factura, cómo pedirla y cómo corregirla."
+        },
+        {
+          "rol": "agente",
+          "texto": "Te paso con una persona del equipo, que te va a responder por este mismo chat.",
+          "accion": "derivar"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Hola, ¿hay alguien ahí? Me pasaron para acá pero sigo sin entender qué tipos de factura hay, ni cómo pedir una o arreglarla si me equivoqué..."
+        },
+        {
+          "rol": "agente",
+          "texto": "Te paso con una persona del equipo, que te va a responder por este mismo chat.",
+          "accion": "derivar"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Bueno, sigo esperando y nadie me explica nada... Sigo con la misma duda sobre las facturas, por favor ayúdenme."
+        },
+        {
+          "rol": "agente",
+          "texto": "Te paso con una persona del equipo, que te va a responder por este mismo chat.",
+          "accion": "derivar"
+        },
+        {
+          "rol": "cliente",
+          "texto": "¿Hola? ¿Otra vez me pasa con el bot o hay alguien que me pueda explicar de una vez lo de los tipos de factura, cómo pedirla y cómo corregirla si me confundí?"
+        },
+        {
+          "rol": "agente",
+          "texto": "Te paso con una persona del equipo, que te va a responder por este mismo chat.",
+          "accion": "derivar"
+        }
+      ],
+      "juez": {
+        "objetivo": false,
+        "reglas_y_marca": false,
+        "correcta": false,
+        "motivo": "El agente no cumplió con el objetivo de explicar la política de facturación ni aplicó el cierre correspondiente, limitándose a repetir un mensaje de derivación en bucle. Tampoco usó el tono requerido."
+      },
+      "paso": false
+    },
+    {
+      "cliente": "c6",
+      "tipo": "horarios_y_sucursales",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: informar direcciones y horarios de las sucursales."
+        },
+        {
+          "rol": "agente",
+          "texto": "Tenemos tres sucursales físicas para que nos visites o retires tus compras:\n\n- *Palermo*: Av. Santa Fe 3200, Ciudad de Buenos Aires.\n- *Rosario*: Córdoba 1500, Rosario, Santa Fe.\n- *Córdoba*: Av. Colón 800, Córdoba capital.\n\nEl horario de atención en todas las sucursales es de lunes a sábado de 10 a 20 horas (los domingos y feriados permanecen cerradas).\n\n¿Te podemos ayudar con otra consulta?",
+          "accion": "responder"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El asistente cumplió con el objetivo de informar direcciones y horarios, siguió las reglas y cerró ofreciendo ayuda. Además, utilizó el tono adecuado en español rioplatense (voseo)."
+      },
+      "paso": true
+    },
+    {
+      "cliente": "c7",
+      "tipo": "medios_de_pago_y_cuotas",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: informar medios de pago, cuotas y promociones vigentes."
+        },
+        {
+          "rol": "agente",
+          "texto": "¡Hola! En Acme Store aceptamos tarjetas de crédito y débito de todos los bancos, transferencia bancaria y billeteras virtuales. \n\nOfrecemos 3 y 6 cuotas sin interés con tarjetas de crédito bancarias, y 12 cuotas con interés con cualquier tarjeta de crédito. Además, pagando por transferencia bancaria tenés un 10% de descuento sobre el total de la compra (este descuento no se combina con las cuotas sin interés).\n\n¿Te podemos ayudar con otra consulta?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "¡Ya me dijiste eso, pero quiero saber si hay alguna promo con Galicia y si el descuento por transferencia aplica a todo! ¡Quiero respuestas claras!"
+        },
+        {
+          "rol": "agente",
+          "texto": "Entiendo tu molestia. Sobre tus consultas, aceptamos tarjetas de todos los bancos, pero no tenemos promociones específicas con bancos particulares nombradas en nuestros registros; podés pagar en 3 y 6 cuotas sin interés si es tarjeta de crédito bancaria. \n\nY respecto al descuento por transferencia bancaria, es del 10% sobre el total de la compra, aunque tené en cuenta que no se combina con las cuotas sin interés. \n\n¿Te podemos ayudar con otra consulta?",
+          "accion": "responder"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El asistente logró el objetivo de informar los medios de pago, cuotas y promociones, respondió correctamente a la pregunta específica sobre el banco Galicia aplicando la regla de qué hacer si no se nombra un medio puntual, respetó el tono rioplatense con voseo y cumplió con el cierre adecuado."
+      },
+      "paso": true
+    },
+    {
+      "cliente": "c8",
+      "tipo": "reembolso",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: iniciar el reembolso de un pedido entregado."
+        },
+        {
+          "rol": "agente",
+          "texto": "Hola. ¿Me pasás el número de pedido para que pueda iniciar el reembolso?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Ay, no sé dónde quedó el número de pedido... ¿Lo puedo buscar en mi correo o dónde está?"
+        },
+        {
+          "rol": "agente",
+          "texto": "El número de pedido figura en el email de confirmación de compra y empieza con 1 seguido de tres dígitos, por ejemplo 1001. ¿Te fijás si lo encontrás ahí?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Ah, creo que ya lo vi... es el 1425. ¿Es ese?"
+        },
+        {
+          "rol": "agente",
+          "texto": "El pedido 1425 figura como pagado, por lo que todavía no fue despachado ni entregado. Según nuestras políticas, los reembolsos se pueden iniciar una vez que el pedido fue entregado. Si querés, podés esperar a que llegue para solicitarlo o te puedo derivar con una persona del equipo para que lo revise. ¿Qué preferís?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Ay, qué tonta, me confundí de número. El pedido que ya me llegó es el 1234, ¿con ese sí se puede hacer el reembolso?"
+        },
+        {
+          "rol": "agente",
+          "texto": "El pedido 1234 figura como pagado, por lo que todavía no fue entregado. Según nuestras políticas, los reembolsos se pueden pedir una vez que el pedido fue entregado. Si querés, podés esperar a que llegue para solicitarlo, o te puedo derivar con una persona del equipo para que lo revise. ¿Qué preferís?",
+          "accion": "responder"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El agente consultó el pedido 1234, verificó que no estaba entregado según los datos de la herramienta (status 'paid', sin fecha de envío), aplicó correctamente la política de explicar que no se puede y ofrecer derivación, y mantuvo el tono voseante de español rioplatense."
+      },
+      "paso": true
+    },
+    {
+      "cliente": "c9",
+      "tipo": "cambiar_direccion",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: actualizar la dirección de envío de un pedido no despachado."
+        },
+        {
+          "rol": "agente",
+          "texto": "¡Hola! Con gusto te ayudamos con eso. ¿Me pasás el número de pedido y la nueva dirección (calle, número y ciudad)?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Sí, es el pedido #45892. La nueva dirección es Av. Corrientes 1234, CABA. ¡Apúrense por favor que no quiero que salga a la vieja dirección!"
+        },
+        {
+          "rol": "agente",
+          "texto": "¡Hola! Entiendo tu preocupación, quédate tranquila que ya actualizamos la dirección de tu pedido *#45892* a *Av. Corrientes 1234, CABA*. Los pedidos se despachan dentro de las 48 horas hábiles y para CABA la entrega suele tardar entre 2 y 4 días hábiles desde el despacho. ¡Cualquier otra duda nos consultás!",
+          "accion": "ejecutar"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El agente cumplió con todos los requisitos: pidió los datos necesarios, consultó el pedido (no despachado), lo actualizó correctamente utilizando las herramientas, confirmó la nueva dirección y la fecha estimada (plazos) según las reglas, y mantuvo el tono rioplatense con voseo esperado."
+      },
+      "paso": true
+    },
+    {
+      "cliente": "c10",
+      "tipo": "cambio_por_talle",
+      "corrida": 1,
+      "turnos": [
+        {
+          "rol": "cliente",
+          "texto": "Hola, necesito ayuda: explicar cómo cambiar un producto por otro talle."
+        },
+        {
+          "rol": "agente",
+          "texto": "¡Hola! Podés cambiar un producto por otro talle o color dentro de los 30 días corridos desde que lo recibiste. El producto tiene que estar sin uso, con las etiquetas originales y en su bolsa o caja.\n\nEl primer cambio es gratis: podés hacerlo en cualquier sucursal o pedir que lo retiremos por tu domicilio. Los cambios siguientes tienen el costo de un envío. Si el talle que buscás no tiene stock, te damos una nota de crédito por el valor del producto, válida por 6 meses.\n\n¿Tenés algún número de pedido o producto en mente para que te ayudemos a iniciarlo?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "¡Al fin alguien me explica cómo es el trámite! Pero me da bronca tener que hacer todo esto por un error de ustedes. El número de pedido es el #45892."
+        },
+        {
+          "rol": "agente",
+          "texto": "Entiendo que te dé bronca tener que hacer el cambio por un inconveniente con el talle. \n\nPara avanzar, recordá que tenés *30 días corridos* desde que recibiste el pedido para hacer el cambio, y el producto tiene que estar *sin uso, con las etiquetas originales y en su bolsa o caja*. El primer cambio es gratis y podés hacerlo en cualquier sucursal o pedir que lo retiremos por tu domicilio. \n\n¿Querés que te ayude a coordinar el retiro por tu domicilio o preferís acercarte a una sucursal?",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Prefiero que lo pasen a retirar por mi casa porque no tengo tiempo de ir a una sucursal, ¿cómo hago eso?"
+        },
+        {
+          "rol": "agente",
+          "texto": "Entendido, vamos a coordinar el retiro por tu domicilio. Recordá que tenés 30 días corridos desde que recibiste el producto y este tiene que estar sin uso, con las etiquetas originales y en su bolsa o caja.\n\nEl primer cambio es gratis. Indicame por favor en qué dirección querés que pasemos a retirarlo para poder avanzar con la solicitud.",
+          "accion": "responder"
+        },
+        {
+          "rol": "cliente",
+          "texto": "Anotá: Corrientes 1450, departamento 4B. Y espero que esta vez no se equivoquen con el horario."
+        },
+        {
+          "rol": "agente",
+          "texto": "Te paso con una persona del equipo, que te va a responder por este mismo chat.",
+          "accion": "derivar"
+        }
+      ],
+      "juez": {
+        "objetivo": true,
+        "reglas_y_marca": true,
+        "correcta": true,
+        "motivo": "El asistente cumplió con el objetivo de explicar cómo cambiar un producto por talle, respetó las reglas, el tono de voz (voseo rioplatense) y derivó correctamente al equipo humano cuando el cliente brindó los datos de la dirección para coordinar el retiro."
+      },
+      "paso": true
+    }
+  ]
+}
