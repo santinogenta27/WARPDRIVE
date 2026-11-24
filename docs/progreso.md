@@ -988,6 +988,57 @@ Sobre `hito-13` y la base `DATABASE_URL_STAGING`. Cada arreglo, en su rama y su 
   frena y, si insiste, deriva. Pasó en 1 de 3 corridas.
 - Modelo real usado: unas 160 llamadas a Groq (4 corridas de la muestra) y embeddings de Gemini.
 
+### Etapa 2 — Cliente nuevo de punta a punta (hecha)
+
+- Contra `hito-13` levantado con uvicorn y staging (decisión 094): `evals/qa_e2e.py` y el navegador
+  `evals/qa_e2e_browser.py`. **27/27**: registro y email, Knowledge con PDF, DOCX y CSV de la tienda
+  inventada (`evals/fixtures/brightside/`), Agent, la tienda con la API simulada de Northwind, el
+  widget en una página HTML de prueba, política con fuente, pedido verificado, cupón del 25 % negado,
+  reembolso aprobado desde Inbox, derivación con el asistente del equipo, venta con link, y todo en
+  Home, Inbox, Customers e Insights.
+- Contra Render (`main`): `evals/qa_render.py`, **5/5**. La confirmación del email en Render necesita
+  una casilla real.
+- Arreglos: el asistente se presenta una sola vez (095, #65), y los emails del registro y de las
+  invitaciones salen en el idioma del panel (096, #66).
+
+### Etapa 3 — Calidad con el modelo real gratuito (a medias: se agotó la cuota del día)
+
+- Simulaciones (`evals/qa_simulations.py`): **Acme 9/10 (90 %)**. Northwind: 6 de 10 hechas, 4 pasaron
+  (cambio de dirección: no confirmó la fecha, que el sandbox devolvía vacía; shopping: derivó en vez
+  de decir que no tenía el producto).
+- Evals (`evals/runner.py --fallback`): la primera corrida se cortó porque el juez de Groq no tiene
+  equivalente en Gemini (arreglado en #70). No se pudieron volver a correr: el 24/11 se agotaron la
+  cuota diaria de Groq (gpt-oss-20b) y la de Gemini.
+- Arreglos: un caso ya derivado no repite la misma frase (097, #69), y sin ningún modelo disponible el
+  caso se deriva en lugar de perder el mensaje (098, #71).
+
+**Para retomar mañana** (PowerShell, desde la raíz del repo; el avance queda en `evals/.cache/`):
+
+```
+$env:DATABASE_URL = (Select-String -Path .env -Pattern '^DATABASE_URL_STAGING=(.*)$').Matches[0].Groups[1].Value
+$env:ANTHROPIC_API_KEY = ''; $env:VOYAGE_API_KEY = ''; $env:LLM_PROVIDER = 'groq'
+$env:PYTHONPATH = 'backend;evals;mocks/acme-api;mocks/northwind-api'
+.venv\Scripts\python evals/qa_simulations.py --company northwind --size 10
+.venv\Scripts\python evals/runner.py --real --fallback --no-cache --company acme --report evals/last_qa_evals-acme.json
+.venv\Scripts\python evals/runner.py --real --fallback --no-cache --company northwind --report evals/last_qa_evals-northwind.json
+```
+
+Cada comando sigue desde donde quedó. Si vuelve a agotarse la cuota, corta con código 2 y el mismo
+comando retoma al día siguiente.
+
+### Etapa 4 — Aislamiento y seguridad (hecha)
+
+- `backend/tests/test_qa_seguridad.py`, **11/11**: dos empresas no se ven en el chat ni en el panel,
+  el cliente no entra al panel, el dueño no entra a la zona del operador, sin verificar no hay datos
+  y la manipulación en el chat y en un PDF subido no cambia nada.
+- `evals/qa_seguridad_real.py`, **7/7** con el modelo real: el PDF malicioso, falso gerente, datos de
+  otro email y pedir el prompt.
+
+### Etapa 5 — Informe (hecho)
+
+`docs/listo-para-vender.md`: qué funciona, las 9 fallas arregladas, lo pendiente con su riesgo y lo
+que tenés que hacer antes del primer cliente.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
