@@ -225,7 +225,8 @@ def _store_body(ctx: Ctx, found: system.SystemConnection | None, mode: str) -> s
     diagnosis = _diagnosis_html(deploy.explain(found.last_test, platform))
     if found.status == "active":
         state = "Your agent uses your real store."
-        toggle = f"""<form method="post" action="/panel/configuracion/sistema/desactivar">
+        toggle = f"""<form method="post" action="/panel/configuracion/sistema/desactivar"
+ data-confirm="Go back to test mode? Your agent stops using your real store.">
 {_csrf(ctx)}<button type="submit">Back to test mode</button></form>"""
     else:
         state = (

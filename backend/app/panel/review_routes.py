@@ -133,7 +133,9 @@ coma)</label><input id="palabras-{i.id}" name="palabras" maxlength="300">
 <p><button class="primary" type="submit">Convertir en caso de prueba</button></p></form></div>"""
             for i in items
         )
-        or '<div class="card empty">No hay respuestas marcadas como incorrectas.</div>'
+        or '<div class="card empty"><b>No hay respuestas marcadas como incorrectas.</b>In a '
+        "conversation, mark an answer as incorrect and write the right one: it shows up here "
+        'and becomes a test.<br><a class="btn" href="/panel/inbox">Open Inbox</a></div>'
     )
     body = f"""{toast(request.query_params.get("aviso"))}<h1>Para mejorar</h1>
 <p class="lead">Las respuestas que el equipo marcó como incorrectas. Escribí la respuesta esperada

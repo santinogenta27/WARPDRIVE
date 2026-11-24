@@ -18,6 +18,7 @@ from app.companies.create import chat_slug
 from app.demo import behind
 from app.demo.behind_routes import _session_tenant, render
 from app.panel import english
+from app.panel.home_routes import PAUSE
 from app.panel.html import esc
 from app.panel.routes import Ctx, Deps, Form, enter
 
@@ -65,8 +66,8 @@ def readiness_html(ctx: Ctx, found: go_live.Readiness) -> str:
     if found.live:
         state = "En vivo: el agente atiende en tu sitio." if not en else "Live on your site."
         button = (
-            f'<form method="post" action="/panel/salir-en-vivo"><input type="hidden" name="csrf"'
-            f' value="{ctx.csrf}"><input type="hidden" name="activo" value="no">'
+            f'<form method="post" action="/panel/salir-en-vivo" {PAUSE}><input type="hidden"'
+            f' name="csrf" value="{ctx.csrf}"><input type="hidden" name="activo" value="no">'
             f'<button type="submit">{"Pause" if en else "Pausar"}</button></form>'
         )
     else:

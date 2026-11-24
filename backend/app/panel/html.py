@@ -188,6 +188,16 @@ details>summary{cursor:pointer}
 .empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:4px}
 .empty .btn,.empty .button{margin-top:12px}
 form.sending button{opacity:.6;cursor:wait}
+form.sending button[type=submit]::after,form.sending button:not([type])::after{content:"";
+width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;
+border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){form.sending button::after{animation:none}}
+dialog{border:1px solid var(--line);border-radius:12px;padding:20px;max-width:min(440px,
+calc(100vw - 32px));background:var(--surface);color:var(--ink);box-shadow:var(--shadow-lg)}
+dialog::backdrop{background:rgba(10,12,16,.45)}
+.dstep .body .card{border:0;padding:0;margin:0 0 8px;box-shadow:none;background:none}
+.dstep .body .card h3:first-child{display:none}
 .toast{position:fixed;top:16px;left:50%;z-index:40;transform:translateX(-50%);
 max-width:calc(100vw - 32px);padding:10px 16px;border-radius:10px;background:var(--ink);
 color:var(--surface);font-weight:600;box-shadow:var(--shadow-lg);
@@ -465,8 +475,8 @@ def page(
 <div class="content"><header class="topbar"><button type="button" id="menu-btn"
  aria-controls="side" aria-expanded="false" aria-label="Open menu">{icon("menu")}</button>
 <b>{esc(name)}</b></header>
-<main id="main">{_tabs(active)}{body}</main></div></div>
-<script>{NO_DOUBLE_SUBMIT}{MENU_JS}</script></body></html>"""
+<main id="main">{_tabs(active)}{body}</main></div></div>{CONFIRM_DIALOG}
+<script>{CONFIRM_JS}{NO_DOUBLE_SUBMIT}{MENU_JS}</script></body></html>"""
     else:
         markup = f"""{head}<body><main id="main" class="auth-main">{body}</main>
 <script>{NO_DOUBLE_SUBMIT}</script></body></html>"""
@@ -489,11 +499,35 @@ def auth_card(body: str) -> str:
 <div class="card">{body}</div></div>"""
 
 
+# Acciones peligrosas (borrar, pausar, aprobar un reembolso): antes de enviar, un diálogo propio
+# con el texto de `data-confirm` (en el formulario o en el botón). Cancelar no envía nada.
+CONFIRM_DIALOG = """<dialog id="confirm" aria-labelledby="confirm-text">
+<p id="confirm-text" style="margin:0 0 16px;font-weight:600"></p>
+<div class="row" style="justify-content:flex-end"><button type="button" id="confirm-no">Cancel
+</button><button type="button" class="danger solid" id="confirm-yes">Confirm</button></div>
+</dialog>"""
+
+CONFIRM_JS = (
+    "(function(){var d=document.getElementById('confirm');if(!d||!d.showModal)return;"
+    "var pending=null,yes=document.getElementById('confirm-yes'),ok=yes.textContent;"
+    "document.addEventListener('submit',function(e){var f=e.target,"
+    "s=e.submitter,msg=(s&&s.dataset.confirm)||f.dataset.confirm;if(!msg||f.dataset.ok)return;"
+    "e.preventDefault();e.stopImmediatePropagation();pending={f:f,s:s};"
+    "document.getElementById('confirm-text').textContent=msg;"
+    "yes.textContent=(s&&s.dataset.confirmOk)||f.dataset.confirmOk||ok;"
+    "d.showModal();document.getElementById('confirm-no').focus()"
+    "},true);document.getElementById('confirm-no').addEventListener('click',function(){d.close()});"
+    "document.getElementById('confirm-yes').addEventListener('click',function(){d.close();"
+    "if(!pending)return;pending.f.dataset.ok='1';if(pending.f.requestSubmit)"
+    "pending.f.requestSubmit(pending.s||undefined);else pending.f.submit()})})();"
+)
+
 # Doble clic en Enviar o Aprobar: el segundo envío del mismo formulario no sale (el servidor
-# además descarta un envío repetido).
+# además descarta un envío repetido). Mientras se procesa, el formulario queda "ocupado".
 NO_DOUBLE_SUBMIT = (
     'document.addEventListener("submit",function(e){var f=e.target;'
-    'if(f.dataset.sent){e.preventDefault();return}f.dataset.sent="1";f.classList.add("sending")});'
+    'if(f.dataset.sent){e.preventDefault();return}f.dataset.sent="1";f.classList.add("sending");'
+    'f.setAttribute("aria-busy","true")});'
 )
 
 

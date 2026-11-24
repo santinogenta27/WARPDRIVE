@@ -120,6 +120,19 @@ def tool_label(name: str | None) -> str:
     return type_label(name)
 
 
+REFUND_TOOLS = {"iniciar_reembolso", "reembolsar", "refund"}
+
+
+def refund_confirm(tool: str) -> str:
+    """Los atributos del botón Aprobar de un reembolso: pide confirmación (decisión 089)."""
+    if tool not in REFUND_TOOLS and "reembols" not in tool and "refund" not in tool:
+        return ""
+    return (
+        "data-confirm=\"Approve this refund? The money goes back to the customer and it can't "
+        'be undone." data-confirm-ok="Approve refund"'
+    )
+
+
 def action_label(tool: str | None, params: dict[str, Any] | None) -> str:
     """Una acción en palabras: `Reembolso · Pedido 1005 · $35.000`. Texto sin escapar."""
     parts = [tool_label(tool)]

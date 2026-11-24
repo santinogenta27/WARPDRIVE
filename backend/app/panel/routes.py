@@ -44,7 +44,7 @@ from app.panel.html import (
     status_badge,
     toast,
 )
-from app.panel.labels import action_label, money, type_label
+from app.panel.labels import action_label, money, refund_confirm, type_label
 from app.panel.notify import notify_customer
 from app.panel.privacy import mask_codes, summary
 from app.policy.approvals import ApprovalError, ApprovalOutcome, decide
@@ -189,13 +189,20 @@ def _to_login() -> RedirectResponse:
 
 
 def _forbidden(message: str = "El formulario venció. Volvé a cargar la página.") -> HTMLResponse:
-    body = f'<div class="card empty">{esc(message)}</div>'
+    body = (
+        f'<div class="card empty" role="alert"><b>{esc(message)}</b>'
+        '<a class="btn" href="/panel/home">Go to Home</a></div>'
+    )
     return HTMLResponse(page("Sin permiso", body), status_code=403)
 
 
 def _not_found(what: str, session: auth.Session) -> HTMLResponse:
     """La misma respuesta si no existe o si es de otra empresa: no se revela cuál de las dos."""
-    body = f'<div class="card empty">{esc(what)} no existe.</div>'
+    body = (
+        f'<div class="card empty" role="alert"><b>{esc(what)} no existe.</b>'
+        "It may have been deleted, or the link is wrong."
+        '<br><a class="btn" href="/panel/home">Go to Home</a></div>'
+    )
     return HTMLResponse(page("No existe", body, session=session), status_code=404)
 
 
@@ -442,7 +449,8 @@ def _approval_cards(rows: list[tuple[Any, ...]], csrf: str, *, back: str) -> str
 <form method="post" action="/panel/aprobaciones/{approval_id}" class="row">
 <input type="hidden" name="csrf" value="{csrf}"><input type="hidden" name="volver" value="{back}">
 <button class="danger" name="decision" value="rechazar">Rechazar</button>
-<button class="primary" name="decision" value="aprobar">Aprobar</button></form></div></div>"""
+<button class="primary" name="decision" value="aprobar"
+ {refund_confirm(tool)}>Aprobar</button></form></div></div>"""
         )
     return "".join(cards)
 
@@ -478,7 +486,9 @@ def approvals_page(request: Request, deps: Deps) -> Response:
                 " where a.status <> 'pending' order by a.decided_at desc nulls last limit 10"
             ).fetchall()
     cards = _approval_cards(pending, ctx.csrf, back="/panel/inbox/approvals") or (
-        '<div class="card empty">No hay pedidos esperando aprobación.</div>'
+        '<div class="card empty"><b>No hay pedidos esperando aprobación.</b>High-risk actions, '
+        "like a refund, wait here until a person approves them."
+        '<br><a class="btn" href="/panel/agent/actions">Review your actions</a></div>'
     )
     history = "".join(
         f"""<div class="card row"><span class="badge {
@@ -632,7 +642,8 @@ style="text-decoration:none;color:inherit;min-width:0">{head}
 <input type="hidden" name="csrf" value="{ctx.csrf}">
 <input type="hidden" name="volver" value="/panel/inbox">
 <button class="danger" name="decision" value="rechazar">Rechazar</button>
-<button class="primary" name="decision" value="aprobar">Aprobar</button></form></div>"""
+<button class="primary" name="decision" value="aprobar"
+ {refund_confirm(tool)}>Aprobar</button></form></div>"""
         return f"""<a class="card row" href="/panel/casos/{case_id}" style="text-decoration:none;
 color:inherit"><div class="grow">{head}
 <div class="ellipsis" style="margin-top:6px">{text}
@@ -641,7 +652,9 @@ color:inherit"><div class="grow">{head}
 </div></a>"""
 
     items = "".join(item(*row) for row in rows) or (
-        '<div class="card empty">Todavía no hay conversaciones.</div>'
+        '<div class="card empty"><b>Todavía no hay conversaciones.</b>When customers write to '
+        "your agent, the conversations show up here, the ones that need you first."
+        '<br><a class="btn primary" href="/panel/test/playground">Try your agent</a></div>'
     )
     reset = '<a class="btn" href="/panel/reiniciar">Reiniciar demo</a>' if ctx.can_reset else ""
     body = f"""{toast(request.query_params.get("aviso"))}
