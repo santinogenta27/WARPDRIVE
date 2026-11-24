@@ -1606,13 +1606,18 @@ class Agent:
             "motivo": reason,
         }
         with tenant_scope(self._conn, turn.tenant_id):
+            before = self._conn.execute(
+                "select status from cases where id = %s", (turn.case_id,)
+            ).fetchone()
             self._conn.execute(
                 "update cases set status = 'escalated', escalation = %s, updated_at = now()"
                 " where id = %s",
                 (json.dumps(summary, ensure_ascii=False), turn.case_id),
             )
         self._audit(turn, "escalated", {**summary, "causa": cause})
-        message = turn.say("escalation")
+        # Ya estaba esperando a una persona (decisión 097): otra frase, no la misma de nuevo.
+        waiting = before is not None and before[0] == "escalated"
+        message = turn.say("escalation_waiting" if waiting else "escalation")
         # Fuera del horario del equipo, cuándo responden (decisión 051).
         note = rules.closed_note(self._conn, turn.tenant_id, turn.lang)
         return self._finish(
