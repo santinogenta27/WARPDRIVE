@@ -7,6 +7,7 @@ pasos) → una de cuatro acciones: responder, ejecutar, pedir_aprobacion o deriv
 """
 
 import json
+import logging
 import re
 import uuid
 from collections.abc import Callable
@@ -47,6 +48,7 @@ from app.identity import email_code
 from app.llm import spending
 from app.llm.client import LLMClient
 from app.llm.embedder import Embedder
+from app.llm.errors import QuotaExhausted
 from app.llm.pricing import cost_usd
 from app.llm.types import LLMResponse
 from app.mailer import Mailer, MailError, mailer_from_env
@@ -260,6 +262,8 @@ HANDOFF_CORRECTIONS = {
         "derivar again."
     ),
 }
+logger = logging.getLogger(__name__)
+
 # Por qué se derivó un caso (decisión 045): va en la auditoría como `causa` ({"tipo": ...,
 # "detalle": ...}), sin datos del cliente, y "Behind the scenes" lo muestra en una línea.
 HANDOFF_CAUSES = (
@@ -274,6 +278,7 @@ HANDOFF_CAUSES = (
     "cobro_afirmado",  # dijo que cobró o compró (decisión 060)
     "tope_de_gasto",
     "agente_en_pausa",  # la empresa pausó el agente desde el panel (decisión 090)
+    "modelo_no_disponible",  # sin cuota en ningún proveedor (decisión 098)
     "fundamento",  # detalle: el control de grounding.KINDS
     "limite_pasos",
     "agente",  # el agente eligió derivar; `reconsiderada`: se le pidió responder antes
@@ -689,6 +694,17 @@ class Agent:
         return str(row[0]) if row else ""
 
     def _respond(self, turn: _Turn, company: str, tone: str) -> AgentResult:
+        """Sin ningún modelo disponible (la cuota agotada en todos los proveedores), el mensaje
+        no se pierde: el caso se deriva a una persona con el mensaje fijo (decisión 098)."""
+        try:
+            return self._respond_with_model(turn, company, tone)
+        except QuotaExhausted as error:
+            logger.warning("Sin modelo disponible: se deriva el caso %s (%s)", turn.case_id, error)
+            return self._escalate(
+                turn, "No hay un modelo disponible.", {"tipo": "modelo_no_disponible"}
+            )
+
+    def _respond_with_model(self, turn: _Turn, company: str, tone: str) -> AgentResult:
         tenant_id, case_id, contact, text = turn.tenant_id, turn.case_id, turn.contact, turn.text
         if LEGAL_THREAT.search(text) or LEGAL_THREAT_EN.search(text):
             # Una amenaza de denuncia o de acción legal la atiende una persona, siempre: no

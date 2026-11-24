@@ -92,6 +92,7 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
         "cobro_afirmado": "Answer blocked: it said it charged or bought, and the agent never does",
         "tope_de_gasto": "The company reached its monthly spending cap",
         "agente_en_pausa": "The company paused its agent",
+        "modelo_no_disponible": "No AI model was available (quota used up)",
         "limite_pasos": "Reached the step limit without a valid answer",
         "agente": "The agent chose to hand off",
         "agente_reconsiderada": (
@@ -116,6 +117,7 @@ HANDOFF_LINES: dict[str, dict[str, str]] = {
         "cobro_afirmado": "Respuesta frenada: dijo que cobró o compró, y el agente nunca lo hace",
         "tope_de_gasto": "La empresa llegó al tope de gasto del mes",
         "agente_en_pausa": "La empresa pausó su agente",
+        "modelo_no_disponible": "No había un modelo disponible (cuota agotada)",
         "limite_pasos": "Llegó al límite de pasos sin una respuesta válida",
         "agente": "El agente eligió derivar",
         "agente_reconsiderada": (
