@@ -432,6 +432,7 @@ class Agent:
         self._mailer = mailer or mailer_from_env()
         self._assistant = ""  # nombre del asistente de la empresa del turno (decisión 052)
         self._supervisor_on = True  # supervisor de respuestas de la empresa (decisión 079)
+        self._live_off = False  # la empresa la pausó (decisión 090)
         self._voice = voice.Voice()  # voz de marca de la empresa del turno (decisión 081)
 
     # -- entrada ---------------------------------------------------------------------------
@@ -510,7 +511,7 @@ class Agent:
         # Tope de gasto mensual alcanzado (decisión 049): deriva sin llamar al modelo.
         capped = spending.over(self._conn, tenant_id)
         # Agente en pausa (decisión 090): cada mensaje pasa a una persona, sin llamar al modelo.
-        paused = go_live.is_paused(self._conn, tenant_id)
+        paused = self._live_off and go_live.is_paused(self._conn, tenant_id)
         case_id, classification = self._open_case(
             tenant_id, contact_id, company, text, lang, classify_reopen=not (capped or paused)
         )
@@ -1689,6 +1690,8 @@ class Agent:
         # El nombre que eligió la empresa para el asistente (decisión 052), para el prompt.
         self._assistant = str((settings.get("brand") or {}).get("assistant") or "")
         self._supervisor_on = settings.get(supervisor.SETTING) is not False
+        # La pausa (decisión 090) se confirma con otra consulta solo si `live` está en false.
+        self._live_off = settings.get("live") is False
         # Voz de marca (decisión 081): en español, el trato elegido manda sobre el tono.
         self._voice = voice.from_settings(settings)
         if lang == "es":
