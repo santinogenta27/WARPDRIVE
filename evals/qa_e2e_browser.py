@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from playwright.sync_api import sync_playwright
 
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -59,9 +60,12 @@ def main() -> int:
         page = browser.new_page(viewport={"width": 1280, "height": 860})
         page.goto(url)
         launcher = page.locator("button.launcher")  # Playwright atraviesa el shadow DOM
-        launcher.wait_for(state="visible", timeout=30000)
-        time.sleep(2)  # que el widget termine de leer su configuración
-        launcher.click()
+        try:
+            launcher.wait_for(state="visible", timeout=20000)
+            time.sleep(2)  # que el widget termine de leer su configuración
+            launcher.click()
+        except PlaywrightTimeout:  # la página propia del chat: ya está abierto, sin botón
+            pass
         page.locator("textarea#msg").wait_for(state="visible", timeout=15000)
         time.sleep(1.5)
         page.screenshot(path=str(shots / "00-abierto.png"))
