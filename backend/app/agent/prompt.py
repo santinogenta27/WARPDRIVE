@@ -158,11 +158,17 @@ def system_prompt(
     )
     if is_english(tone):
         fixed = f"{fixed.rstrip()}\n{conduct_rules()}"
-    if assistant:  # el nombre que eligió la empresa (decisión 052); sin nombre, no cambia nada
+    # El nombre que eligió la empresa (decisión 052); sin nombre, no cambia nada. Solo se
+    # presenta en la primera respuesta (decisión 095).
+    if assistant:
         intro = (
-            f"Your name is {_escape(assistant)}: introduce yourself with it."
+            f"Your name is {_escape(assistant)}. Introduce yourself with it only in your first "
+            "reply, when <historial> is empty; after that, don't repeat your name or introduce "
+            "yourself again."
             if is_english(tone)
-            else f"Te llamás {_escape(assistant)}: presentate con ese nombre."
+            else f"Te llamás {_escape(assistant)}. Presentate con ese nombre solo en tu primera "
+            "respuesta, cuando <historial> está vacío; después no repitas tu nombre ni te "
+            "vuelvas a presentar."
         )
         fixed = f"{fixed.rstrip()}\n{intro}"
     if memory:

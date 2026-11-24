@@ -234,7 +234,7 @@ def test_nombre_y_saludo(acme: World) -> None:
     default_greeting = config["greeting"]
     _widget(acme, "Luna", "¡Hola! Soy Luna, de Acme. ¿En qué te ayudo?")
     acme.stack.send("lucia", "¿Abren los domingos?")
-    assert "Te llamás Luna: presentate con ese nombre." in acme.system()
+    assert "Te llamás Luna. Presentate con ese nombre solo en tu primera respuesta" in acme.system()
     config = TestClient(app).get("/chat/widget/config", params={"canal": slug}).json()
     assert config["greeting"] == "¡Hola! Soy Luna, de Acme. ¿En qué te ayudo?"
     _widget(acme, "", "")
