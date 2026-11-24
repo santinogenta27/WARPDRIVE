@@ -75,25 +75,27 @@ def main() -> int:
 
     current: dict[str, Any] = {}
 
-    def trail() -> list[str]:
-        """Los pasos del último caso de la empresa en uso: por qué respondió así."""
+    def trail(case: Any) -> list[str]:
+        """Los pasos del caso: por qué respondió así."""
+        if case is None:
+            return []
         with tenant_scope(conn, current["tenant"]):
             rows = conn.execute(
-                "select kind, payload from audit_events where case_id = (select case_id from"
-                " audit_events where kind = 'final_action' order by seq desc limit 1)"
-                " order by seq"
+                "select kind, payload from audit_events where case_id = %s order by seq", (case,)
             ).fetchall()
         keep = {"classified", "rag_search", "tool_call", "grounding_rejected", "escalated"}
         return [f"{k}: {json.dumps(p, ensure_ascii=False)[:300]}" for k, p in rows if k in keep]
 
-    def record(option: str, expected: str, ok: bool, said: str, **extra: Any) -> None:
+    def record(
+        option: str, expected: str, ok: bool, said: str, case: Any = None, **extra: Any
+    ) -> None:
         results.append(
             {
                 "opcion": option,
                 "esperado": expected,
                 "ok": ok,
                 "respuesta": said,
-                "pasos": trail(),
+                "pasos": trail(case or current.get("case")),
                 **extra,
             }  # fmt: skip
         )
@@ -144,7 +146,9 @@ def main() -> int:
             return seed.contacts[label] if label in seed.contacts else seed.contacts["lucia"]
 
         def send(label: str, text: str) -> Any:
-            return agent.handle_message(seed.tenant_id, contact(label), text)
+            result = agent.handle_message(seed.tenant_id, contact(label), text)
+            current["case"] = result.case_id
+            return result
 
         def voice(**values: str) -> None:
             base = {"tono": "", "trato": "", "usar": "", "evitar": "", "emojis": "si", "firma": ""}
@@ -218,7 +222,12 @@ def main() -> int:
                    files=[("archivos", ("envios.md", doc, "text/markdown"))])  # fmt: skip
         slug = chat_slug(conn, shop.tenant_id)
 
+        def cases() -> set[Any]:
+            with tenant_scope(conn, shop.tenant_id):
+                return {r[0] for r in conn.execute("select id from cases").fetchall()}
+
         def ask(text: str, origin: str | None = None) -> str:
+            before = cases()
             headers = {"Origin": origin} if origin else {}
             api = TestClient(app)
             session = api.post("/chat/session", params={"canal": slug}, headers=headers).json()
@@ -229,6 +238,7 @@ def main() -> int:
                 fields = dict(line.split(": ", 1) for line in block.splitlines())
                 if fields.get("event") == "message":
                     texts.append(json.loads(fields["data"])["text"])
+            current["case"] = next(iter(cases() - before), None)
             return " ".join(texts)
 
         said = ask("¿Cuánto tarda el envío a Ushuaia?")
