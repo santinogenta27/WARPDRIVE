@@ -1174,7 +1174,8 @@ class Agent:
                         and self._supervisor_on
                         and supervisor.needs_review(final_input, bool(turn.decisions))
                     ):
-                        review = self._supervise(turn, said)
+                        quoted: Any = final_input.get("fuentes") or []  # decisión 092
+                        review = self._supervise(turn, said, [str(s) for s in quoted])
                         if review.verdict == supervisor.REWRITE and turn.supervisor_retries == 0:
                             self._audit(
                                 turn,
@@ -1501,7 +1502,9 @@ class Agent:
             return False
         return not promises.pending(self._conn, turn.tenant_id, turn.case_id)
 
-    def _supervise(self, turn: _Turn, answer: str) -> supervisor.Review:
+    def _supervise(
+        self, turn: _Turn, answer: str, cited: list[str] | None = None
+    ) -> supervisor.Review:
         """Revisión del supervisor (decisión 079), con su costo y su latencia en la auditoría."""
         documents: dict[str, str] = {}
         for doc in turn.documents:
@@ -1531,6 +1534,7 @@ class Agent:
                 if part
             ),
             avoid=list(self._voice.evitar),
+            cited=cited,
         )
         if found.response is not None:
             self._audit_model_call(turn, supervisor.ROLE, found.response)
