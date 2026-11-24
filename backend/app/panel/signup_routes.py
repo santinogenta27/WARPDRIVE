@@ -82,6 +82,7 @@ def signup_submit(request: Request, form: Form, deps: Deps) -> HTMLResponse:
                 password=form.get("clave", ""),
                 base_url=_base(request),
                 trial_token=form.get("prueba", ""),
+                language="en" if english.english() else "es",
             )
     except signup.SignupError as error:
         return HTMLResponse(_signup_page(str(error), values), status_code=400)
