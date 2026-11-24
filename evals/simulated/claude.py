@@ -227,6 +227,21 @@ class SimulatedClaude:
             if self.mode == "modifica_sin_consultar" and "error" in result:
                 if "regla del negocio" not in system:
                     return escalate(f"No se pudo: {result['error']}")
+            # Lo que hizo gpt-oss-20b en el QA 2 (decisión 091): el guardián negó el reembolso
+            # y dice que quedó en revisión. Con "_una_vez", corregido ya no lo dice.
+            if (
+                name == "iniciar_reembolso"
+                and "error" in result
+                and (
+                    self.mode == "revision_sin_aprobacion_siempre"
+                    or (self.mode == "revision_sin_aprobacion" and not corrected)
+                )
+            ):
+                return reply(
+                    "El reembolso está en revisión por nuestro equipo y te avisamos cuando se "
+                    "acredite.",
+                    factual=False,
+                )
             return self._after_tool(name, call_input, result, low, message, tool_names, reply)
         address = re.search(r"pedido\s+\d+\s+a\s+(.*\d.*)$", message)
         if (

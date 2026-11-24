@@ -1046,10 +1046,17 @@ class Agent:
                         continue
                     # "Reembolsado" con la aprobación pendiente tampoco vale (decisión 048).
                     if (
-                        not self._acted(turn) and _check(conduct.claims_action, said, turn.lang)
-                    ) or (
-                        not self._executed(turn)
-                        and _check(conduct.claims_completion, said, turn.lang)
+                        (not self._acted(turn) and _check(conduct.claims_action, said, turn.lang))
+                        or (
+                            not self._executed(turn)
+                            and _check(conduct.claims_completion, said, turn.lang)
+                        )
+                        or (
+                            # "Quedó en revisión" sin ninguna aprobación (decisión 091).
+                            not self._acted(turn)
+                            and _check(conduct.claims_review, said, turn.lang)
+                            and not self._pending_approval(turn)
+                        )
                     ):
                         self._audit(
                             turn,
@@ -1392,6 +1399,14 @@ class Agent:
         return any(
             d.side_effect and d.status in ("executed", "approval_required") for d in turn.decisions
         )
+
+    def _pending_approval(self, turn: _Turn) -> bool:
+        """El caso tiene una aprobación pendiente de un turno anterior."""
+        row = self._conn.execute(
+            "select exists (select 1 from approvals where case_id = %s and status = 'pending')",
+            (turn.case_id,),
+        ).fetchone()
+        return bool(row and row[0])
 
     @staticmethod
     def _executed(turn: _Turn) -> bool:

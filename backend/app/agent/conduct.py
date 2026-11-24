@@ -49,6 +49,29 @@ _DONE_ES = re.compile(
     r"|\b(?:reembolsad|acreditad|cancelad|aplicad|procesad)[oa]s?\b"
 )
 DONE = {"es": _DONE_ES, "en": _DONE_EN}
+# Lo que dice que una persona ya está revisando el pedido del cliente: solo vale si hay una
+# aprobación (en este turno o pendiente en el caso). En el QA 2, con el reembolso negado por el
+# tope de monto, gpt-oss-20b dijo "Iniciamos el proceso de reembolso…, queda en revisión" y "El
+# reembolso está en revisión por nuestro equipo" (decisión 091). "Sigue en revisión" queda
+# afuera: es el estado de una aprobación de antes.
+_REVIEW_ES = re.compile(
+    r"(?i)\b(?:inici|gener|cre|abr|registr|carg)amos\s+(?:el|la|un|una|tu|su)\s+"
+    r"(?:proceso|solicitud|pedido|tr[aá]mite|reembolso|devoluci[oó]n|cancelaci[oó]n|cambio"
+    r"|reclamo)\b"
+    r"|\b(?:est[aá]|qued[aó]|queda|quedar[aá]|pas[oó]|pasa)\s+(?:ya\s+)?(?:en\s+revisi[oó]n"
+    r"|a\s+revisi[oó]n|pendiente\s+de\s+(?:aprobaci[oó]n|revisi[oó]n))\b"
+    # "Tu solicitud de reembolso ya fue registrada" (gpt-oss-20b en el QA 2).
+    r"|\b(?:solicitud|pedido\s+de\s+reembolso|reclamo|tr[aá]mite)\s+(?:\w+\s+){0,3}?"
+    r"(?:ya\s+)?(?:fue|qued[oó]|est[aá])\s+(?:ya\s+)?(?:registrad|cargad|iniciad|enviad)[oa]\b"
+)
+_REVIEW_EN = re.compile(
+    r"(?i)\b(?:is|are|has\s+been|have\s+been|was)\s+(?:now\s+)?(?:under\s+review"
+    r"|pending\s+(?:approval|review)|(?:sent|submitted|passed)\s+(?:on\s+)?(?:for|to)\s+"
+    r"(?:approval|review|our\s+team))\b"
+    r"|\bwe(?:'ve|\s+have)?\s+(?:opened|submitted|filed|created|started)\s+(?:a|the|your)\s+"
+    r"(?:refund|return|cancellation|request|claim|process)\b"
+)
+REVIEW = {"es": _REVIEW_ES, "en": _REVIEW_EN}
 # Lo que ya estaba hecho de antes no es una afirmación nueva ("the express shipping you chose
 # earlier is already on your account").
 _RECAP = re.compile(r"(?i)\b(?:already|earlier|previously|before|ya\s+estaba|antes)\b")
@@ -291,6 +314,12 @@ def claims_completion(text: str, language: str) -> bool:
     pendiente no alcanza, hace falta una herramienta ejecutada."""
     done = DONE.get(language, _DONE_EN).search(_plain(text))
     return claims_action(text, language) and done is not None
+
+
+def claims_review(text: str, language: str) -> bool:
+    """La respuesta dice que el pedido del cliente quedó en revisión o que se inició un trámite:
+    el loop la rechaza si no hay ninguna aprobación que lo respalde (decisión 091)."""
+    return REVIEW.get(language, _REVIEW_EN).search(_plain(text)) is not None
 
 
 def is_upset(message: str, language: str) -> bool:
