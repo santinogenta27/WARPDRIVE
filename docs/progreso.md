@@ -965,6 +965,29 @@ Rama `h13-verificacion`.
 - La migración 0035 quedó aplicada también en la base de la demo (ver la tarea 1). Las 0036 y 0037 solo en staging y en el CI.
 - **Modelo real:** 0 llamadas en todo el hito. Las embeddings de Gemini se usaron para medir Knowledge, en `evals/knowledge_recall.py` y en el sitio de una tienda real.
 
+## Hito QA 2 — Verificar de punta a punta antes de vender (desde el 24 de noviembre de 2026)
+
+Sobre `hito-13` y la base `DATABASE_URL_STAGING`. Cada arreglo, en su rama y su PR contra
+`hito-13`, mergeado con el CI en verde.
+
+### Etapa 1 — Matriz configuración → comportamiento (hecha)
+
+- `backend/tests/test_qa_configuracion.py`: 22 opciones de Agent, Knowledge y Deploy. Cada una se
+  cambia desde el panel, se verifica en lo que se arma antes del modelo y se vuelve atrás. Tabla:
+  `docs/qa-configuracion.md`.
+- `evals/qa_config_real.py`: la muestra con el modelo real gratuito (gpt-oss-20b en Groq, Gemini
+  de respaldo y embeddings de Gemini). Resultado: 9/9 después de los arreglos.
+- Fallas encontradas y arregladas:
+  | Falla | Arreglo | PR |
+  |---|---|---|
+  | Pausar no hacía que el agente dejara de responder: solo sacaba el widget del sitio | En pausa, cada mensaje se deriva sin llamar al modelo y el widget sigue (decisión 090) | #60 |
+  | Con el reembolso negado por el tope, el modelo decía "está en revisión por nuestro equipo" | Control en código: "en revisión", "iniciamos el proceso" y "solicitud registrada" necesitan una aprobación (decisión 091) | #61 |
+  | Una empresa nueva derivaba las preguntas que su documento respondía: el supervisor pedía "citar la fuente" en el texto | El supervisor recibe las fuentes citadas aparte (decisión 092) | #62 |
+  | En inglés, "10 a.m. to 8 p.m." y "24/7" se rechazaban contra "de 10 a 20 hs" y "24 horas, todos los días" | El control de fundamento compara horas en 24 y acepta 24/7 con respaldo (decisión 093) | #63 |
+- Riesgo que queda: con trato de usted, gpt-oss-20b a veces mezcla formas de vos. El supervisor lo
+  frena y, si insiste, deriva. Pasó en 1 de 3 corridas.
+- Modelo real usado: unas 160 llamadas a Groq (4 corridas de la muestra) y embeddings de Gemini.
+
 ## Qué significa "simulado"
 
 Todavía no hay claves de API, así que Claude y Voyage se reemplazan por **transportes HTTP simulados** (`evals/simulated/`) que responden con el formato real de cada API. Corre el código de producción completo: SDK de Anthropic, cliente de Voyage, clasificador, RAG, ciclo, guardián, API de Acme, auditoría y costos.
