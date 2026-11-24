@@ -219,17 +219,19 @@ def build_real_stack(
     *,
     cache_models: bool = True,
     company: str = "acme",
+    fallback: bool = False,
 ) -> SimulatedStack:
     """Modelos y embeddings reales según las claves del entorno; Acme sigue simulada. Mide un
     solo proveedor: sin respaldo automático al otro gratuito. `cache_models=False`: cada pedido
-    va al modelo (los embeddings siguen en caché)."""
+    va al modelo (los embeddings siguen en caché). `fallback`: con el respaldo entre gratuitos
+    (Groq → Gemini), como en producción (Hito QA 2); la caché lo anota en su perfil."""
     import os
 
     from app.llm.embedding_cache import CachingEmbedder
     from app.llm.factory import embedding_backend
     from simulated.cache import CachingProvider
 
-    os.environ["LLM_FALLBACK"] = "off"
+    os.environ["LLM_FALLBACK"] = "on" if fallback else "off"
     backend = llm_backend()
     recorder = PostgresUsageRecorder(conn)
     # Los mismos documentos y consultas en cada corrida: sin caché se agota la cuota diaria.
@@ -238,7 +240,9 @@ def build_real_stack(
     )
     provider = (
         CachingProvider(
-            provider_from_env(), cache_dir / str(backend), profile=model_profile(backend)
+            provider_from_env(),
+            cache_dir / str(backend),
+            profile=model_profile(backend) + ("+respaldo" if fallback else ""),
         )
         if cache_models
         else provider_from_env()
