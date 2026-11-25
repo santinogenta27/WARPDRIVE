@@ -500,9 +500,11 @@ def test_el_nombre_de_la_tienda_entra_en_el_widget() -> None:
 
 
 # -- la clave de la prueba gratis ----------------------------------------------------------------
-def test_usa_la_clave_propia_de_la_prueba_y_si_no_la_de_siempre(
+def test_usa_la_clave_propia_de_la_prueba_y_nunca_la_de_la_plataforma(
     conn: psycopg.Connection, box: _Outbox, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Sin `TRIAL_GEMINI_API_KEY` no hay respaldo con la clave de la plataforma (decisión 100)."""
+    keys.reset()
     _, trial = _trial(conn, box)
     assert trial.tenant_id is not None
     used: list[str] = []
@@ -523,12 +525,13 @@ def test_usa_la_clave_propia_de_la_prueba_y_si_no_la_de_siempre(
     monkeypatch.setenv("GEMINI_API_KEY", "clave-de-siempre")
     monkeypatch.setenv("TRIAL_GEMINI_API_KEY", "clave-de-la-prueba")
     recorder = PostgresUsageRecorder(conn)
-    keys.trial_embedder(recorder, http_client=http).embed(["hola"], tenant_id=trial.tenant_id)
-    monkeypatch.delenv("TRIAL_GEMINI_API_KEY")
-    keys.trial_embedder(recorder, http_client=http).embed(["hola"], tenant_id=trial.tenant_id)
-    assert used == ["clave-de-la-prueba", "clave-de-siempre"]
+    keys.trial_embedder(recorder, client=http).embed(["hola"], tenant_id=trial.tenant_id)
+    monkeypatch.setenv("TRIAL_GEMINI_API_KEY", "")  # vacía: el .env no la vuelve a cargar
+    with pytest.raises(keys.TrialBusy):
+        keys.trial_embedder(recorder, client=http).embed(["hola"], tenant_id=trial.tenant_id)
+    assert used == ["clave-de-la-prueba"]
     with tenant_scope(conn, trial.tenant_id):
         usage = conn.execute(
             "select kind, input_tokens from usage where tenant_id = %s", (trial.tenant_id,)
         ).fetchall()
-    assert usage == [("embedding", 7), ("embedding", 7)]  # todo uso queda registrado
+    assert usage == [("embedding", 7)]  # todo uso queda registrado
