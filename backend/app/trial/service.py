@@ -43,7 +43,9 @@ TRIAL_DAYS = 7
 CODE_TTL = timedelta(minutes=15)
 MAX_CODE_ATTEMPTS = 5
 MAX_PER_IP = 3  # pruebas por IP por día
-MAX_PRODUCTS = 12
+MAX_PRODUCTS = 150  # decisión 101
+SUMMARY_AFTER = 5  # mensajes: después, la página muestra el resumen de la prueba
+WHATSAPP = "5491128492480"  # el equipo de ventas (una persona)
 SAMPLE_PHONE = "+10000001001"  # el cliente de los pedidos de ejemplo (el visitante)
 BASE_PREFIX = "demo:trial:"
 CATALOG_SOURCE = "catalogo_de_la_prueba"
@@ -78,9 +80,18 @@ TEXTS: dict[str, dict[str, Any]] = {
             "¿Me hacen un 50 % de descuento?",
             "Busco {product}",
         ],
+        "service_suggestions": [
+            "¿Qué servicios ofrecen?",
+            "¿Cuánto cuesta?",
+            "¿Cómo los contacto?",
+            "¿Cuál es el horario de atención?",
+        ],
         "generic": ["Producto de ejemplo A", "Producto de ejemplo B", "Producto de ejemplo C"],
         "contact_subject": "Prueba gratis: quiere hablar · {domain}",
         "contact_body": "Sitio: {site}\nEmail: {email}\nEstado de la prueba: {status}\n",
+        "whatsapp": (
+            "¡Hola! Acabo de probar el agente de IA con {name} y quiero hablar de un piloto."
+        ),
     },
     "en": {
         "subject": "Your code to try the assistant: {code}",
@@ -97,11 +108,18 @@ TEXTS: dict[str, dict[str, Any]] = {
             "Where is my order DEMO-1001?",
             "I want to return order DEMO-1002",
             "Can I get a 50% discount?",
-            "I'm looking for {product}",
+            "I'm looking for the {product}",
+        ],
+        "service_suggestions": [
+            "What services do you offer?",
+            "How much does it cost?",
+            "How can I contact you?",
+            "What are your opening hours?",
         ],
         "generic": ["Sample product A", "Sample product B", "Sample product C"],
         "contact_subject": "Free trial: wants to talk · {domain}",
         "contact_body": "Site: {site}\nEmail: {email}\nTrial status: {status}\n",
+        "whatsapp": "Hi! I just tried the AI agent with {name} and want to talk about a pilot.",
     },
 }
 
@@ -113,6 +131,10 @@ class TrialError(ValueError):
 ERRORS = {
     "es": {
         "site": "La dirección de la tienda no es válida. Escribila como tutienda.com.",
+        "not_found": (
+            "No encontramos el sitio {domain}. Revisá que esté bien escrito, por ejemplo "
+            "tutienda.com."
+        ),
         "email": "El email no es válido.",
         "taken": "Ya hay una prueba con ese email o con esa tienda. Si querés seguir, escribinos.",
         "ip": "Ya se pidieron varias pruebas desde tu conexión hoy. Probá de nuevo mañana.",
@@ -121,6 +143,9 @@ ERRORS = {
     },
     "en": {
         "site": "The store address isn't valid. Write it like yourstore.com.",
+        "not_found": (
+            "We couldn't find the site {domain}. Check that it's spelled right, like yourstore.com."
+        ),
         "email": "The email isn't valid.",
         "taken": "There's already a trial with that email or store. Write to us to continue.",
         "ip": "Several trials were requested from your connection today. Try again tomorrow.",
@@ -130,8 +155,8 @@ ERRORS = {
 }
 
 
-def _error(language: str, key: str) -> TrialError:
-    return TrialError(ERRORS["en" if language == "en" else "es"][key])
+def _error(language: str, key: str, **values: str) -> TrialError:
+    return TrialError(ERRORS["en" if language == "en" else "es"][key].format(**values))
 
 
 @dataclass(frozen=True)
@@ -201,22 +226,27 @@ def for_tenant(conn: psycopg.Connection, tenant_id: uuid.UUID) -> Trial | None:
 
 
 def normalize_site(raw: str, language: str = "es") -> tuple[str, str]:
-    """(dirección del sitio, dominio sin `www.`) de lo que escribió el visitante."""
+    """(dirección del sitio, dominio sin `www.`) de lo que escribió el visitante. Tolera lo que
+    se escribe mal: sin `https://`, `https//`, `htps://`, una coma en lugar del punto, espacios,
+    mayúsculas, parámetros de campaña y anclas (decisión 101)."""
     text = raw.strip()
-    if text and "://" not in text:
-        text = "https://" + text
-    parts = urlsplit(text)
+    if len(text) > 300 or re.match(r"(?i)^(mailto|javascript|data|file|ftp):", text):
+        raise _error(language, "site")
+    text = re.sub(r"(?i)^h?t+p+s?:?/+", "", text)  # cualquier variante de http(s)://
+    text = re.sub(r"\s+", "", text)
+    head, slash, rest = text.partition("/")
+    if "." not in head and head.count(",") == 1:
+        head = head.replace(",", ".")
+    parts = urlsplit(f"https://{head}{slash}{rest}")
     host = (parts.hostname or "").lower().rstrip(".")
-    if (
-        parts.scheme not in ("http", "https")
-        or "." not in host
-        or len(text) > 300
-        or not re.fullmatch(r"[a-z0-9.-]+", host)
-    ):
+    if not host or "." not in host or not re.fullmatch(r"[a-z0-9.-]+", host):
+        raise _error(language, "site")
+    if host.startswith(".") or ".." in host or not re.search(r"\.[a-z]{2,}$", host):
         raise _error(language, "site")
     domain = host.removeprefix("www.")
+    path = parts.path or "/"
     # Siempre HTTPS (decisión 076); el rastreo verifica además que la dirección sea pública.
-    return f"https://{parts.netloc.lower()}{parts.path or '/'}", domain
+    return f"https://{host}{path}", domain
 
 
 def cost_cap() -> Decimal:
@@ -240,6 +270,8 @@ def start(
     try:  # una dirección interna no llega ni a guardarse (decisión 076)
         net.check_url(url)
     except net.UnsafeURL as error:
+        if "resolver" in str(error):  # el dominio no existe (o está mal escrito)
+            raise _error(language, "not_found", domain=domain) from error
         raise _error(language, "site") from error
     email = email.strip().lower()
     if not EMAIL.match(email) or len(email) > 200:
@@ -394,9 +426,10 @@ def can_retry(conn: psycopg.Connection, trial: Trial) -> bool:
     return trial.status == "building" and elapsed(conn, trial.id) > STALE_SECONDS
 
 
-def retry(conn: psycopg.Connection, token: str) -> bool:
+def retry(conn: psycopg.Connection, token: str, *, sample: bool = False) -> bool:
     """ "Reintentar": vuelve a encolar el armado si falló o lleva más de 2 minutos. Idempotente:
-    un doble clic encola un solo intento nuevo, y el job del intento anterior ya no toca nada."""
+    un doble clic encola un solo intento nuevo, y el job del intento anterior ya no toca nada.
+    `sample`: "Seguir con una prueba de ejemplo" (el sitio no se pudo leer, decisión 101)."""
     found = find(conn, token)
     if found is None:
         return False
@@ -407,9 +440,10 @@ def retry(conn: psycopg.Connection, token: str) -> bool:
     attempt = int(trial.progress.get("attempt") or 1) + 1
     conn.execute(
         "update trials set status = 'building', progress = jsonb_build_object('step', 'crawl',"
-        " 'attempt', %s::int, 'started_at', clock_timestamp(), 'at', clock_timestamp())"
-        " where id = %s",
-        (attempt, trial.id),
+        " 'attempt', %s::int, 'started_at', clock_timestamp(), 'at', clock_timestamp(),"
+        " 'sample', %s::boolean, 'operator_emailed', coalesce((progress->>'operator_emailed')"
+        "::boolean, false)) where id = %s",
+        (attempt, sample, trial.id),
     )
     enqueue(
         conn,
@@ -436,16 +470,23 @@ def _fit(name: str) -> str:
 
 
 def _name_from(declared: str, title: str, domain: str) -> str:
-    if 2 <= len(declared) <= 80:
-        return declared
-    separators = r"\s+[|–—\-·•»]\s+"
-    parts = [p.strip() for p in re.split(separators, " ".join(title.split())) if p.strip()]
+    separators = r"\s+[|–—\-·•»:]\s+"
     stem = re.sub(r"[^a-z0-9]", "", domain.split(".")[0].lower())
-    for part in parts:
-        if stem and stem in re.sub(r"[^a-z0-9]", "", part.lower()):
-            return part[:80]
-    first = parts[0] if parts else ""
-    return first[:80] if 2 <= len(first) <= 80 else domain
+
+    def best(text: str) -> str:
+        """La parte que se parece al dominio ("JOCO Cups | Glass Reusable Cups" → "JOCO
+        Cups"); si ninguna, la primera."""
+        parts = [p.strip() for p in re.split(separators, " ".join(text.split())) if p.strip()]
+        for part in parts:
+            if stem and stem in re.sub(r"[^a-z0-9]", "", part.lower()):
+                return part[:80]
+        return parts[0][:80] if parts else ""
+
+    name = best(declared)
+    if 2 <= len(name) <= 80:
+        return name
+    first = best(title)
+    return first if 2 <= len(first) <= 80 else domain
 
 
 # Qué leer primero de las 30 páginas: las políticas (suelen estar en el pie), después algunos
@@ -482,13 +523,61 @@ def _priority() -> Callable[[str], int]:
     return rank
 
 
+def _money(value: Any, currency: str) -> str:
+    return f"{currency} {float(value):,.2f}".replace(".00", "")
+
+
+def product_line(p: dict[str, Any], language: str) -> str:
+    """Una línea del catálogo: nombre, precio (rango y oferta), stock, variantes y link."""
+    en = language == "en"
+    price = _money(p["price"], p["currency"])
+    if p.get("price_max"):
+        price = f"{'from' if en else 'desde'} {price} {'to' if en else 'hasta'} " + _money(
+            p["price_max"], p["currency"]
+        )
+    if p.get("compare_at"):
+        before = _money(p["compare_at"], p["currency"])
+        price += f" ({'on sale, was' if en else 'en oferta, antes'} {before})"
+    parts = [f"- {p['name']}: {price}"]
+    if p.get("category"):
+        parts.append(f"{'category' if en else 'categoría'}: {p['category']}")
+    if p.get("available") is False:
+        parts.append("out of stock" if en else "sin stock")
+    if p.get("variants"):
+        parts.append(f"{'options' if en else 'opciones'}: {', '.join(p['variants'][:8])}")
+    if p.get("description"):
+        parts.append(str(p["description"])[:160])
+    if p.get("url"):
+        parts.append(str(p["url"]))
+    return " · ".join(parts)
+
+
 def _catalog_text(products: list[dict[str, Any]], language: str) -> str:
-    title = "# Catalog" if language == "en" else "# Catálogo"
-    lines = [
-        f"- {p['name']}: {p['currency']} {p['price']:g}" + (f" ({p['url']})" if p["url"] else "")
-        for p in products
-    ]
-    return "\n".join([title, "", *lines])
+    """El catálogo que indexa el RAG. Aclara que es lo que leímos del sitio, no todo lo que vende
+    la tienda: el agente nunca dice que vende "solo" esto (decisión 101)."""
+    en = language == "en"
+    title = "# Catalog" if en else "# Catálogo"
+    note = (
+        f"Products read from the store's public site ({len(products)}). The store may sell more."
+        if en
+        else f"Productos leídos del sitio público de la tienda ({len(products)}). Puede vender más."
+    )
+    return "\n".join([title, "", note, "", *(product_line(p, language) for p in products)])
+
+
+def suggestions_for(
+    language: str, products: list[dict[str, Any]], mode: str = "store"
+) -> list[str]:
+    """Las sugerencias del chat: con el nombre corto de un producto (decisión 101) o, en un
+    sitio que no es tienda, sobre sus servicios."""
+    texts = TEXTS["en" if language == "en" else "es"]
+    if mode == "services" or not products:
+        return list(texts["service_suggestions"])
+    from app.trial import catalog
+
+    first = products[0]
+    short = first.get("short") or catalog.short_name(first["name"])
+    return [s.format(product=short) for s in texts["suggestions"]]
 
 
 def run_build(
@@ -509,7 +598,11 @@ def run_build(
 
 
 def _configure(
-    conn: psycopg.Connection, trial: Trial, name: str, products: list[dict[str, Any]]
+    conn: psycopg.Connection,
+    trial: Trial,
+    name: str,
+    products: list[dict[str, Any]],
+    mode: str = "store",
 ) -> None:
     from app.channels.web import widget
     from app.demo import northwind
@@ -522,10 +615,11 @@ def _configure(
         base_url=base_url(trial.tenant_id),
         instructions=instructions,
         limits=TOOL_LIMITS,
-        active=dict.fromkeys(CASE_TYPES, True),
+        # Un sitio que no es tienda no tiene pedidos ni productos: sin esos tipos de caso, el
+        # agente atiende con las páginas del sitio (decisión 101).
+        active=dict.fromkeys(CASE_TYPES, mode != "services"),
     )
-    first = products[0]["name"] if products else ""
-    suggestions = [s.format(product=first) for s in TEXTS[trial.language]["suggestions"]]
+    suggestions = suggestions_for(trial.language, products, mode)
     widget.save(
         conn,
         trial.tenant_id,
@@ -562,25 +656,52 @@ def reset_sandboxes() -> None:
     _SANDBOXES.clear()
 
 
-def mock_products(products: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Los productos de la tienda en el formato de la API simulada (un talle, con stock)."""
-    return [
-        {
-            "code": f"P{n:02d}",
-            "sku_prefix": "DEMO",
-            "name": p["name"],
-            "price": p["price"],
-            "currency": p["currency"],
-            "image": p.get("image") or "",
-            "url": p.get("url") or "",
-            "category": "",
-            "description": p["name"],
-            "sizes": ["One size"],
-            "colors": ["Standard"],
-            "stock": {"Standard": {"One size": 10}},
-        }
-        for n, p in enumerate(products, start=1)
-    ]
+def _short_details(p: dict[str, Any], language: str) -> str:
+    """La descripción para la API simulada: corta (la búsqueda devuelve varios productos y todo
+    llega al agente), con el rango de precios y la oferta, que la API no tiene en otros campos."""
+    en = language == "en"
+    parts = []
+    if p.get("price_max"):
+        parts.append(
+            f"{'Price from' if en else 'Precio desde'} {_money(p['price'], p['currency'])} "
+            f"{'to' if en else 'hasta'} {_money(p['price_max'], p['currency'])}"
+        )
+    if p.get("compare_at"):
+        parts.append(
+            f"{'On sale, was' if en else 'En oferta, antes'} "
+            + _money(p["compare_at"], p["currency"])
+        )
+    if p.get("description"):
+        parts.append(str(p["description"])[:120])
+    return ". ".join(parts) or str(p["name"])
+
+
+def mock_products(products: list[dict[str, Any]], language: str = "en") -> list[dict[str, Any]]:
+    """Los productos de la tienda en el formato de la API simulada. Las opciones (talles o
+    colores) van como talles, con stock si la fuente dice que hay; la descripción lleva la
+    categoría, el rango de precios y la oferta, para que la búsqueda y el agente los vean."""
+    items = []
+    for n, p in enumerate(products, start=1):
+        options = [str(v)[:24] for v in (p.get("variants") or [])][:8] or ["One size"]
+        units = 0 if p.get("available") is False else 10
+        details = _short_details(p, language)
+        items.append(
+            {
+                "code": f"P{n:03d}",
+                "sku_prefix": "DEMO",
+                "name": p["name"],
+                "price": p["price"],
+                "currency": p["currency"],
+                "image": p.get("image") or "",
+                "url": p.get("url") or "",
+                "category": p.get("category") or "",
+                "description": details,
+                "sizes": options,
+                "colors": ["Standard"],
+                "stock": {"Standard": dict.fromkeys(options, units)},
+            }
+        )
+    return items
 
 
 def sample_orders(
@@ -588,14 +709,19 @@ def sample_orders(
 ) -> list[dict[str, Any]]:
     """DEMO-1001 en camino con demora, DEMO-1002 entregado y DEMO-1003 sin despachar."""
     texts = TEXTS["en" if language == "en" else "es"]
-    items = mock_products(products)
+    items = mock_products(products, language)
+    # Productos distintos entre sí, primero los que tienen stock (decisión 101).
+    stocked = [i for i, p in enumerate(products) if p.get("available") is not False]
+    picks = (stocked + [i for i in range(len(items)) if i not in stocked])[:3] or [0]
 
     def line(n: int) -> dict[str, Any]:
-        product = items[n % len(items)]
+        product = items[picks[n % len(picks)]]
+        size = product["sizes"][0]
+        code = "OS" if size.lower() == "one size" else size.upper()
         return {
-            "sku": f"DEMO-{product['code']}-STA-OS",
+            "sku": f"DEMO-{product['code']}-STA-{code}",
             "name": product["name"],
-            "size": "One size",
+            "size": size,
             "color": "Standard",
             "quantity": 1,
             "unit_price": product["price"],
@@ -614,7 +740,7 @@ def sample_orders(
             "status": status,
             "items": [item],
             "total": item["unit_price"],
-            "currency": items[n % len(items)]["currency"],
+            "currency": items[picks[n % len(picks)]]["currency"],
             "shipping_address": texts["address"],
             "created_at": moment(created),
             "shipped_at": None,
@@ -654,25 +780,81 @@ def sample_orders(
     ]
 
 
+SEARCH_RESULTS = 8  # productos por búsqueda en la tienda de ejemplo
+_SEARCH_WORD = re.compile(r"[a-z0-9]+")
+_SEARCH_STOP = {"a", "an", "the", "do", "you", "have", "any", "in", "for", "of", "and", "or", "s"}
+
+
+def _ranked(products: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    """Los productos que mejor coinciden primero: las palabras de la búsqueda en el nombre pesan
+    más que en la categoría o la descripción; a igual puntaje, los que tienen stock."""
+    words = {w.rstrip("s") for w in _SEARCH_WORD.findall(query.lower())} - _SEARCH_STOP
+
+    def score(product: dict[str, Any]) -> tuple[float, int]:
+        def found(text: Any) -> int:
+            own = {w.rstrip("s") for w in _SEARCH_WORD.findall(str(text or "").lower())}
+            return len(words & own)
+
+        points = 3.0 * found(product.get("name")) + found(product.get("category"))
+        points += 0.5 * found(product.get("description"))
+        return points, 1 if product.get("in_stock") else 0
+
+    return sorted(products, key=score, reverse=True)
+
+
+class _Sandbox(TestClient):
+    """La API simulada de la prueba con la búsqueda acotada (decisión 101). Con un catálogo real
+    ("men" y "wool" están en casi todos los productos de Allbirds) la API devolvía decenas de
+    productos y el resultado le llegaba cortado al agente. Acá devuelve los que mejor coinciden y
+    cuántos más hay, para que el agente sepa que el catálogo tiene más."""
+
+    trial_products = 0
+
+    # El cliente de Starlette puede venir con su propio httpx (httpx2): tipos genéricos.
+    def send(self, request: Any, **kwargs: Any) -> Any:
+        response = super().send(request, **kwargs)
+        if request.method != "GET" or request.url.path != "/products":
+            return response
+        if response.status_code != 200:
+            return response
+        data = response.json()
+        found = data.get("products") or []
+        if len(found) <= SEARCH_RESULTS:
+            return response
+        query = request.url.params.get("query", "")
+        best = _ranked(found, query)[:SEARCH_RESULTS]
+        data = {
+            "products": best,
+            "total_matches": len(found),
+            "note": (
+                f"Showing the {SEARCH_RESULTS} best matches of {len(found)}. The store has more "
+                "products: search with more specific words to see others."
+            ),
+        }
+        return type(response)(200, json=data, request=request)
+
+
 def sandbox(conn: psycopg.Connection, tenant_id: uuid.UUID) -> TestClient:
     """La API simulada de la prueba, en memoria y por proceso. Se arma desde la fila de la prueba:
-    un reinicio la vuelve a su estado inicial."""
-    cached = _SANDBOXES.get(tenant_id)
-    if cached is not None:
-        return cached
+    un reinicio la vuelve a su estado inicial, y también cuando el segundo plano suma productos
+    (decisión 101). Un sitio que no es tienda no tiene pedidos de ejemplo."""
     from app.companies.create import chat_slug
     from app.demo import northwind
 
     trial = for_tenant(conn, tenant_id)
     if trial is None:
         raise RuntimeError("La empresa no tiene una prueba en curso")
-    api = northwind.api_module()
     products = trial.products or []
+    cached = _SANDBOXES.get(tenant_id)
+    if isinstance(cached, _Sandbox) and cached.trial_products == len(products):
+        return cached
+    api = northwind.api_module()
     public = (os.environ.get("PUBLIC_BASE_URL") or "http://localhost:8000").rstrip("/")
-    client = TestClient(
+    orders = sample_orders(products, trial.language, api.store_today()) if products else []
+    client = _Sandbox(
         api.create_app(
-            sample_orders(products, trial.language, api.store_today()),
-            catalog=mock_products(products),
+            orders,
+            catalog=mock_products(products, trial.language),
             customers=[
                 {
                     "id": "C-1001",
@@ -686,6 +868,7 @@ def sandbox(conn: psycopg.Connection, tenant_id: uuid.UUID) -> TestClient:
             checkout_base=f"{public}/demo/{chat_slug(conn, tenant_id)}",
         )
     )
+    client.trial_products = len(products)
     _SANDBOXES[tenant_id] = client
     return client
 
@@ -744,6 +927,60 @@ def pending_approvals(conn: psycopg.Connection, tenant_id: uuid.UUID) -> list[di
         {"id": str(approval_id), "tool": tool, "label": action_label(tool, params)}
         for approval_id, tool, params in rows
     ]
+
+
+def whatsapp_url(trial: Trial) -> str:
+    """El chat de WhatsApp con el equipo, con un mensaje en el idioma de la prueba que nombra la
+    tienda (decisión 101)."""
+    from urllib.parse import quote
+
+    text = TEXTS[trial.language]["whatsapp"].format(name=trial.name)
+    return f"https://wa.me/{WHATSAPP}?text={quote(text)}"
+
+
+def summary(conn: psycopg.Connection, trial: Trial) -> dict[str, Any]:
+    """El resumen de la prueba, solo con datos reales: las consultas que resolvió el agente (el
+    primer mensaje de cada caso no derivado), cuántas derivó y qué acciones hizo el guardián."""
+    left = max(MAX_MESSAGES - trial.messages, 0)
+    data: dict[str, Any] = {
+        "show": trial.messages >= SUMMARY_AFTER or left == 0,
+        "messages": trial.messages,
+        "left": left,
+        "resolved": [],
+        "escalated": 0,
+        "actions": {"verified": 0, "offer_denied": 0, "refund_pending": 0},
+    }
+    if trial.tenant_id is None:
+        return data
+    with tenant_scope(conn, trial.tenant_id):
+        cases = conn.execute(
+            "select c.id, c.status = 'escalated' or exists (select 1 from audit_events e"
+            " where e.case_id = c.id and e.kind = 'escalated'),"
+            " (select m.text from case_messages m where m.case_id = c.id and m.role = 'customer'"
+            "  order by m.created_at limit 1),"
+            " exists (select 1 from case_messages m where m.case_id = c.id and m.role = 'agent')"
+            " from cases c order by c.created_at"
+        ).fetchall()
+        events = conn.execute(
+            "select kind, payload from audit_events where kind in ('verification_checked',"
+            " 'tool_call')"
+        ).fetchall()
+    for _, escalated, first, answered in cases:
+        if escalated:
+            data["escalated"] += 1
+        elif answered and first:
+            data["resolved"].append(" ".join(str(first).split())[:140])
+    actions = data["actions"]
+    for kind, payload in events:
+        payload = payload or {}
+        if kind == "verification_checked" and payload.get("result") == "verified":
+            actions["verified"] += 1
+        elif kind == "tool_call" and payload.get("tool") == "ofrecer_cupon":
+            actions["offer_denied"] += payload.get("status") == "denied"
+        elif kind == "tool_call" and payload.get("status") == "approval_required":
+            actions["refund_pending"] += payload.get("tool") == "iniciar_reembolso"
+    data["resolved"] = data["resolved"][:8]
+    return data
 
 
 def request_pilot(conn: psycopg.Connection, trial_id: uuid.UUID) -> None:
