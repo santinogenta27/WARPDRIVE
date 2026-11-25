@@ -13,6 +13,7 @@ El token del enlace es la credencial de la prueba: solo se guarda su hash.
 import hmac
 import html
 import json
+import logging
 import os
 import time
 import uuid
@@ -32,6 +33,7 @@ from app.policy.approvals import ApprovalError, decide
 from app.trial import service
 
 router = APIRouter(include_in_schema=False)
+logger = logging.getLogger(__name__)
 ES_MONTHS = (
     "enero",
     "febrero",
@@ -109,13 +111,30 @@ T: dict[str, dict[str, str]] = {
             "No pudimos abrir {domain}. Revisá que la dirección esté bien y que el sitio sea "
             "público, y probá de nuevo."
         ),
+        "error_not_found": (
+            "No encontramos {domain}. Revisá que la dirección esté bien escrita y probá de nuevo."
+        ),
+        "error_slow": (
+            "{domain} tardó demasiado en responder. Puede estar con mucho tráfico: probá de nuevo "
+            "en un minuto."
+        ),
         "error_blocked": (
-            "{domain} no nos dejó leer sus páginas. Algunas tiendas bloquean las visitas "
-            "automáticas: probá de nuevo o escribinos y la armamos nosotros."
+            "{domain} bloquea las visitas automáticas, así que no pudimos leer sus páginas. Podés "
+            "seguir con una prueba de ejemplo (productos y políticas de ejemplo con el nombre de "
+            "tu tienda) o hablar con nuestro equipo por WhatsApp y la armamos con vos."
+        ),
+        "error_js_only": (
+            "{domain} arma sus páginas con JavaScript y no publica un sitemap ni datos de "
+            "productos que podamos leer sin un navegador. Podés seguir con una prueba de ejemplo "
+            "o hablar con nuestro equipo por WhatsApp."
+        ),
+        "error_password": (
+            "{domain} tiene contraseña, así que todavía no podemos ver la tienda. Podés seguir con "
+            "una prueba de ejemplo o probar de nuevo cuando la tienda sea pública."
         ),
         "error_empty": (
-            "Abrimos {domain} pero no encontramos texto para leer. Si tu tienda se arma solo con "
-            "JavaScript, escribinos y la armamos nosotros."
+            "Abrimos {domain} pero no encontramos texto para leer. Podés seguir con una prueba de "
+            "ejemplo o hablar con nuestro equipo por WhatsApp."
         ),
         "error_unsafe": "La dirección {domain} no es un sitio público.",
         "error_internal": (
@@ -142,10 +161,34 @@ T: dict[str, dict[str, str]] = {
         "approve": "Aprobar",
         "reject": "Rechazar",
         "pilot": "Empezar mi piloto",
-        "talk": "Hablar con Santino",
-        "talked": "Listo: Santino te escribe a {email}.",
+        "talk": "Hablá con nuestro equipo por WhatsApp",
+        "talk_note": "Te atiende una persona del equipo.",
+        "sample": "Seguir con una prueba de ejemplo",
         "products": "Tus productos",
-        "generic": "No encontramos productos en tu sitio: usamos productos de ejemplo.",
+        "generic": "No pudimos leer tu sitio: esta prueba usa productos y políticas de ejemplo.",
+        "services_lead": (
+            "Este es el mismo asistente que vendemos, con las páginas y los servicios de tu sitio. "
+            "Junto a la conversación ves qué hace por dentro. Nada de esto toca tu sitio real."
+        ),
+        "speed": (
+            "Atención: esta prueba gratis usa un modelo de demo compartido, así que las respuestas "
+            "pueden tardar unos segundos más. En tu piloto, el agente usa modelos dedicados y más "
+            "rápidos, y responde en segundos."
+        ),
+        "typing": "Escribiendo…",
+        "still": "Todavía estoy en eso: la prueba usa un modelo de demo compartido.",
+        "build_note": (
+            "Armamos tu prueba en nuestro entorno de demo compartido. Tu agente real se configura "
+            "una sola vez y está siempre listo."
+        ),
+        "summary": "Tu prueba hasta ahora",
+        "summary_lead": "Lo que hizo el agente en esta prueba, con tus mensajes.",
+        "summary_resolved": "Consultas que resolvió el agente: {n}",
+        "summary_escalated": "Consultas que derivó a una persona: {n}",
+        "summary_verified": "Pedidos verificados: {n}",
+        "summary_denied": "Ofertas negadas por la política: {n}",
+        "summary_refunds": "Reembolsos esperando aprobación: {n}",
+        "summary_next": "¿Lo querés con tu tienda real? En el piloto conectamos tu sistema.",
         "left": "Mensajes de la prueba: {left} de {total}",
         "converted": "Esta prueba ya es tu piloto",
         "converted_lead": "Entrá al panel con el email y la clave que elegiste.",
@@ -208,13 +251,29 @@ T: dict[str, dict[str, str]] = {
             "We couldn't open {domain}. Check that the address is right and that the site is "
             "public, then try again."
         ),
+        "error_not_found": (
+            "We couldn't find {domain}. Check that the address is spelled right and try again."
+        ),
+        "error_slow": (
+            "{domain} took too long to respond. It may be busy right now: try again in a minute."
+        ),
         "error_blocked": (
-            "{domain} didn't let us read its pages. Some stores block automated visits: try "
-            "again, or write to us and we'll set it up for you."
+            "{domain} blocks automated visits, so we couldn't read its pages. You can continue "
+            "with a sample trial (sample products and policies with your store's name) or talk "
+            "to our team on WhatsApp and we'll set it up with you."
+        ),
+        "error_js_only": (
+            "{domain} builds its pages with JavaScript and doesn't publish a sitemap or product "
+            "data we can read without a browser. You can continue with a sample trial or talk to "
+            "our team on WhatsApp."
+        ),
+        "error_password": (
+            "{domain} is password protected, so we can't see the store yet. You can continue with "
+            "a sample trial, or try again once the store is public."
         ),
         "error_empty": (
-            "We opened {domain} but found no text to read. If your store is built only with "
-            "JavaScript, write to us and we'll set it up for you."
+            "We opened {domain} but found no text to read. You can continue with a sample trial "
+            "or talk to our team on WhatsApp."
         ),
         "error_unsafe": "The address {domain} isn't a public site.",
         "error_internal": (
@@ -241,10 +300,35 @@ T: dict[str, dict[str, str]] = {
         "approve": "Approve",
         "reject": "Reject",
         "pilot": "Start my pilot",
-        "talk": "Talk to Santino",
-        "talked": "Done: Santino will write to you at {email}.",
+        "talk": "Talk to our team on WhatsApp",
+        "talk_note": "A person from our team will reply.",
+        "sample": "Continue with a sample trial",
         "products": "Your products",
-        "generic": "We didn't find products on your site: we used sample products.",
+        "generic": "We couldn't read your site: this trial uses sample products and policies.",
+        "services_lead": (
+            "This is the same assistant we sell, with your site's pages and services. Next to the "
+            "conversation you see what it does behind the scenes. None of this touches your real "
+            "site."
+        ),
+        "speed": (
+            "Heads up: this free trial runs on a shared demo model, so replies can take a few "
+            "extra seconds. In your pilot, the agent runs on dedicated, faster models and replies "
+            "in seconds."
+        ),
+        "typing": "Typing…",
+        "still": "Still working on it — the trial runs on a shared demo model.",
+        "build_note": (
+            "Building your trial on our shared demo setup. Your real agent is set up once and is "
+            "always ready."
+        ),
+        "summary": "Your trial so far",
+        "summary_lead": "What the agent did in this trial, with your messages.",
+        "summary_resolved": "Questions the agent resolved: {n}",
+        "summary_escalated": "Questions it handed to a person: {n}",
+        "summary_verified": "Orders verified: {n}",
+        "summary_denied": "Offers denied by policy: {n}",
+        "summary_refunds": "Refunds waiting for approval: {n}",
+        "summary_next": "Want it with your real store? In the pilot we connect your system.",
         "left": "Trial messages: {left} of {total}",
         "converted": "This trial is already your pilot",
         "converted_lead": "Log in to the dashboard with the email and password you chose.",
@@ -322,6 +406,14 @@ border:1px solid var(--line);background:var(--bg)}
 .approval{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line);
 padding:10px 0}
 .approval .actions button{padding:7px 12px}
+.speed{display:flex;gap:10px;align-items:flex-start;margin:0 0 10px;padding:10px 12px;
+border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:10px;
+background:var(--card);font-size:14px;color:var(--muted)}
+.speed b{color:var(--ink)}
+.summary{border-color:var(--accent)}
+.summary ul{margin:8px 0 12px;padding-left:18px}.summary li{margin:2px 0}
+.summary .quote{color:var(--muted);font-style:italic}
+.note{font-size:13px;color:var(--muted);margin:6px 0 0}
 """
 
 # La pantalla de armado y la de falla, con los tokens del panel (decisiones 089 y 099).
@@ -579,6 +671,7 @@ def _building_page(trial: service.Trial, token: str) -> HTMLResponse:
  aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><span id="bar"></span></div>
 <div class="meta"><span id="pct">3%</span>
 <span>{esc(t["elapsed"])} <b id="elapsed">0:00</b></span></div>
+<p class="note">{esc(t["build_note"])}</p>
 <ol class="plan" aria-live="polite">{steps}</ol>
 <p class="detail" id="now"></p>
 <section id="policies" hidden><h2>{esc(t["found_policies"])}</h2>
@@ -597,19 +690,25 @@ def _building_page(trial: service.Trial, token: str) -> HTMLResponse:
 
 def _failed_page(conn: Any, trial: service.Trial, token: str) -> HTMLResponse:
     t = T[trial.language]
-    retry = (
-        f'<form method="post" action="/probar/{esc(token)}/reintentar" style="margin:0">'
-        f'<button type="submit">{esc(t["retry"])}</button></form>'
-        if service.can_retry(conn, trial)
-        else ""
-    )
+    retry = sample = ""
+    if service.can_retry(conn, trial):
+        retry = (
+            f'<form method="post" action="/probar/{esc(token)}/reintentar" style="margin:0">'
+            f'<button type="submit">{esc(t["retry"])}</button></form>'
+        )
+        if str(trial.progress.get("error_code")) not in ("unsafe", "not_found"):
+            sample = (
+                f'<form method="post" action="/probar/{esc(token)}/ejemplo" style="margin:0">'
+                f'<button class="ghost" type="submit">{esc(t["sample"])}</button></form>'
+            )
     body = f"""<div class="build"><div class="card">
 <span class="tag">{esc(t["trial_tag"])}</span>
 <h1>{esc(t["failed"])}</h1><p class="site">{esc(trial.domain)}</p>
 <p class="lead" role="alert" style="margin-top:14px">{esc(_failure(trial))}</p>
-<div class="actions">{retry}
-<form method="post" action="/probar/{esc(token)}/contacto" style="margin:0">
-<button class="ghost" type="submit">{esc(t["talk"])}</button></form></div>
+<div class="actions">{retry}{sample}
+<a class="button ghost" href="/probar/{esc(token)}/whatsapp" target="_blank"
+ rel="noopener">{esc(t["talk"])}</a></div>
+<p class="note">{esc(t["talk_note"])}</p>
 </div></div>"""
     return _layout(t["failed"], body, trial.language, extra_css=BUILD_CSS)
 
@@ -669,90 +768,177 @@ def _order_card(order: dict[str, Any], t: dict[str, str], language: str) -> str:
     )
 
 
+# La página de la prueba lista: aprobaciones, resumen (decisión 101) y el "Typing…" del widget.
+# Todo lo que viene del sitio o del visitante se pinta con textContent: es dato, nunca HTML.
+READY_JS = """
+(function(){
+  var c=JSON.parse(document.getElementById("cfg").textContent), t=c.t, base=c.base;
+  var $=function(id){return document.getElementById(id)};
+  function fill(s,v){return s.replace(/\\{(\\w+)\\}/g,function(_,k){return v[k]})}
+  document.querySelectorAll("[data-copy]").forEach(function(b){
+    b.addEventListener("click",function(){
+      if(navigator.clipboard)navigator.clipboard.writeText(b.dataset.copy);
+    });
+  });
+  function render(list){
+    var box=$("approvals");
+    if(!list.length){box.textContent=t.none;return}
+    box.textContent="";
+    list.forEach(function(a){
+      var row=document.createElement("div");row.className="approval";
+      var text=document.createElement("span");text.textContent=a.label;row.appendChild(text);
+      var acts=document.createElement("div");acts.className="actions";
+      [["aprobar",t.approve,""],["rechazar",t.reject,"ghost"]].forEach(function(d){
+        var b=document.createElement("button");b.type="button";b.textContent=d[1];
+        b.className=d[2];
+        b.addEventListener("click",function(){
+          b.disabled=true;
+          fetch(base+"/aprobaciones/"+a.id,{method:"POST",
+            headers:{"Content-Type":"application/x-www-form-urlencoded"},
+            body:"decision="+d[0]}).then(load);
+        });
+        acts.appendChild(b);
+      });
+      row.appendChild(acts);box.appendChild(row);
+    });
+  }
+  function load(){
+    fetch(base+"/aprobaciones",{cache:"no-store"}).then(function(r){return r.json()})
+    .then(function(d){render(d.approvals||[])}).catch(function(){});
+  }
+  load();setInterval(load,3000);
+
+  // El resumen: después de 5 mensajes o con los 30 usados. Solo datos reales de la prueba.
+  function line(ul,text){var li=document.createElement("li");li.textContent=text;ul.appendChild(li)}
+  function summary(){
+    fetch(c.summary,{cache:"no-store"}).then(function(r){return r.json()}).then(function(s){
+      $("left").textContent=fill(t.left,{left:s.left,total:c.total});
+      if(!s.show)return;
+      var box=$("summary");box.hidden=false;
+      var ul=$("summary-list");ul.textContent="";
+      line(ul,fill(t.resolved,{n:s.resolved.length}));
+      var quotes=$("summary-quotes");quotes.textContent="";
+      s.resolved.forEach(function(q){line(quotes,"\\u201c"+q+"\\u201d")});
+      line(ul,fill(t.escalated,{n:s.escalated}));
+      var a=s.actions||{};
+      if(a.verified)line(ul,fill(t.verified,{n:a.verified}));
+      if(a.offer_denied)line(ul,fill(t.denied,{n:a.offer_denied}));
+      if(a.refund_pending)line(ul,fill(t.refunds,{n:a.refund_pending}));
+    }).catch(function(){});
+  }
+  summary();setInterval(summary,5000);
+
+  // "Typing…" mientras el agente piensa y, pasados 8 s, la nota del modelo compartido. El chat
+  // es el widget de siempre en un iframe del mismo origen: se lee su indicador (.typing .label)
+  // sin cambiar el widget. Si no se puede leer, el chat sigue igual.
+  var frame=$("chat"), host=null, since=0;
+  function shadow(){
+    try{
+      var d=frame.contentDocument;if(!d)return null;
+      if(host&&host.isConnected&&host.shadowRoot)return host.shadowRoot;
+      var all=d.querySelectorAll("*");
+      for(var i=0;i<all.length;i++){if(all[i].shadowRoot){host=all[i];return host.shadowRoot}}
+    }catch(e){}
+    return null;
+  }
+  setInterval(function(){
+    var root=shadow();if(!root)return;
+    var row=root.querySelector(".typing:not(.out)");
+    if(!row){since=0;return}
+    if(!since)since=Date.now();
+    var label=row.querySelector(".label");
+    if(label&&label.textContent!==t.typing)label.textContent=t.typing;
+    if(Date.now()-since>8000&&!row.querySelector(".edai-still")){
+      var note=row.ownerDocument.createElement("small");note.className="edai-still";
+      note.textContent=t.still;
+      note.style.cssText="display:block;font-size:12px;line-height:1.3;opacity:.85;margin-left:4px";
+      row.appendChild(note);
+    }
+  },400);
+})();
+"""
+
+
 def _ready_page(view: service.View, token: str, notice: str) -> HTMLResponse:
     trial = view.trial
     t = T[trial.language]
+    mode = str(trial.progress.get("mode") or "store")
     orders = "".join(_order_card(o, t, trial.language) for o in view.orders)
     products = "".join(
         "<figure>"
-        + (f'<img src="{esc(p["image"])}" alt="">' if p.get("image") else "")
+        + (f'<img src="{esc(p["image"])}" alt="" loading="lazy">' if p.get("image") else "")
         + f"<figcaption>{esc(p['name'])}</figcaption></figure>"
-        for p in trial.products
+        for p in trial.products[:24]
     )
-    generic = (
-        f'<p class="small muted">{esc(t["generic"])}</p>' if trial.progress.get("generic") else ""
-    )
+    generic = f'<p class="small muted">{esc(t["generic"])}</p>' if mode == "sample" else ""
     left = max(service.MAX_MESSAGES - trial.messages, 0)
-    talked = (
-        f'<p class="small" role="status">{esc(t["talked"].format(email=trial.email))}</p>'
-        if notice == "contacto" or trial.contact_requested_at
-        else ""
-    )
     tries = "".join(
         f'<li><button type="button" data-copy="{esc(s)}">{esc(s)}</button></li>'
         for s in _suggestions(trial)
     )
+    talk = (
+        f'<a class="button ghost" href="/probar/{esc(token)}/whatsapp" target="_blank"'
+        f' rel="noopener">{esc(t["talk"])}</a>'
+    )
+    pilot = f'<a class="button" href="/probar/{esc(token)}/piloto">{esc(t["pilot"])}</a>'
+    orders_card = (
+        f'<div class="card"><h2>{esc(t["orders"])} <span class="tag">demo</span></h2>'
+        f'<p class="small muted">{esc(t["orders_note"].format(email=trial.email))}</p>'
+        f"{orders}</div>"
+        if view.orders
+        else ""
+    )
+    products_card = (
+        f'<div class="card"><h2>{esc(t["products"])}</h2>{generic}'
+        f'<div class="products">{products}</div></div>'
+        if trial.products
+        else ""
+    )
+    lead = t["services_lead"] if mode == "services" else t["ready_lead"]
+    keys = ("none", "approve", "reject", "left", "typing", "still")
+    config = {
+        "base": f"/probar/{token}",
+        "summary": f"/probar/{token}/resumen",
+        "total": service.MAX_MESSAGES,
+        "t": {
+            **{k: t[k] for k in keys},
+            "resolved": t["summary_resolved"],
+            "escalated": t["summary_escalated"],
+            "verified": t["summary_verified"],
+            "denied": t["summary_denied"],
+            "refunds": t["summary_refunds"],
+        },
+    }
+    data = json.dumps(config, ensure_ascii=False).replace("</", "<\\/")
     body = f"""<div class="top"><div><span class="tag">{esc(t["trial_tag"])}</span>
-<h1>{esc(trial.name)}</h1><p class="lead">{esc(t["ready_lead"])}</p></div>
-<div class="actions"><a class="button" href="/probar/{esc(token)}/piloto">{esc(t["pilot"])}</a>
-<form method="post" action="/probar/{esc(token)}/contacto" style="margin:0">
-<button class="ghost" type="submit">{esc(t["talk"])}</button></form></div></div>{talked}
+<h1>{esc(trial.name)}</h1><p class="lead">{esc(lead)}</p></div>
+<div class="actions">{pilot}{talk}</div></div>
 <div class="grid"><div>
-<iframe src="/demo/{esc(view.chat_slug)}" title="{esc(trial.name)}"></iframe>
-<p class="small muted">{esc(t["left"].format(left=left, total=service.MAX_MESSAGES))}</p></div>
+<p class="speed" role="note">{esc(t["speed"])}</p>
+<iframe id="chat" src="/demo/{esc(view.chat_slug)}" title="{esc(trial.name)}"></iframe>
+<p class="small muted" id="left">{esc(t["left"].format(left=left, total=service.MAX_MESSAGES))}</p>
+<section class="card summary" id="summary" hidden aria-live="polite">
+<h2>{esc(t["summary"])}</h2><p class="small muted">{esc(t["summary_lead"])}</p>
+<ul id="summary-list"></ul><ul class="small quote" id="summary-quotes"></ul>
+<p class="small">{esc(t["summary_next"])}</p>
+<div class="actions">{pilot}{talk}</div><p class="note">{esc(t["talk_note"])}</p></section>
+</div>
 <aside>
-<div class="card"><h2>{esc(t["orders"])} <span class="tag">demo</span></h2>
-<p class="small muted">{esc(t["orders_note"].format(email=trial.email))}</p>{orders}</div>
+{orders_card}
 <div class="card"><h2>{esc(t["tries"])}</h2><ul class="tries">{tries}</ul></div>
 <div class="card"><h2>{esc(t["approvals"])}</h2>
 <p class="small muted">{esc(t["approvals_note"])}</p><div id="approvals"
  class="small muted">{esc(t["none"])}</div></div>
-<div class="card"><h2>{esc(t["products"])}</h2>{generic}<div class="products">{products}</div></div>
+{products_card}
 </aside></div>
-<script>
-(function(){{
-  var base="/probar/{esc(token)}", none={json.dumps(t["none"])};
-  var labels={{approve:{json.dumps(t["approve"])},reject:{json.dumps(t["reject"])}}};
-  document.querySelectorAll("[data-copy]").forEach(function(b){{
-    b.addEventListener("click",function(){{
-      if(navigator.clipboard)navigator.clipboard.writeText(b.dataset.copy);
-    }});
-  }});
-  function render(list){{
-    var box=document.getElementById("approvals");
-    if(!list.length){{box.textContent=none;return}}
-    box.textContent="";
-    list.forEach(function(a){{
-      var row=document.createElement("div");row.className="approval";
-      var text=document.createElement("span");text.textContent=a.label;row.appendChild(text);
-      var acts=document.createElement("div");acts.className="actions";
-      [["aprobar",labels.approve,""],["rechazar",labels.reject,"ghost"]].forEach(function(d){{
-        var b=document.createElement("button");b.type="button";b.textContent=d[1];
-        b.className=d[2];
-        b.addEventListener("click",function(){{
-          b.disabled=true;
-          fetch(base+"/aprobaciones/"+a.id,{{method:"POST",
-            headers:{{"Content-Type":"application/x-www-form-urlencoded"}},
-            body:"decision="+d[0]}}).then(load);
-        }});
-        acts.appendChild(b);
-      }});
-      row.appendChild(acts);box.appendChild(row);
-    }});
-  }}
-  function load(){{
-    fetch(base+"/aprobaciones",{{cache:"no-store"}}).then(function(r){{return r.json()}})
-    .then(function(d){{render(d.approvals||[])}}).catch(function(){{}});
-  }}
-  load();setInterval(load,3000);
-}})();
-</script>"""
+<script id="cfg" type="application/json">{data}</script>
+<script>{READY_JS}</script>"""
     return _layout(trial.name, body, trial.language)
 
 
 def _suggestions(trial: service.Trial) -> list[str]:
-    first = trial.products[0]["name"] if trial.products else ""
-    return [s.format(product=first) for s in service.TEXTS[trial.language]["suggestions"]]
+    mode = str(trial.progress.get("mode") or "store")
+    return service.suggestions_for(trial.language, trial.products or [], mode)
 
 
 def _message_page(
@@ -827,6 +1013,7 @@ def trial_state(token: str, deps: Deps) -> JSONResponse:
         "name": trial.name,
         "error": progress.get("error"),
         "generic": bool(progress.get("generic")),
+        "mode": progress.get("mode") or "",
         # Mientras se arma, los productos que va encontrando (nombre, precio y foto).
         "products": trial.products if trial.status == "ready" else progress.get("found") or [],
         "orders": view.orders,
@@ -924,6 +1111,43 @@ def trial_contact(token: str, deps: Deps) -> Response:
             return _not_found()
         service.contact_operator(conn, deps.mailer(), trial)
     return RedirectResponse(f"/probar/{token}?aviso=contacto", status_code=303)
+
+
+@router.get("/probar/{token}/whatsapp")
+def trial_whatsapp(token: str, deps: Deps) -> Response:
+    """ "Hablá con nuestro equipo por WhatsApp": anota el contacto, avisa al operador (una vez) y
+    abre WhatsApp con un mensaje que nombra la tienda (decisión 101)."""
+    with deps.connection() as conn:
+        trial = service.find(conn, token)
+        if trial is None:
+            return _not_found()
+        try:
+            service.contact_operator(conn, deps.mailer(), trial)
+        except Exception:  # noqa: BLE001 — el visitante llega a WhatsApp aunque falle el aviso
+            logger.exception("No se pudo avisar al operador del contacto de la prueba %s", trial.id)
+    return RedirectResponse(service.whatsapp_url(trial), status_code=303)
+
+
+@router.get("/probar/{token}/resumen")
+def trial_summary(token: str, deps: Deps) -> JSONResponse:
+    with deps.connection() as conn:
+        trial = service.find(conn, token)
+        if trial is None or trial.status != "ready":
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        data = service.summary(conn, trial)
+    return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/probar/{token}/ejemplo")
+def trial_sample(token: str, deps: Deps) -> Response:
+    """ "Seguir con una prueba de ejemplo": el sitio no se pudo leer (decisión 101)."""
+    with deps.connection() as conn:
+        if service.find(conn, token) is None:
+            return _not_found()
+        retried = service.retry(conn, token, sample=True)
+    if retried:
+        deps.kick_worker()
+    return RedirectResponse(f"/probar/{token}", status_code=303)
 
 
 @router.get("/probar/{token}/piloto")

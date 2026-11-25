@@ -122,10 +122,14 @@ class TrialEmbedder:
         *,
         transport: GeminiTransport | None = None,
         on_busy: Any = None,
+        marks_busy: bool = True,
     ) -> None:
         self._recorder = recorder
         self._transport = transport
         self._on_busy = on_busy or (lambda: None)
+        # El armado no deja la demo "ocupada": sigue por texto y completa los vectores después
+        # (decisión 101). Visto: un 429 del armado bloqueaba el chat 5 minutos.
+        self._marks_busy = marks_busy
 
     def embed(
         self,
@@ -143,7 +147,8 @@ class TrialEmbedder:
             )
         except QuotaExhausted as error:
             self._on_busy()
-            if error.daily and not isinstance(error, TrialBusy):  # la por minuto se renueva sola
+            daily = error.daily and not isinstance(error, TrialBusy)  # la por minuto se renueva
+            if daily and self._marks_busy:
                 mark_busy()
             raise TrialBusy(str(error)) from error
 
@@ -159,4 +164,4 @@ def trial_embedder(recorder: UsageRecorder, *, client: httpx.Client | None = Non
             min_interval=0.5,
             max_retries=0,
         )
-    return TrialEmbedder(recorder, transport=transport)
+    return TrialEmbedder(recorder, transport=transport, marks_busy=False)

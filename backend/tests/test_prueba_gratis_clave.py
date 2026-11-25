@@ -269,12 +269,26 @@ def test_un_429_por_minuto_no_deja_la_demo_ocupada(
     with pytest.raises(keys.TrialBusy):
         embedder.embed(["hola"], tenant_id=trial.tenant_id)
     assert not keys.busy()
-    daily = keys.trial_embedder(
+    # La cuota diaria agotada en el armado tampoco: sigue por texto (decisión 101)…
+    build = keys.trial_embedder(
         PostgresUsageRecorder(conn),
         client=httpx.Client(transport=httpx.MockTransport(_Gemini(False))),
     )
     with pytest.raises(keys.TrialBusy):
-        daily.embed(["hola"], tenant_id=trial.tenant_id)
+        build.embed(["hola"], tenant_id=trial.tenant_id)
+    assert not keys.busy()
+    # …pero en el chat sí: no se insiste en cada mensaje.
+    from app.llm.gemini import GeminiTransport
+
+    transport = GeminiTransport(
+        api_key=TRIAL_KEY,
+        http_client=httpx.Client(transport=httpx.MockTransport(_Gemini(False))),
+        min_interval=0,
+        max_retries=0,
+    )
+    chat = keys.TrialEmbedder(PostgresUsageRecorder(conn), transport=transport)
+    with pytest.raises(keys.TrialBusy):
+        chat.embed(["hola"], tenant_id=trial.tenant_id, input_type="query")
     assert keys.busy()
 
 
