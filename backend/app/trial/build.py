@@ -68,6 +68,7 @@ BUILD_SECONDS = 45.0  # todo el armado; los embeddings se saltean si no queda ti
 EMBED_MIN_SECONDS = 8.0
 REST_SECONDS = 120.0
 REST_RETRY = timedelta(minutes=30)  # si siguen sin haber embeddings
+REST_FIRST_WAIT = timedelta(seconds=75)
 REST_ROUNDS = 8
 EMBED_BATCH = 100
 MAX_LIVE_PRODUCTS = 12
@@ -585,7 +586,14 @@ def _build(
             "round": 0,
             "urls": leftover,
         }
-        enqueue(conn, service.JOB_KIND, payload, idempotency_key=rest_key(trial.id, attempt, 0))
+        enqueue(
+            conn,
+            service.JOB_KIND,
+            payload,
+            idempotency_key=rest_key(trial.id, attempt, 0),
+            # Sin vectores (p. ej. un 429 por minuto): después de que se renueve la ventana.
+            run_after=None if vectors else datetime.now(UTC) + REST_FIRST_WAIT,
+        )
     progress.update(
         "ready",
         step="done",
