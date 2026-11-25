@@ -24,6 +24,8 @@ Deja el chat de Acme Store en un link fijo del tipo `https://acme-chat-demo.onre
 
    El resto (`LLM_PROVIDER=groq`, los modelos, los límites y la versión de Python) ya viene de `render.yaml`.
 
+   **Clave propia de la prueba gratis (recomendada).** La prueba gratis (`/try` y `/probar`) usa su propia clave de Gemini para los embeddings, así el resto del sistema no le agota la cuota diaria. Agregala en el servicio → **Environment** → **Add Environment Variable**: `TRIAL_GEMINI_API_KEY` (de otro proyecto de aistudio.google.com, para que tenga su propia cuota) → **Save Changes**. Si no está, la prueba usa `GEMINI_API_KEY` (decisión 099).
+
    **Si ya habías creado el servicio** antes de pasar a Groq, Render toma solo las variables nuevas con valor. `GROQ_API_KEY` es secreta y no se pide sola: agregala en el servicio → **Environment** → **Add Environment Variable** → **Save Changes**.
 5. **Desplegá.** Tocá **Deploy Blueprint** (o **Apply**). Render instala las dependencias y arranca el servicio. Tarda unos minutos. En **Logs** vas a ver:
    - `Migraciones aplicadas: ninguna (al día)`
@@ -188,6 +190,7 @@ Cada secreto se cambia en Render → servicio → **Environment** → editar →
 | `DATABASE_URL` | Neon → **Roles** → `neondb_owner` → **Reset password** | Copiá la URL nueva a Render y a `.env` enseguida: la vieja deja de andar. |
 | `GROQ_API_KEY` | console.groq.com → **API Keys** → crear una nueva → borrar la vieja | Ninguno, si cargás la nueva antes de borrar la vieja. |
 | `GEMINI_API_KEY` | aistudio.google.com → **API keys** | Igual que Groq. |
+| `TRIAL_GEMINI_API_KEY` (la de la prueba gratis) | aistudio.google.com → **API keys**, en otro proyecto | Igual que Groq. Mientras falte, la prueba usa `GEMINI_API_KEY`. |
 | `ANTHROPIC_API_KEY`, `VOYAGE_API_KEY` | console.anthropic.com y dash.voyageai.com | Igual que Groq. |
 | `RESEND_API_KEY` | resend.com → **API Keys** | Igual que Groq. |
 | `WHATSAPP_APP_SECRET` | Meta → tu app → **Configuración → Básica → Restablecer clave secreta** | Los webhooks firmados con la vieja se rechazan: cambiala en Render en el mismo momento. |

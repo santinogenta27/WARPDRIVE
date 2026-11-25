@@ -3,9 +3,10 @@
 1. `start`: el visitante deja la URL de su tienda y su email; se le manda un código.
 2. `confirm`: con el código correcto se crea la empresa de prueba (un tenant común, con su chat y
    "detrás de escena") y se encolan el armado y el borrado a los 7 días.
-3. `run_build` (job `trial_build`): rastrea el sitio, indexa sus páginas, lee sus productos y
+3. `run_build` (job `trial_build`): lee el sitio, indexa sus páginas, lee sus productos y
    configura el mismo agente que se vende contra la API simulada de Northwind, con sus productos
-   y pedidos de ejemplo `DEMO-…`. Idempotente: cada paso reemplaza lo suyo.
+   y pedidos de ejemplo `DEMO-…`. En menos de un minuto y sin quedar trabado (decisión 099, en
+   `build`). Idempotente: cada paso reemplaza lo suyo. `retry` lo vuelve a encolar.
 4. `convert`: "Empezar mi piloto" convierte la empresa de prueba en una real, sin los pedidos de
    ejemplo. `run_expire_job` la borra a los 7 días si no se convirtió.
 """
@@ -34,7 +35,6 @@ from app.db.connection import tenant_scope
 from app.jobs.queue import Job, enqueue
 from app.llm.embedder import Embedder
 from app.mailer import Email, Mailer
-from app.trial import catalog
 
 JOB_KIND = "trial_build"
 EXPIRE_JOB = "trial_expire"
@@ -333,11 +333,18 @@ def confirm(conn: psycopg.Connection, token: str, code: str) -> Trial:
     tenant_id = _new_tenant(conn, trial)
     conn.execute(
         "update trials set company_id = %s, status = 'building', code_hash = null,"
-        " progress = %s where id = %s",
-        (tenant_id, Jsonb({"step": "crawl"}), trial.id),
+        " progress = jsonb_build_object('step', 'crawl', 'attempt', 1, 'started_at', now(),"
+        " 'at', now()) where id = %s",
+        (tenant_id, trial.id),
     )
     payload = {"trial_id": str(trial.id)}  # sin tenant_id: el borrado de la empresa no lo toca
-    enqueue(conn, JOB_KIND, payload, idempotency_key=f"trial-build-{trial.id}", max_attempts=3)
+    enqueue(
+        conn,
+        JOB_KIND,
+        _build_payload(trial.id, tenant_id, token, 1),
+        idempotency_key=f"trial-build-{trial.id}",
+        max_attempts=3,
+    )
     enqueue(
         conn,
         EXPIRE_JOB,
@@ -350,13 +357,89 @@ def confirm(conn: psycopg.Connection, token: str, code: str) -> Trial:
     return confirmed
 
 
+def _build_payload(
+    trial_id: uuid.UUID, tenant_id: uuid.UUID, token: str, attempt: int
+) -> dict[str, Any]:
+    """El job de armado lleva su intento y el enlace de la prueba, cifrado con la clave de la
+    empresa, para el email de "lista" (en la base solo está el hash del enlace)."""
+    from app.crypto import encrypt_for
+
+    return {
+        "trial_id": str(trial_id),
+        "attempt": attempt,
+        "link": encrypt_for(tenant_id, token),
+    }
+
+
+STALE_SECONDS = 120  # "building" por más de esto: la página ofrece reintentar
+MAX_ATTEMPTS = 5
+
+
+def elapsed(conn: psycopg.Connection, trial_id: uuid.UUID) -> float:
+    """Segundos desde que empezó el armado en curso."""
+    row = conn.execute(
+        "select extract(epoch from clock_timestamp()"
+        " - coalesce((progress->>'started_at')::timestamptz, created_at))"
+        " from trials where id = %s",
+        (trial_id,),
+    ).fetchone()
+    return max(float(row[0]), 0.0) if row and row[0] is not None else 0.0
+
+
+def can_retry(conn: psycopg.Connection, trial: Trial) -> bool:
+    if trial.tenant_id is None or int(trial.progress.get("attempt") or 1) >= MAX_ATTEMPTS:
+        return False
+    if trial.status == "failed":
+        return True
+    return trial.status == "building" and elapsed(conn, trial.id) > STALE_SECONDS
+
+
+def retry(conn: psycopg.Connection, token: str) -> bool:
+    """ "Reintentar": vuelve a encolar el armado si falló o lleva más de 2 minutos. Idempotente:
+    un doble clic encola un solo intento nuevo, y el job del intento anterior ya no toca nada."""
+    found = find(conn, token)
+    if found is None:
+        return False
+    trial = get(conn, found.id, lock=True)
+    if trial is None or not can_retry(conn, trial):
+        return False
+    assert trial.tenant_id is not None
+    attempt = int(trial.progress.get("attempt") or 1) + 1
+    conn.execute(
+        "update trials set status = 'building', progress = jsonb_build_object('step', 'crawl',"
+        " 'attempt', %s::int, 'started_at', clock_timestamp(), 'at', clock_timestamp())"
+        " where id = %s",
+        (attempt, trial.id),
+    )
+    enqueue(
+        conn,
+        JOB_KIND,
+        _build_payload(trial.id, trial.tenant_id, token, attempt),
+        idempotency_key=f"trial-build-{trial.id}-{attempt}",
+        max_attempts=2,
+    )
+    return True
+
+
 # -- armado -----------------------------------------------------------------------------------
+NAME_MAX = 60  # el máximo del nombre del widget
+
+
 def _store_name(declared: str, title: str, domain: str) -> str:
     """El nombre que declara el sitio (`og:site_name`); si no, la parte del título que se parece
-    al dominio ("Ofertas – Tienda Sol" → "Tienda Sol"); si no, la primera."""
+    al dominio ("Ofertas – Tienda Sol" → "Tienda Sol"); si no, la primera. Hasta `NAME_MAX`."""
+    return _fit(_name_from(declared, title, domain)) or domain[:NAME_MAX]
+
+
+def _fit(name: str) -> str:
+    return name if len(name) <= NAME_MAX else name[:NAME_MAX].rsplit(" ", 1)[0].strip()
+
+
+def _name_from(declared: str, title: str, domain: str) -> str:
     if 2 <= len(declared) <= 80:
         return declared
-    parts = [p.strip() for p in re.split(r"\s+[|–—-]\s+", " ".join(title.split())) if p.strip()]
+    separators = r"\s+[|–—\-·•»]\s+"
+    parts = [p.strip() for p in re.split(separators, " ".join(title.split())) if p.strip()]
     stem = re.sub(r"[^a-z0-9]", "", domain.split(".")[0].lower())
     for part in parts:
         if stem and stem in re.sub(r"[^a-z0-9]", "", part.lower()):
@@ -399,12 +482,6 @@ def _priority() -> Callable[[str], int]:
     return rank
 
 
-def _progress(conn: psycopg.Connection, trial_id: uuid.UUID, **values: Any) -> None:
-    conn.execute(
-        "update trials set progress = progress || %s where id = %s", (Jsonb(values), trial_id)
-    )
-
-
 def _catalog_text(products: list[dict[str, Any]], language: str) -> str:
     title = "# Catalog" if language == "en" else "# Catálogo"
     lines = [
@@ -420,59 +497,15 @@ def run_build(
     *,
     embedder: Embedder,
     http: httpx.Client | None = None,
+    checkpoint: Callable[[], None] | None = None,
 ) -> None:
-    """Arma la prueba. Correrlo de nuevo reemplaza lo anterior sin duplicar nada."""
-    from app.onboarding.ingest import crawl, index_document, remove_source, save_site
+    """Arma la prueba (ver `build`). Correrlo de nuevo reemplaza lo anterior sin duplicar nada.
+    `checkpoint`: se llama en cada paso (el job confirma ahí, así la página ve el avance)."""
+    from app.trial import build
 
-    trial = get(conn, trial_id)
-    if trial is None or trial.status not in ACTIVE or trial.tenant_id is None:
-        return
-    tenant_id = trial.tenant_id
-    found: list[catalog.Product] = []
-    declared: list[str] = []
-
-    def on_page(url: str, markup: str) -> None:
-        found.extend(catalog.extract(markup, url))
-        if not declared:  # la primera página: la portada
-            declared.append(catalog.site_name(markup))
-
-    try:
-        pages = crawl(trial.site_url, http, on_page=on_page, priority=_priority())
-    except Exception as error:  # noqa: BLE001 — se informa en la página, sin reintentar
-        conn.execute(
-            "update trials set status = 'failed', progress = progress || %s where id = %s",
-            (Jsonb({"error": str(error)[:300]}), trial_id),
-        )
-        return
-    save_site(conn, tenant_id, trial.site_url, pages, embedder)
-    name = _store_name(declared[0] if declared else "", pages[0].title, trial.domain)
-    _progress(conn, trial_id, step="products", pages=len(pages), name=name)
-    # Una tarjeta de regalo no sirve como pedido de ejemplo ni como recomendación.
-    kept = [p for p in found if not _GIFT_CARD.search(p.name)]
-    products = [p.__dict__ for p in catalog.unique(kept, MAX_PRODUCTS)]
-    generic = not products
-    if generic:
-        currency = "USD" if trial.language == "en" else "ARS"
-        products = [
-            {"name": n, "price": float(10 * (i + 2)), "currency": currency, "image": "", "url": ""}
-            for i, n in enumerate(TEXTS[trial.language]["generic"])
-        ]
-    conn.execute("update trials set products = %s where id = %s", (Jsonb(products), trial_id))
-    remove_source(conn, tenant_id, CATALOG_SOURCE)
-    index_document(
-        conn,
-        tenant_id,
-        embedder,
-        title="Catalog" if trial.language == "en" else "Catálogo",
-        source=CATALOG_SOURCE,
-        text=_catalog_text(products, trial.language),
+    build.run_build(
+        conn, trial_id, embedder=embedder, http=http, checkpoint=checkpoint or (lambda: None)
     )
-    _configure(conn, trial, name, products)
-    conn.execute(
-        "update trials set status = 'ready', progress = progress || %s where id = %s",
-        (Jsonb({"step": "done", "products": len(products), "generic": generic}), trial_id),
-    )
-    _SANDBOXES.pop(tenant_id, None)
 
 
 def _configure(
@@ -510,11 +543,11 @@ def case_type_texts(language: str) -> dict[str, str]:
 
 
 def run_build_job(conn: psycopg.Connection, job: Job) -> None:
-    from app.llm.client import PostgresUsageRecorder
-    from app.llm.factory import embedder_from_env
+    """El job de la cola: confirma en cada paso y avisa por email cuando está lista."""
+    from app.mailer import mailer_from_env
+    from app.trial import build
 
-    embedder = embedder_from_env(PostgresUsageRecorder(conn))
-    run_build(conn, uuid.UUID(str(job.payload["trial_id"])), embedder=embedder)
+    build.run_job(conn, job, mailer=mailer_from_env(), checkpoint=conn.commit)
 
 
 # -- la tienda de ejemplo ---------------------------------------------------------------------

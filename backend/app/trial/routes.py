@@ -81,11 +81,47 @@ T: dict[str, dict[str, str]] = {
         "code": "Código",
         "confirm": "Confirmar",
         "building": "Estamos armando tu prueba",
-        "step_crawl": "Leyendo las páginas públicas de tu sitio (hasta 30)",
-        "step_products": "Buscando tus productos (nombre, precio e imagen)",
-        "step_agent": "Configurando el asistente con tus políticas y una tienda de ejemplo",
-        "failed": "No pudimos leer tu sitio",
-        "failed_lead": "Revisá que la dirección sea pública. Si querés, te ayudamos nosotros.",
+        "step_crawl": "Leyendo las páginas principales de tu sitio",
+        "step_index": "Aprendiendo tus políticas y tus productos",
+        "step_agent": "Configurando tu asistente con una tienda de ejemplo",
+        "read_of": "Leímos {read} de {total} páginas",
+        "read_done": "Leímos {n} páginas",
+        "reading": "Leyendo {page}",
+        "elapsed": "Tiempo",
+        "found_products": "Productos que encontramos",
+        "found_policies": "Políticas que encontramos",
+        "calm": (
+            "Suele tardar menos de un minuto. Podés dejar esta pestaña abierta; también te "
+            "avisamos por email cuando esté listo."
+        ),
+        "stale": "Está tardando más de lo normal. Podés reintentar: no se duplica nada.",
+        "retry": "Reintentar",
+        "failed": "No pudimos armar tu prueba",
+        "policy_shipping": "Envíos",
+        "policy_returns": "Devoluciones",
+        "policy_warranty": "Garantía",
+        "policy_payments": "Pagos",
+        "policy_faq": "Preguntas frecuentes",
+        "policy_privacy": "Privacidad",
+        "policy_terms": "Términos",
+        "policy_contact": "Contacto",
+        "error_unreachable": (
+            "No pudimos abrir {domain}. Revisá que la dirección esté bien y que el sitio sea "
+            "público, y probá de nuevo."
+        ),
+        "error_blocked": (
+            "{domain} no nos dejó leer sus páginas. Algunas tiendas bloquean las visitas "
+            "automáticas: probá de nuevo o escribinos y la armamos nosotros."
+        ),
+        "error_empty": (
+            "Abrimos {domain} pero no encontramos texto para leer. Si tu tienda se arma solo con "
+            "JavaScript, escribinos y la armamos nosotros."
+        ),
+        "error_unsafe": "La dirección {domain} no es un sitio público.",
+        "error_internal": (
+            "Algo falló de nuestro lado mientras armábamos tu prueba. Probá de nuevo; si vuelve a "
+            "pasar, te ayudamos."
+        ),
         "ready_lead": (
             "Este es el mismo asistente que vendemos, con las políticas de tu sitio y una tienda "
             "de ejemplo con tus productos. Junto a la conversación ves qué hace por "
@@ -144,11 +180,47 @@ T: dict[str, dict[str, str]] = {
         "code": "Code",
         "confirm": "Confirm",
         "building": "We're setting up your trial",
-        "step_crawl": "Reading the public pages of your site (up to 30)",
-        "step_products": "Finding your products (name, price and image)",
-        "step_agent": "Setting up the assistant with your policies and a sample store",
-        "failed": "We couldn't read your site",
-        "failed_lead": "Check that the address is public. We can help you if you want.",
+        "step_crawl": "Reading your site's main pages",
+        "step_index": "Learning your policies and products",
+        "step_agent": "Setting up your assistant with a sample store",
+        "read_of": "Read {read} of {total} pages",
+        "read_done": "Read {n} pages",
+        "reading": "Reading {page}",
+        "elapsed": "Elapsed",
+        "found_products": "Products we found",
+        "found_policies": "Policies we found",
+        "calm": (
+            "This usually takes under a minute. You can keep this tab open; we'll also email you "
+            "when it's ready."
+        ),
+        "stale": "This is taking longer than usual. You can try again: nothing gets duplicated.",
+        "retry": "Try again",
+        "failed": "We couldn't set up your trial",
+        "policy_shipping": "Shipping",
+        "policy_returns": "Returns",
+        "policy_warranty": "Warranty",
+        "policy_payments": "Payments",
+        "policy_faq": "FAQ",
+        "policy_privacy": "Privacy",
+        "policy_terms": "Terms",
+        "policy_contact": "Contact",
+        "error_unreachable": (
+            "We couldn't open {domain}. Check that the address is right and that the site is "
+            "public, then try again."
+        ),
+        "error_blocked": (
+            "{domain} didn't let us read its pages. Some stores block automated visits: try "
+            "again, or write to us and we'll set it up for you."
+        ),
+        "error_empty": (
+            "We opened {domain} but found no text to read. If your store is built only with "
+            "JavaScript, write to us and we'll set it up for you."
+        ),
+        "error_unsafe": "The address {domain} isn't a public site.",
+        "error_internal": (
+            "Something went wrong on our side while setting up your trial. Try again; if it "
+            "happens again, we'll help you."
+        ),
         "ready_lead": (
             "This is the same assistant we sell, with your site's policies and a sample store "
             "with your products. Next to the conversation you see what it does behind the "
@@ -252,6 +324,56 @@ padding:10px 0}
 .approval .actions button{padding:7px 12px}
 """
 
+# La pantalla de armado y la de falla, con los tokens del panel (decisiones 089 y 099).
+BUILD_CSS = """
+.build{--brand:#4338ca;--brand-soft:#eef0fd;--on-brand:#fff;--ok:#157f3c;--bad:#c02626;
+--bad-soft:#fdecec;--sunken:#f1f2f4;--ink-2:#3c414b;max-width:680px;margin:24px auto}
+@media (prefers-color-scheme:dark){.build{--brand:#8b93f8;--brand-soft:#20233d;
+--on-brand:#0e1014;--ok:#4ade80;--bad:#f87171;--bad-soft:#341617;--sunken:#1c2029;
+--ink-2:#c3c8d1}}
+.build .card{padding:22px;border-radius:10px;box-shadow:0 1px 2px rgba(16,24,40,.06)}
+.build h1{font-size:24px}.build h2{font-size:15px;margin:22px 0 8px}
+.build button{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.build button.ghost{background:transparent;color:var(--brand)}
+.build :focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.build .site{color:var(--muted);font-size:14px;margin:0;overflow-wrap:anywhere}
+.bar{height:8px;border-radius:999px;background:var(--sunken);overflow:hidden;margin:18px 0 6px}
+.bar>span{display:block;height:100%;width:3%;background:var(--brand);border-radius:inherit;
+transition:width .5s ease}
+.meta{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted);
+font-variant-numeric:tabular-nums}
+.plan{list-style:none;margin:14px 0 0;padding:0}
+.plan li{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;
+align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+.plan li:first-child{border-top:0}
+.dot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;
+font-weight:700;border:2px solid var(--line);color:var(--muted);box-sizing:border-box}
+.plan li.on .dot{border-color:var(--brand);border-top-color:transparent;
+animation:spin 1s linear infinite}
+.plan li.done .dot{background:var(--ok);border-color:var(--ok);color:var(--on-brand)}
+.what{font-weight:600}.plan li:not(.on):not(.done) .what{color:var(--muted)}
+.detail{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;
+white-space:nowrap}
+.took{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.plan li.on .dot{animation:none;
+border-top-color:var(--brand)}.bar>span{transition:none}}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}
+.chips li{font-size:13px;padding:3px 10px;border-radius:999px;background:var(--brand-soft)}
+.found{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px}
+.found figure{margin:0;font-size:13px;line-height:1.3}
+.found .ph,.found img{display:block;width:100%;aspect-ratio:1;object-fit:cover;
+border-radius:10px;border:1px solid var(--line);background:var(--sunken)}
+.found figcaption{margin-top:6px;overflow-wrap:anywhere}.found .price{color:var(--muted)}
+@media (max-width:480px){.build{margin:8px auto}.build .card{padding:16px}
+.found{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.calm{margin:20px 0 0;padding:12px 14px;border-radius:10px;background:var(--sunken);
+font-size:14px;color:var(--ink-2)}
+.notice{margin:16px 0 0;padding:12px 14px;border-radius:10px;background:var(--bad-soft);
+font-size:14px}
+.notice .actions{margin-top:10px}
+"""
+
 
 def _lang(value: str | None) -> str:
     return "en" if value == "en" else "es"
@@ -261,12 +383,14 @@ def esc(value: object) -> str:
     return html.escape("" if value is None else str(value), quote=True)
 
 
-def _layout(title: str, body: str, language: str, status: int = 200) -> HTMLResponse:
+def _layout(
+    title: str, body: str, language: str, status: int = 200, extra_css: str = ""
+) -> HTMLResponse:
     markup = (
         f'<!doctype html><html lang="{language}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f'<meta name="color-scheme" content="light dark"><title>{esc(title)}</title>'
-        f"<style>{CSS}</style></head><body><main>{body}</main></body></html>"
+        f"<style>{CSS}{extra_css}</style></head><body><main>{body}</main></body></html>"
     )
     return HTMLResponse(markup, status_code=status, headers={"Cache-Control": "no-store"})
 
@@ -365,35 +489,150 @@ def _code_page(trial: service.Trial, token: str, error: str = "") -> HTMLRespons
     return _layout(t["code_title"], body, trial.language, 400 if error else 200)
 
 
+STEPS = ("crawl", "index", "agent")
+
+# La pantalla de armado: consulta el estado cada 1,5 s y pinta todo con textContent (lo que
+# viene del sitio del visitante es dato, nunca HTML).
+BUILD_JS = """
+(function(){
+  var c=JSON.parse(document.getElementById("cfg").textContent), t=c.t;
+  var $=function(id){return document.getElementById(id)};
+  var base=0, at=Date.now(), steps=["crawl","index","agent"];
+  function fill(s,v){return s.replace(/\\{(\\w+)\\}/g,function(_,k){return v[k]})}
+  function clock(n){n=Math.max(0,Math.floor(n));return Math.floor(n/60)+":"+("0"+n%60).slice(-2)}
+  function money(v,cur){
+    try{return new Intl.NumberFormat(c.lang==="en"?"en-US":"es-AR",{style:"currency",
+      currency:cur||"USD",maximumFractionDigits:v%1?2:0}).format(v)}
+    catch(e){return (cur||"")+" "+v}
+  }
+  function path(u){try{var p=new URL(u).pathname;return p==="/"?new URL(u).host:p}
+    catch(e){return u}}
+  function tick(){$("elapsed").textContent=clock(base+(Date.now()-at)/1000)}
+  function paint(s){
+    base=s.elapsed||0;at=Date.now();tick();
+    var pct=Math.max(3,Math.min(100,s.progress_percent||0));
+    $("bar").style.width=pct+"%";$("barwrap").setAttribute("aria-valuenow",pct);
+    $("pct").textContent=pct+"%";
+    var at_=steps.indexOf(s.step);if(s.step==="done")at_=3;if(at_<0)at_=0;
+    var times=s.times||{};
+    steps.forEach(function(k,i){
+      var li=$("step-"+k);li.className=i<at_?"done":(i===at_?"on":"");
+      li.querySelector(".dot").textContent=i<at_?"\\u2713":(i===at_?"":String(i+1));
+      li.querySelector(".took").textContent=times[k]!=null?fill(t.seconds,{n:Math.max(1,
+        Math.round(times[k]))}):"";
+    });
+    var d=$("step-crawl").querySelector(".detail");
+    if(at_===0&&s.pages_total){d.textContent=fill(t.read_of,{read:s.pages_read||0,
+      total:s.pages_total});}
+    else if(at_>0&&s.pages_total){d.textContent=fill(t.read_done,{n:s.pages_total})}
+    $("now").textContent=at_===0&&s.current?fill(t.reading,{page:path(s.current)}):"";
+    var pol=s.policies||[];$("policies").hidden=!pol.length;
+    var ul=$("policy-list");ul.textContent="";
+    pol.forEach(function(p){var li=document.createElement("li");li.textContent=p.label;
+      ul.appendChild(li)});
+    var prods=s.products||[];$("products").hidden=!prods.length;
+    var grid=$("product-list");grid.textContent="";
+    prods.forEach(function(p){
+      var f=document.createElement("figure");
+      if(/^https?:\\/\\//.test(p.image||"")){var img=document.createElement("img");
+        img.src=p.image;img.alt="";img.loading="lazy";img.referrerPolicy="no-referrer";
+        img.onerror=function(){img.replaceWith(Object.assign(document.createElement("div"),
+          {className:"ph"}))};f.appendChild(img)}
+      else{var ph=document.createElement("div");ph.className="ph";f.appendChild(ph)}
+      var cap=document.createElement("figcaption");cap.textContent=p.name;
+      var pr=document.createElement("div");pr.className="price";
+      pr.textContent=money(p.price,p.currency);cap.appendChild(pr);f.appendChild(cap);
+      grid.appendChild(f);
+    });
+    $("stale").hidden=!(s.stale&&s.can_retry);
+  }
+  function poll(){
+    fetch(c.state,{cache:"no-store"}).then(function(r){return r.json()}).then(function(s){
+      if(s.status!=="building"){location.reload();return}
+      paint(s);setTimeout(poll,1500);
+    }).catch(function(){setTimeout(poll,4000)});
+  }
+  setInterval(tick,1000);poll();
+})();
+"""
+
+
 def _building_page(trial: service.Trial, token: str) -> HTMLResponse:
     t = T[trial.language]
     steps = "".join(
-        f'<li data-step="{key}">{esc(t["step_" + key])}</li>'
-        for key in ("crawl", "products", "agent")
+        f'<li id="step-{key}"{" class=on" if n == 0 else ""}><span class="dot" aria-hidden="true">'
+        f'{"" if n == 0 else n + 1}</span><div><div class="what">{esc(t["step_" + key])}</div>'
+        f'<div class="detail"></div></div><span class="took"></span></li>'
+        for n, key in enumerate(STEPS)
     )
-    body = f"""<div class="narrow"><div class="card">
-<h1>{esc(t["building"])}</h1><p class="lead muted">{esc(trial.site_url)}</p>
-<ol class="steps" id="steps">{steps}</ol></div></div>
-<script>
-(function(){{
-  var order=["crawl","products","agent"];
-  function paint(s){{
-    var at=s.step==="done"?3:(s.step==="products"?1:0);
-    document.querySelectorAll("#steps li").forEach(function(li,i){{
-      li.className=i<at?"done":(i===at?"on":"");
-    }});
-  }}
-  function poll(){{
-    fetch("/probar/{esc(token)}/estado",{{cache:"no-store"}}).then(function(r){{return r.json()}})
-    .then(function(s){{
-      if(s.status!=="building"){{location.reload();return}}
-      paint(s);setTimeout(poll,2000);
-    }}).catch(function(){{setTimeout(poll,4000)}});
-  }}
-  paint({{step:"crawl"}});poll();
-}})();
-</script>"""
-    return _layout(t["building"], body, trial.language)
+    keys = ("read_of", "read_done", "reading")
+    config = {
+        "lang": trial.language,
+        "state": f"/probar/{token}/estado",
+        "t": {**{k: t[k] for k in keys}, "seconds": "{n} s"},
+    }
+    data = json.dumps(config).replace("</", "<\\/")
+    body = f"""<div class="build"><div class="card">
+<span class="tag">{esc(t["trial_tag"])}</span>
+<h1>{esc(t["building"])}</h1><p class="site">{esc(trial.domain)}</p>
+<div class="bar" id="barwrap" role="progressbar" aria-label="{esc(t["building"])}"
+ aria-valuemin="0" aria-valuemax="100" aria-valuenow="3"><span id="bar"></span></div>
+<div class="meta"><span id="pct">3%</span>
+<span>{esc(t["elapsed"])} <b id="elapsed">0:00</b></span></div>
+<ol class="plan" aria-live="polite">{steps}</ol>
+<p class="detail" id="now"></p>
+<section id="policies" hidden><h2>{esc(t["found_policies"])}</h2>
+<ul class="chips" id="policy-list"></ul></section>
+<section id="products" hidden><h2>{esc(t["found_products"])}</h2>
+<div class="found" id="product-list"></div></section>
+<p class="calm">{esc(t["calm"])}</p>
+<div class="notice" id="stale" role="status" hidden>{esc(t["stale"])}
+<form method="post" action="/probar/{esc(token)}/reintentar" class="actions">
+<button type="submit">{esc(t["retry"])}</button></form></div>
+</div></div>
+<script id="cfg" type="application/json">{data}</script>
+<script>{BUILD_JS}</script>"""
+    return _layout(t["building"], body, trial.language, extra_css=BUILD_CSS)
+
+
+def _failed_page(conn: Any, trial: service.Trial, token: str) -> HTMLResponse:
+    t = T[trial.language]
+    retry = (
+        f'<form method="post" action="/probar/{esc(token)}/reintentar" style="margin:0">'
+        f'<button type="submit">{esc(t["retry"])}</button></form>'
+        if service.can_retry(conn, trial)
+        else ""
+    )
+    body = f"""<div class="build"><div class="card">
+<span class="tag">{esc(t["trial_tag"])}</span>
+<h1>{esc(t["failed"])}</h1><p class="site">{esc(trial.domain)}</p>
+<p class="lead" role="alert" style="margin-top:14px">{esc(_failure(trial))}</p>
+<div class="actions">{retry}
+<form method="post" action="/probar/{esc(token)}/contacto" style="margin:0">
+<button class="ghost" type="submit">{esc(t["talk"])}</button></form></div>
+</div></div>"""
+    return _layout(t["failed"], body, trial.language, extra_css=BUILD_CSS)
+
+
+def _failure(trial: service.Trial) -> str:
+    """El mensaje para el visitante según por qué falló (el detalle técnico queda guardado)."""
+    t = T[trial.language]
+    code = str(trial.progress.get("error_code") or "unreachable")
+    return t.get(f"error_{code}", t["error_internal"]).format(domain=trial.domain)
+
+
+def _percent(trial: service.Trial) -> int:
+    if trial.status == "ready":
+        return 100
+    progress = trial.progress
+    step = progress.get("step")
+    if step == "agent":
+        return 88
+    if step == "index":
+        return 70
+    read = int(progress.get("pages_read") or 0)
+    total = max(int(progress.get("pages_total") or 1), 1)
+    return 5 + int(55 * min(read, total) / total)
 
 
 def _date(value: object, language: str) -> str:
@@ -544,12 +783,7 @@ def trial_page(token: str, request: Request, deps: Deps) -> HTMLResponse:
         if trial.status == "building":
             return _building_page(trial, token)
         if trial.status == "failed":
-            error = trial.progress.get("error") or ""
-            body = f"""<div class="narrow"><div class="card"><h1>{esc(t["failed"])}</h1>
-<p class="lead">{esc(t["failed_lead"])}</p><p class="small muted">{esc(error)}</p>
-<form method="post" action="/probar/{esc(token)}/contacto">
-<button type="submit">{esc(t["talk"])}</button></form></div></div>"""
-            return _layout(t["failed"], body, trial.language)
+            return _failed_page(conn, trial, token)
         if trial.status == "converted":
             return _message_page(
                 trial.language, t["converted"], t["converted_lead"], "/panel/login"
@@ -581,7 +815,11 @@ def trial_state(token: str, deps: Deps) -> JSONResponse:
         if trial is None:
             return JSONResponse({"error": "not_found"}, status_code=404)
         view = service.view(conn, trial)
+        seconds = service.elapsed(conn, trial.id)
+        retry = service.can_retry(conn, trial)
     progress = trial.progress
+    t = T[trial.language]
+    building = trial.status == "building"
     data = {
         "status": trial.status,
         "step": progress.get("step"),
@@ -589,12 +827,41 @@ def trial_state(token: str, deps: Deps) -> JSONResponse:
         "name": trial.name,
         "error": progress.get("error"),
         "generic": bool(progress.get("generic")),
-        "products": trial.products if trial.status == "ready" else [],
+        # Mientras se arma, los productos que va encontrando (nombre, precio y foto).
+        "products": trial.products if trial.status == "ready" else progress.get("found") or [],
         "orders": view.orders,
         "chat_slug": view.chat_slug,
         "messages_left": max(service.MAX_MESSAGES - trial.messages, 0),
+        # El avance en vivo (decisión 099).
+        "pages_read": progress.get("pages_read", 0),
+        "pages_total": progress.get("pages_total", 0),
+        "current": progress.get("current") or "",
+        "policies": [
+            {"kind": k, "label": t[f"policy_{k}"]}
+            for k in progress.get("policies") or []
+            if f"policy_{k}" in t
+        ],
+        "times": progress.get("times") or {},
+        "progress_percent": _percent(trial),
+        "elapsed": round(seconds, 1),
+        "stale": building and seconds > service.STALE_SECONDS,
+        "can_retry": retry,
+        "text_only": bool(progress.get("text_only")),
+        "message": _failure(trial) if trial.status == "failed" else "",
     }
     return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/probar/{token}/reintentar")
+def trial_retry(token: str, deps: Deps) -> Response:
+    """ "Reintentar" (si falló o lleva más de 2 minutos). Un doble clic arma una sola vez."""
+    with deps.connection() as conn:
+        if service.find(conn, token) is None:
+            return _not_found()
+        retried = service.retry(conn, token)
+    if retried:
+        deps.kick_worker()
+    return RedirectResponse(f"/probar/{token}", status_code=303)
 
 
 @router.get("/probar/{token}/aprobaciones")
