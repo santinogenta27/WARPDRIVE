@@ -67,7 +67,8 @@ def test_costo_por_modelo() -> None:
     assert cost_usd("claude-haiku-5-5", million) == Decimal("0.6")
     assert cost_usd("claude-opus-5-5", million) == Decimal("24")
     cached = TokenUsage(input_tokens=0, output_tokens=0, cache_read_input_tokens=1_000_000)
-    assert cost_usd("claude-sonnet-5-5", cached) == Decimal("0.2")
+    # 0,10 por millón según la página de precios de Anthropic (decisión 102; estaba en 0,20).
+    assert cost_usd("claude-sonnet-5-5", cached) == Decimal("0.1")
 
 
 def test_cada_llamada_guarda_tokens_y_costo(conn: psycopg.Connection) -> None:
