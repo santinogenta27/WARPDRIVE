@@ -10,6 +10,16 @@ y lo que no está queda igual.
 import re
 from collections.abc import Callable
 
+_MONTHS_EN = (
+    "January", "February", "March", "April", "May", "June", "July", "August", "September",
+    "October", "November", "December",
+)  # fmt: skip
+_MONTHS_ES = (
+    "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre",
+    "octubre", "noviembre", "diciembre",
+)  # fmt: skip
+
+
 PHRASES: dict[str, str] = {
     # layout
     "Skip to content": "Ir al contenido",
@@ -52,7 +62,121 @@ PHRASES: dict[str, str] = {
     "Results": "Resultados",
     "Team": "Equipo",
     "Usage & model": "Uso y modelo",
+    "Usage": "Gasto",
     "Your data": "Tus datos",
+    # Usage & model y Usage (decisión 102)
+    "AI model": "Modelo de IA",
+    "Spending cap": "Tope de gasto",
+    "This month": "Este mes",
+    "See usage": "Ver el gasto",
+    "Platform model": "Modelo de la plataforma",
+    "Use your own key": "Usar tu propia key",
+    "Provider": "Proveedor",
+    "Model": "Modelo",
+    "API key": "API key",
+    "Paste your key": "Pegá tu key",
+    "Test key": "Probar key",
+    "Save key": "Guardar key",
+    "Change model": "Cambiar de modelo",
+    "Replace the key": "Reemplazar la key",
+    "Save cap": "Guardar tope",
+    "No cap": "Sin tope",
+    "Set one in Usage & model": "Fijalo en Uso y modelo",
+    "Monthly spending cap (USD)": "Tope de gasto mensual (USD)",
+    "Included in your plan": "Incluido en tu plan",
+    "Over 80% of the cap": "Más del 80 % del tope",
+    "We test the key with a tiny request and save it encrypted. It's never shown again.": (
+        "Probamos la key con un pedido mínimo y la guardamos cifrada. No se vuelve a mostrar."
+    ),
+    "Removing the key switches your agent back to the platform model, with its limits.": (
+        "Si quitás la key, tu agente vuelve al modelo de la plataforma, con sus límites."
+    ),
+    "Search over your documents keeps working as it does today, with the platform's search, so "
+    "nothing needs to be processed again.": (
+        "La búsqueda en tus documentos sigue funcionando como hoy, con la de la plataforma, así "
+        "que no hace falta volver a procesar nada."
+    ),
+    "Your agent uses our model, included in your plan.": (
+        "Tu agente usa nuestro modelo, incluido en tu plan."
+    ),
+    "Add your own key to use your provider account, with no platform limits.": (
+        "Cargá tu propia key para usar tu cuenta del proveedor, sin los límites de la plataforma."
+    ),
+    "At 80% we send a warning. At 100%, your agent hands every message to your team until next "
+    "month or until you raise the cap.": (
+        "Al 80 % te avisamos. Al 100 %, tu agente pasa cada mensaje a tu equipo hasta el mes "
+        "siguiente o hasta que subas el tope."
+    ),
+    "With your own key there's no cap unless you set one.": (
+        "Con tu propia key no hay tope, salvo que fijes uno."
+    ),
+    "With the platform model, the platform limit applies even if you set a higher cap.": (
+        "Con el modelo de la plataforma, rige su límite aunque fijes un tope más alto."
+    ),
+    "These amounts are an estimate, calculated from each model's published price.": (
+        "Estos montos son una estimación, calculada con el precio publicado de cada modelo."
+    ),
+    "The exact amount is on your provider's invoice.": (
+        "El monto exacto está en la factura de tu proveedor."
+    ),
+    "No monthly cap": "Sin tope mensual",
+    "Saved key": "Key guardada",
+    "Previous month": "Mes anterior",
+    "Next month": "Mes siguiente",
+    "Share of the monthly cap used": "Parte del tope mensual usada",
+    "This model has no price in our table": "Este modelo no tiene precio en nuestra tabla",
+    "(document search)": "(búsqueda en documentos)",
+    "Day": "Día",
+    "Calls": "Llamadas",
+    "Case": "Caso",
+    "Tokens": "Tokens",
+    "Testing…": "Probando…",
+    "Recommended. The best answers for customer conversations.": (
+        "Recomendado. Las mejores respuestas para conversar con tus clientes."
+    ),
+    "Fastest and about 20 times cheaper. Good for simple questions.": (
+        "El más rápido y unas 20 veces más barato. Bueno para preguntas simples."
+    ),
+    "Recommended. Good answers at a low cost.": "Recomendado. Buenas respuestas a bajo costo.",
+    "Newer and stronger, about 3 times the cost.": "Más nuevo y mejor, a unas 3 veces el costo.",
+    "Recommended. Google's most capable Flash model.": (
+        "Recomendado. El modelo Flash más capaz de Google."
+    ),
+    "Fastest and cheapest. Good for simple questions.": (
+        "El más rápido y barato. Bueno para preguntas simples."
+    ),
+    "Recommended. An open model with very fast replies.": (
+        "Recomendado. Un modelo abierto que responde muy rápido."
+    ),
+    "Smaller and cheaper.": "Más chico y más barato.",
+    "Cap saved.": "Tope guardado.",
+    "Cap removed.": "Tope quitado.",
+    "Key removed. Your agent uses the platform model again, with its limits.": (
+        "Key quitada. Tu agente vuelve a usar el modelo de la plataforma, con sus límites."
+    ),
+    "Spent this month": "Gasto del mes",
+    "Projected for the month": "Proyección del mes",
+    "Monthly cap": "Tope mensual",
+    "Average per conversation": "Promedio por conversación",
+    "Average per resolved case": "Promedio por caso resuelto",
+    "Input tokens": "Tokens de entrada",
+    "Output tokens": "Tokens de salida",
+    "Spend per day": "Gasto por día",
+    "By model": "Por modelo",
+    "Billed to": "A cargo de",
+    "Most expensive conversations": "Conversaciones más caras",
+    "Export CSV": "Exportar CSV",
+    "Show as a table": "Ver como tabla",
+    "price unknown": "precio desconocido",
+    "No spending yet this month": "Todavía no hay gasto este mes",
+    "No model calls this month.": "No hubo llamadas al modelo este mes.",
+    "No conversations this month.": "No hubo conversaciones este mes.",
+    "You passed 80% of your monthly cap.": "Pasaste el 80 % de tu tope mensual.",
+    "What your agent spent this month, estimated from the tokens each call used and the "
+    "published price of each model.": (
+        "Lo que gastó tu agente este mes, estimado con los tokens de cada llamada y el precio "
+        "publicado de cada modelo."
+    ),
     # operador
     "Companies": "Empresas",
     "Trials": "Pruebas",
@@ -905,6 +1029,132 @@ PATTERNS: list[tuple[re.Pattern[str], Callable[[re.Match[str]], str]]] = [
         lambda m: (
             f"Esto borra para siempre {m[1]} y todos sus datos: conversaciones, clientes, "
             "conocimiento, usuarios y conexiones."
+        ),
+    ),
+    # Usage & model y Usage (decisión 102)
+    (
+        re.compile(r"(\d+)% of your (.+) cap(?: · ([\d,.]+) of ([\d,.]+) model calls)?"),
+        lambda m: (
+            f"{m[1]} % de tu tope de {m[2]}"
+            + (f" · {m[3]} de {m[4]} llamadas al modelo" if m[3] else "")
+        ),
+    ),
+    (
+        re.compile(r"Limit: (.+?)(?: a month)?(?: and (.+) model calls a month)?\."),
+        lambda m: (
+            f"Límite: {m[1]} por mes" + (f" y {m[2]} llamadas al modelo por mes." if m[2] else ".")
+        ),
+    ),
+    (
+        re.compile(r"Billed to your (.+) account"),
+        lambda m: f"A cargo de tu cuenta de {m[1]}",
+    ),
+    (re.compile(r"Your (.+) account"), lambda m: f"Tu cuenta de {m[1]}"),
+    (
+        re.compile(
+            r"Conversations use (.+)\. Classifying messages and checking answers use (.+), the "
+            r"provider's fast model\."
+        ),
+        lambda m: (
+            f"Las conversaciones usan {m[1]}. Para clasificar mensajes y revisar respuestas se usa "
+            f"{m[2]}, el modelo rápido del proveedor."
+        ),
+    ),
+    (re.compile(r"([\d,.]+) conversations"), lambda m: f"{m[1]} conversaciones"),
+    (re.compile(r"([\d,.]+) resolved"), lambda m: f"{m[1]} resueltos"),
+    (
+        re.compile(r"(?:Spent in )?(" + "|".join(_MONTHS_EN) + r") (\d{4})"),
+        lambda m: (
+            ("Gasto de " if m[0].startswith("Spent") else "")
+            + f"{_MONTHS_ES[_MONTHS_EN.index(m[1])]} {m[2]}"
+        ),
+    ),
+    (
+        re.compile(r"Spend per day in (" + "|".join(_MONTHS_EN) + r")"),
+        lambda m: f"Gasto por día en {_MONTHS_ES[_MONTHS_EN.index(m[1])]}",
+    ),
+    (
+        re.compile(r"Prices last checked on (" + "|".join(_MONTHS_EN) + r") (\d+), (\d{4})\."),
+        lambda m: (
+            f"Precios verificados el {m[2]} de {_MONTHS_ES[_MONTHS_EN.index(m[1])]} de {m[3]}."
+        ),
+    ),
+    (
+        re.compile(
+            r"([\d,.]+) calls used a model with no price in our table\. They show as price "
+            r"unknown and aren't included in the totals\."
+        ),
+        lambda m: (
+            f"{m[1]} llamadas usaron un modelo sin precio en nuestra tabla. Figuran como precio "
+            "desconocido y no suman en los totales."
+        ),
+    ),
+    (
+        re.compile(r"Connected to (.+) with (.+)\."),
+        lambda m: f"Conectado a {m[1]} con {m[2]}.",
+    ),
+    (
+        re.compile(r"Connected\. Your agent now uses (.+?)( with your key)?\."),
+        lambda m: f"Conectado. Tu agente ahora usa {m[1]}" + (" con tu key." if m[2] else "."),
+    ),
+    (
+        re.compile(r"(.+?)( The key wasn't saved\.| The model wasn't changed\.)"),
+        lambda m: (
+            translate_text(m[1])
+            + (" La key no se guardó." if "key" in m[2] else " El modelo no se cambió.")
+        ),
+    ),
+    (
+        re.compile(
+            r"This key isn't valid\. Check that you copied the whole key from your (.+) account\."
+        ),
+        lambda m: (
+            "Esta key no es válida. Revisá que hayas copiado la key completa de tu cuenta de "
+            f"{m[1]}."
+        ),
+    ),
+    (
+        re.compile(
+            r"The key works, but the account has no credit or quota left\. Add credit in your (.+) "
+            r"billing settings and try again\."
+        ),
+        lambda m: (
+            f"La key funciona, pero la cuenta no tiene saldo ni cuota. Cargá saldo en la "
+            f"facturación de {m[1]} y probá de nuevo."
+        ),
+    ),
+    (
+        re.compile(
+            r"The key works, but it doesn't have access to (.+)\. Choose another model or "
+            r"enable it in your (.+) account\."
+        ),
+        lambda m: (
+            f"La key funciona, pero no tiene acceso a {m[1]}. Elegí otro modelo o habilitalo en tu "
+            f"cuenta de {m[2]}."
+        ),
+    ),
+    (
+        re.compile(r"(.+) is limiting requests right now\. Wait a minute and test the key again\."),
+        lambda m: f"{m[1]} está limitando los pedidos. Esperá un minuto y volvé a probar la key.",
+    ),
+    (
+        re.compile(
+            r"(.+) is busy right now and couldn't answer\. Test the key again in a minute\."
+        ),
+        lambda m: f"{m[1]} está ocupado y no pudo responder. Volvé a probar la key en un minuto.",
+    ),
+    (
+        re.compile(r"We couldn't reach (.+)\. Check your connection and try again in a minute\."),
+        lambda m: f"No pudimos comunicarnos con {m[1]}. Revisá tu conexión y probá en un minuto.",
+    ),
+    (
+        re.compile(
+            r"(.+) rejected the test call(?: \(HTTP (\d+)\))?\. Check the key and try again\."
+        ),
+        lambda m: (
+            f"{m[1]} rechazó la llamada de prueba"
+            + (f" (HTTP {m[2]})" if m[2] else "")
+            + ". Revisá la key y probá de nuevo."
         ),
     ),
 ]

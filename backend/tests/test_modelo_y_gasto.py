@@ -7,15 +7,11 @@
 - La página de configuración muestra el gasto del mes y nunca la key.
 """
 
-import re
 import uuid
-from collections.abc import Iterator
-from contextlib import nullcontext
 from decimal import Decimal
 
 import psycopg
 import pytest
-from fastapi.testclient import TestClient
 from simulated.stack import SimulatedStack, build_simulated_stack
 
 from app.companies.create import create_company
@@ -24,11 +20,7 @@ from app.demo import behind
 from app.llm import spending, tenant_llm
 from app.llm.client import AnthropicProvider
 from app.llm.groq import GroqProvider
-from app.main import app
-from app.panel import auth
-from app.panel.routes import PanelDeps, panel_deps
 
-ADMIN, ADMIN_PASSWORD = "operador@plataforma.example", "clave-del-operador"
 NORTE, NORTE_PASSWORD = "ana@tiendanorte.example", "clave-de-tienda-norte"
 KEY = "gsk_clave-de-prueba-de-tienda-norte-123"
 
@@ -64,8 +56,11 @@ def test_la_key_se_guarda_cifrada_y_el_agente_usa_ese_proveedor(
     assert KEY not in _settings(conn, tenant)
     assert tenant_llm.own_provider(conn, tenant) == "groq"
     provider = tenant_llm.provider_for(conn, tenant, lambda: shared)
-    assert isinstance(provider, GroqProvider)
-    assert provider._transport._api_key == KEY
+    # Con el modelo elegido (el recomendado, si no eligió) y el uso a nombre de la key propia.
+    assert isinstance(provider, tenant_llm.TenantProvider)
+    assert isinstance(provider.inner, GroqProvider)
+    assert provider.inner._transport._api_key == KEY
+    assert provider.model == tenant_llm.default_model("groq")
 
     for name in tenant_llm.PROVIDERS:
         assert tenant_llm.make_provider(name, "k-123") is not None
@@ -130,67 +125,4 @@ def test_al_100_deriva_sin_llamar_al_modelo(conn: psycopg.Connection) -> None:
 
 
 # -- 3. el panel ------------------------------------------------------------------------------
-@pytest.fixture
-def panel(conn: psycopg.Connection, monkeypatch: pytest.MonkeyPatch) -> Iterator[uuid.UUID]:
-    monkeypatch.setenv("PANEL_EMAIL", ADMIN)
-    monkeypatch.setenv("PANEL_PASSWORD", ADMIN_PASSWORD)
-    auth._failures.clear()
-    stack = build_simulated_stack(conn)
-    company = create_company(conn, "Tienda Norte", NORTE, NORTE_PASSWORD)
-    app.dependency_overrides[panel_deps] = lambda: PanelDeps(
-        connection=lambda: nullcontext(conn),
-        tenant_id=stack.seed.tenant_id,
-        guardian=lambda c, t: stack.agent._guardian,
-        embedder=lambda c: stack.embedder,
-        kick_worker=lambda: None,
-    )
-    try:
-        yield company.tenant_id
-    finally:
-        app.dependency_overrides.clear()
-
-
-def _login() -> TestClient:
-    client = TestClient(app)
-    response = client.post(
-        "/panel/login", data={"email": NORTE, "password": NORTE_PASSWORD}, follow_redirects=False
-    )
-    assert response.status_code == 303, response.text
-    return client
-
-
-def _csrf(client: TestClient) -> str:
-    match = re.search(r'name="csrf" value="([^"]+)"', client.get("/panel/settings/usage").text)
-    assert match is not None
-    return match.group(1)
-
-
-def test_el_panel_guarda_la_key_y_el_tope_sin_mostrar_la_key(
-    conn: psycopg.Connection, panel: uuid.UUID
-) -> None:
-    client = _login()
-    page = client.get("/panel/settings/usage").text
-    assert "Uso y modelo" in page and "Gasto del mes" in page
-    response = client.post(
-        "/panel/configuracion/modelo",
-        data={"csrf": _csrf(client), "proveedor": "groq", "clave": KEY, "tope": "25"},
-        follow_redirects=False,
-    )
-    assert response.status_code == 303, response.text
-    assert tenant_llm.own_provider(conn, panel) == "groq"
-    assert spending.budget(conn, panel).cap_usd == Decimal(25)
-    page = client.get("/panel/settings/usage").text
-    assert KEY not in page and "Groq" in page
-
-    # Sin clave nueva se conserva la guardada; "plataforma" la borra.
-    client.post(
-        "/panel/configuracion/modelo",
-        data={"csrf": _csrf(client), "proveedor": "groq", "clave": "", "tope": "30"},
-    )
-    assert tenant_llm.own_provider(conn, panel) == "groq"
-    client.post(
-        "/panel/configuracion/modelo",
-        data={"csrf": _csrf(client), "proveedor": "plataforma", "clave": "", "tope": ""},
-    )
-    assert tenant_llm.own_provider(conn, panel) is None
-    assert spending.budget(conn, panel).cap_usd is not None  # vuelve el límite de la plataforma
+# Desde la decisión 102 el panel prueba la key antes de guardarla: lo cubre test_modelo_propio.py.

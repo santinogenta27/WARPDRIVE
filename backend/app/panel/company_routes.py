@@ -9,7 +9,6 @@ uno que no existe. Los POST exigen el token anti-CSRF.
 import hmac
 import re
 import uuid
-from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any
 
 import httpx
@@ -29,7 +28,6 @@ from app.companies import deploy, export, onboarding, review, rules
 from app.companies.create import CompanyError, chat_slug, create_company
 from app.connectors import platforms, shopify, shopify_auth
 from app.demo import behind
-from app.llm import spending, tenant_llm
 from app.onboarding import ingest as ingestion
 from app.onboarding.ingest import Upload
 from app.panel import agent_forms as forms
@@ -702,53 +700,6 @@ def save_behind(request: Request, form: Form, deps: Deps) -> Response:
     return _back("operator/behind", ok=f"Vista detrás de escena {state}.")
 
 
-def _model_html(ctx: Ctx, conn: Any) -> str:
-    """API key propia y tope de gasto mensual (decisión 049). La key nunca se muestra."""
-    own = tenant_llm.own_provider(conn, ctx.tenant_id)
-    limits = spending.budget(conn, ctx.tenant_id)
-    spent = spending.month_spend(conn, ctx.tenant_id)
-    used = spending.ratio(spent, limits)
-    cap = (
-        f'<span>Tope:</span> <span class="mono">USD {limits.cap_usd:.2f}</span>'
-        if limits.cap_usd is not None
-        else "<span>Sin tope</span>"
-    )
-    calls = (
-        f' · <span>Llamadas al modelo:</span> <span class="mono">{spent.calls} / '
-        f"{limits.cap_calls}</span>"
-        if limits.cap_calls
-        else ""
-    )
-    chosen = (
-        f'<span class="mono">{esc(tenant_llm.PROVIDERS[own])}</span>'
-        if own
-        else "<span>La de la plataforma, con límites</span>"
-    )
-    options = "".join(
-        f'<option value="{value}"{" selected" if value == (own or "plataforma") else ""}>'
-        f"{esc(label)}</option>"
-        for value, label in [
-            ("plataforma", "Usar la de la plataforma"),
-            *tenant_llm.PROVIDERS.items(),
-        ]
-    )
-    tope = esc(str(spending._setting(conn, ctx.tenant_id) or ""))
-    warn = ' style="color:var(--warn)"' if used >= spending.WARN_AT else ""
-    return f"""<div class="card"><p><strong>Key en uso:</strong> {chosen}</p>
-<p{warn}><strong>Gasto del mes:</strong> <span class="mono">USD {spent.usd:.2f} ·
-{used:.0%}</span> · {cap}{calls}</p>
-<p class="muted small">Al 80 % se envía un aviso; al 100 %, el agente pasa cada mensaje a una
-persona del equipo hasta el mes siguiente o hasta que subas el tope.</p>
-<form method="post" action="/panel/configuracion/modelo">{_csrf(ctx)}
-<label for="proveedor">Proveedor</label><select id="proveedor" name="proveedor"
-style="max-width:320px">{options}</select>
-<label for="clave">API key (se guarda cifrada; dejala vacía para conservar la guardada)</label>
-<input id="clave" name="clave" type="password" autocomplete="off" style="max-width:420px">
-<label for="tope">Tope mensual en USD (vacío: sin tope propio)</label>
-<input id="tope" name="tope" inputmode="decimal" value="{tope}" style="max-width:160px">
-<div class="row"><button type="submit">Guardar</button></div></form></div>"""
-
-
 @router.post("/configuracion/reglas")
 def save_rules(request: Request, form: Form, deps: Deps) -> Response:
     ctx = enter(request, deps, form)
@@ -790,37 +741,6 @@ def remove_upsell(rule_id: uuid.UUID, request: Request, form: Form, deps: Deps) 
     with deps.connection() as conn:
         upsell.remove(conn, ctx.tenant_id, rule_id)
     return _back("agent/sales", ok="Producto quitado.")
-
-
-@router.post("/configuracion/modelo")
-def save_model(request: Request, form: Form, deps: Deps) -> Response:
-    ctx = enter(request, deps, form)
-    if isinstance(ctx, Response):
-        return ctx
-    choice = form.get("proveedor", "")
-    key = form.get("clave", "").strip()
-    raw = form.get("tope", "").strip().replace(",", ".")
-    try:
-        cap = Decimal(raw) if raw else None
-    except InvalidOperation:
-        return _back("settings/usage", error="El tope tiene que ser un número.")
-    if cap is not None and cap < 0:
-        return _back("settings/usage", error="El tope no puede ser negativo.")
-    with deps.connection() as conn:
-        if choice == "plataforma":
-            tenant_llm.clear_key(conn, ctx.tenant_id)
-        elif choice in tenant_llm.PROVIDERS:
-            if key:
-                try:
-                    tenant_llm.save_key(conn, ctx.tenant_id, choice, key)
-                except ValueError as error:
-                    return _back("settings/usage", error=str(error))
-            elif tenant_llm.own_provider(conn, ctx.tenant_id) != choice:
-                return _back("settings/usage", error="Falta la API key de ese proveedor.")
-        else:
-            return _back("settings/usage", error="Elegí un proveedor de la lista.")
-        spending.set_budget(conn, ctx.tenant_id, cap)
-    return _back("settings/usage", ok="Modelo y tope guardados.")
 
 
 # Una línea de ayuda por pantalla, en lenguaje simple (decisión 085).
@@ -952,18 +872,6 @@ def agent_language_page(request: Request, deps: Deps) -> Response:
     body = f"""{forms.FORM_CSS}{head("Language", LEADS["Language"])}
 {forms.language_html(ctx.csrf, language, i18n.NAMES)}"""
     return _section(request, ctx, "agent/language", "Language", body)
-
-
-@router.get("/settings/usage", response_class=HTMLResponse)
-def settings_usage_page(request: Request, deps: Deps) -> Response:
-    ctx = enter(request, deps)
-    if isinstance(ctx, Response):
-        return ctx
-    with deps.connection() as conn:
-        model = _model_html(ctx, conn)
-    body = f"""{head("Usage & model", LEADS["Usage & model"])}
-{model}"""
-    return _section(request, ctx, "settings/usage", "Usage & model", body)
 
 
 def _owner(ctx: Ctx) -> bool:
@@ -1410,3 +1318,9 @@ def deactivate_whatsapp(request: Request, form: Form, deps: Deps) -> Response:
         return "WhatsApp desactivado: el agente ya no responde en tu número."
 
     return _whatsapp_action(request, form, deps, run)
+
+
+# Settings → Usage & model y Usage (decisión 102), con el prefijo /panel de este router.
+from app.panel.usage_routes import router as _usage_router  # noqa: E402
+
+router.include_router(_usage_router)

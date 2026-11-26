@@ -43,7 +43,7 @@ TABS = {
     "/panel/agent": ["Rules", "Actions", "Topics", "Brand &amp; voice", "Sales", "Language"],
     "/panel/test": ["Readiness", "Playground", "Simulations", "To improve"],
     "/panel/insights": ["Overview", "Results"],
-    "/panel/settings": ["Team", "Usage &amp; model", "Your data"],
+    "/panel/settings": ["Team", "Usage &amp; model", "Usage", "Your data"],  # Usage: decisión 102
 }
 OPERATOR = ["/panel/operator/companies", "/panel/operator/trials", "/panel/operator/billing"]
 
