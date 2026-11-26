@@ -34,7 +34,7 @@ from app.llm.gemini import GeminiEmbedder, GeminiTransport
 from app.mailer import Email
 from app.main import app
 from app.panel.routes import PanelDeps, panel_deps
-from app.trial import build, keys, service
+from app.trial import build, keys, service, sources
 
 REPO = Path(__file__).resolve().parents[2]
 SITE = "https://tienda-sol.example"
@@ -73,7 +73,8 @@ def _site(pages: dict[str, str] | None = None, delay: float = 0.0) -> httpx.Clie
     served = PAGES if pages is None else pages
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if delay and request.url.path != "/":
+        # Las páginas lentas (no robots.txt ni las fuentes de catálogo, que no existen acá).
+        if delay and request.url.path != "/" and request.url.path in served:
             time.sleep(delay)
         body = served.get(request.url.path)
         if body is None:
@@ -286,6 +287,7 @@ def test_con_el_tiempo_agotado_sigue_con_lo_que_haya(
     conn: psycopg.Connection, box: _Outbox, embedder: _Counting, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(build, "CRAWL_SECONDS", 0.5)
+    monkeypatch.setattr(sources, "MIN_INTERVAL", 0.0)  # el ritmo de pedidos tiene su test
     token, _ = _trial(conn, box)
     trial = service.find(conn, token)
     assert trial is not None
@@ -468,11 +470,12 @@ def test_avisa_por_email_cuando_esta_lista_una_sola_vez(
 ) -> None:
     token, trial = _trial(conn, box, lang="en")
     job = _job(conn, trial.id)
-    sent = len(box.sent)
+    sent = len([e for e in box.sent if e.to == EMAIL])
     build.run_job(conn, job, embedder=embedder, http=_site(), mailer=box)
     build.run_job(conn, job, embedder=embedder, http=_site(), mailer=box)
-    assert len(box.sent) == sent + 1
-    email = box.sent[-1]
+    mine = [e for e in box.sent if e.to == EMAIL]  # el aviso al operador va aparte
+    assert len(mine) == sent + 1
+    email = mine[-1]
     assert email.to == EMAIL and "ready" in email.subject.lower()
     assert f"https://agente.example/probar/{token}" in email.body
 

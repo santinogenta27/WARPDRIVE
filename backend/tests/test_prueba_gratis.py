@@ -252,7 +252,12 @@ def test_de_punta_a_punta_prueba_piloto_y_contacto(
 
     # La página: el agente con "detrás de escena", los pedidos de ejemplo y las sugerencias.
     page = client.get(f"/probar/{token}").text
-    for expected in ("Pedidos de ejemplo", "DEMO-1001", "Empezar mi piloto", "Hablar con Santino"):
+    for expected in (
+        "Pedidos de ejemplo",
+        "DEMO-1001",
+        "Empezar mi piloto",
+        "Hablá con nuestro equipo por WhatsApp",  # decisión 101
+    ):
         assert expected in page
     assert f"/demo/{state['chat_slug']}" in page
     behind = client.get(f"/demo/{state['chat_slug']}")
@@ -323,7 +328,7 @@ def test_de_punta_a_punta_prueba_piloto_y_contacto(
     other = client.post(f"/probar/{uuid.uuid4().hex}/aprobaciones/{pending[0]['id']}", data={})
     assert other.status_code == 404
 
-    # Hablar con Santino: un email al operador, una sola vez.
+    # Hablar con el equipo: un email al operador, una sola vez.
     sent = len(box.sent)
     assert client.post(f"/probar/{token}/contacto", follow_redirects=False).status_code == 303
     client.post(f"/probar/{token}/contacto", follow_redirects=False)
