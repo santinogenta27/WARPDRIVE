@@ -16,6 +16,7 @@ import psycopg
 from app.agent.loop import Agent
 from app.audit import log as audit_log
 from app.cases import supervision
+from app.channels import links
 from app.channels.base import (
     IGNORED_TYPES,
     UNSUPPORTED_MESSAGE,
@@ -89,6 +90,7 @@ def handle_message_job(conn: psycopg.Connection, job: Job, deps: WhatsAppDeps) -
             logger.warning("WhatsApp no mostró el indicador de escribiendo: %s", error)
         forget_sender(conn, job)
         return
+    reply = links.for_whatsapp(conn, tenant_id, reply)  # cada link en su línea, corto
     try:
         wamid = deps.client.send_text(
             token=token, phone_number_id=message.phone_number_id, to=message.sender, body=reply

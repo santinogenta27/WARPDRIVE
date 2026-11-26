@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Literal
 import psycopg
 
 from app.audit import log as audit_log
+from app.channels import links
 from app.channels.whatsapp.client import OUTSIDE_WINDOW, WhatsAppClient, WhatsAppError
 from app.channels.whatsapp.format import to_whatsapp
 from app.channels.whatsapp.routing import channel_for_tenant
@@ -74,10 +75,12 @@ def reply_as_human(
                 (tenant_id, case_id, text),
             )
     address = json.loads(decrypt(address_enc))
+    # Lo que se envía: cada link en su línea, corto (decisión 103). El historial guarda el texto.
+    body = links.for_whatsapp(conn, tenant_id, text)
     if last_in is not None and now - last_in < WINDOW:
         try:
             wamid = deps.client.send_text(
-                token=token, phone_number_id=phone_number_id, to=address["wa_id"], body=text
+                token=token, phone_number_id=phone_number_id, to=address["wa_id"], body=body
             )
         except WhatsAppError as error:
             if error.code != OUTSIDE_WINDOW:
@@ -98,7 +101,7 @@ def reply_as_human(
         conn.execute(
             "insert into outbound_messages (tenant_id, case_id, contact_id, text)"
             " values (%s, %s, %s, %s)",
-            (tenant_id, case_id, contact_id, text),
+            (tenant_id, case_id, contact_id, body),
         )
     audit_log.record(
         conn,

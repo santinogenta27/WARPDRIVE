@@ -531,6 +531,15 @@ def _shopify_product(item: Any, origin: str, found: Catalog) -> Product | None:
         if v.get("title") and v.get("title") != "Default Title"
     ]
     availability = [bool(v["available"]) for v in variants if "available" in v]
+    # La variante real para el carrito de la tienda (decisión 103): la de cada opción y, sin una
+    # elegida, la primera disponible.
+    ids = {
+        catalog.clean_text(v.get("title"), 40): str(v["id"])
+        for v in variants
+        if v.get("id") and v.get("title") and v.get("title") != "Default Title"
+    }
+    first = next((v for v in variants if v.get("id") and v.get("available") is not False), None)
+    first = first or next((v for v in variants if v.get("id")), None)
     product = catalog.make(
         title,
         price,
@@ -542,6 +551,12 @@ def _shopify_product(item: Any, origin: str, found: Catalog) -> Product | None:
         available=any(availability) if availability else None,
         variants=tuple(dict.fromkeys(labels))[: catalog.MAX_VARIANTS],
         price_max=high if high > price else None,
+        variant_id=str(first["id"]) if first else "",
+        variant_ids=tuple(
+            (label, ids[label])
+            for label in tuple(dict.fromkeys(labels))[: catalog.MAX_VARIANTS]
+            if label in ids
+        ),
         **base,
     )
     if product is None:

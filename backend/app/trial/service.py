@@ -780,6 +780,56 @@ def sample_orders(
     ]
 
 
+_DEMO_SKU = re.compile(r"^DEMO-P(\d{3})-")
+PURCHASE_NOTE = {
+    "en": "This opens your real store's checkout. In your pilot, every sale the agent starts is "
+    "tracked in your dashboard.",
+    "es": "Esto abre el checkout real de tu tienda. En tu piloto, cada venta que inicia el agente "
+    "queda registrada en tu panel.",
+}
+
+
+def purchase_note(language: str) -> str:
+    """La línea bajo el botón de compra de la prueba (decisión 103)."""
+    return PURCHASE_NOTE["en" if language == "en" else "es"]
+
+
+def has_real_store(products: list[dict[str, Any]]) -> bool:
+    return any(str(p.get("url") or "").startswith(("https://", "http://")) for p in products)
+
+
+def store_checkout(products: list[dict[str, Any]], checkout: dict[str, Any]) -> dict[str, Any]:
+    """El link de compra de la prueba en la tienda real (decisión 103). Shopify: el permalink de
+    carrito del dominio de la tienda (`/cart/{variante}:{cantidad}`), que abre su checkout con
+    los productos; no crea nada ni cobra. Otra plataforma: la página real del producto. Conserva
+    el `ref` de la conversación. Sin tienda real (la prueba de ejemplo), el de la demo."""
+    lines: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for item in checkout.get("items") or []:
+        found = _DEMO_SKU.match(str(item.get("sku") or ""))
+        index = int(found.group(1)) - 1 if found else -1
+        if not 0 <= index < len(products):
+            return checkout
+        lines.append((products[index], item))
+    if not lines or not has_real_store([p for p, _ in lines]):
+        return checkout
+    query = urlsplit(str(checkout.get("url") or "")).query
+    ref = next((part for part in query.split("&") if part.startswith("ref=")), "")
+    suffix = f"?{ref}" if ref else ""
+    parts = []
+    for product, item in lines:
+        size = str(item.get("size") or "")
+        ids = product.get("variant_ids") or {}
+        chosen = next((v for label, v in ids.items() if label[:24] == size), None)
+        parts.append((chosen or product.get("variant_id"), int(item.get("quantity") or 1)))
+    store = urlsplit(str(lines[0][0]["url"]))
+    shopify = all(p.get("source") == "shopify_json" for p, _ in lines)
+    if shopify and all(variant for variant, _ in parts):
+        cart = ",".join(f"{variant}:{quantity}" for variant, quantity in parts)
+        return {**checkout, "url": f"https://{store.netloc}/cart/{cart}{suffix}"}
+    page = str(lines[0][0]["url"])
+    return {**checkout, "url": page + (("&" if "?" in page else "?") + ref if ref else "")}
+
+
 SEARCH_RESULTS = 8  # productos por búsqueda en la tienda de ejemplo
 _SEARCH_WORD = re.compile(r"[a-z0-9]+")
 _SEARCH_STOP = {"a", "an", "the", "do", "you", "have", "any", "in", "for", "of", "and", "or", "s"}
@@ -809,10 +859,18 @@ class _Sandbox(TestClient):
     cuántos más hay, para que el agente sepa que el catálogo tiene más."""
 
     trial_products = 0
+    products: list[dict[str, Any]] = []
 
     # El cliente de Starlette puede venir con su propio httpx (httpx2): tipos genéricos.
     def send(self, request: Any, **kwargs: Any) -> Any:
         response = super().send(request, **kwargs)
+        if request.method == "POST" and request.url.path == "/checkouts":
+            # El carrito real de la tienda (decisión 103): la API simulada lo arma con los SKU
+            # de ejemplo y acá se cambia el link por el de la tienda.
+            if response.status_code != 201:
+                return response
+            data = store_checkout(self.products, response.json())
+            return type(response)(201, json=data, request=request)
         if request.method != "GET" or request.url.path != "/products":
             return response
         if response.status_code != 200:
@@ -869,6 +927,7 @@ def sandbox(conn: psycopg.Connection, tenant_id: uuid.UUID) -> TestClient:
         )
     )
     client.trial_products = len(products)
+    client.products = products
     _SANDBOXES[tenant_id] = client
     return client
 
