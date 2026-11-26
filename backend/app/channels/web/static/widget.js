@@ -29,7 +29,7 @@
       noConnect: "No pudimos conectar con el asistente.",
       askReset: "¿Empezar una conversación nueva? Esta se borra de este dispositivo.",
       yesReset: "Sí, empezar", cancel: "Cancelar", unavailable: "Este chat no está disponible en este sitio.",
-      noLoad: "No pudimos cargar el chat.", answers: "Respuestas rápidas",
+      noLoad: "No pudimos cargar el chat.", answers: "Respuestas rápidas", buy: "Completá tu compra",
       greeting: function (n) { return "¡Hola! Soy el asistente virtual de " + n + ". ¿En qué te puedo ayudar?"; },
       domain: "Este dominio no está en la lista de dominios permitidos del chat. Agregalo en el panel, en Configuración."
     },
@@ -44,7 +44,7 @@
       noConnect: "We couldn't reach the assistant.",
       askReset: "Start a new conversation? This one will be cleared from this device.",
       yesReset: "Yes, start over", cancel: "Cancel", unavailable: "This chat isn't available on this site.",
-      noLoad: "We couldn't load the chat.", answers: "Quick replies",
+      noLoad: "We couldn't load the chat.", answers: "Quick replies", buy: "Complete your purchase",
       greeting: function (n) { return "Hi! I'm the virtual assistant for " + n + ". How can I help you today?"; },
       domain: "This domain isn't on the chat's list of allowed domains. Add it in the dashboard, under Settings."
     }
@@ -157,6 +157,20 @@ animation:in .32s cubic-bezier(.2,.9,.3,1) both}
 overflow-wrap:anywhere}
 .user .bubble{background:var(--accent);color:var(--on-accent);border-radius:20px;border-bottom-right-radius:7px}
 .user.failed .bubble{opacity:.55}
+.bubble a{color:inherit;font-weight:550;text-decoration:underline;text-decoration-thickness:1px;
+text-underline-offset:3px;border-radius:4px}
+.bubble a:hover{text-decoration-thickness:2px}
+.lnk i{font-style:normal;margin-left:3px;font-size:.85em;text-decoration:none;display:inline-block}
+.dom{font-weight:450;opacity:.72;font-size:.92em}
+.acts{display:flex;flex-direction:column;align-items:flex-start;gap:7px;margin-top:8px;max-width:100%;
+animation:in .4s .06s both}
+.buy{display:inline-flex;flex-wrap:wrap;align-items:baseline;justify-content:center;column-gap:8px;
+padding:11px 20px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-weight:620;
+font-size:14.5px;text-decoration:none;box-shadow:0 6px 18px -8px rgba(15,23,42,.45);
+transition:transform .2s cubic-bezier(.2,1.3,.4,1),filter .15s}
+.buy:hover{transform:translateY(-1px);filter:brightness(1.07)}
+.buy:active{transform:scale(.98)}
+.pnote{font-size:12px;line-height:1.4;color:var(--muted);padding:0 8px}
 .who{font-size:11.5px;font-weight:600;color:var(--muted);margin:0 0 4px 12px}
 .meta{font-size:12px;color:var(--warn);margin:5px 4px 0}
 .note{align-self:center;max-width:92%;padding:9px 14px;border-radius:14px;background:var(--warn-bg);
@@ -222,7 +236,7 @@ transition-duration:.01ms!important}
 .typing .mark{animation:none;opacity:1;transform:none}
 .typing .label{animation:none;background:none;-webkit-text-fill-color:currentColor}
 .root[data-mode=float] .panel{transform:none}}
-@media (forced-colors:active){.bubble,.panel,.launcher,.send{border:1px solid CanvasText}.thumb{background:CanvasText}
+@media (forced-colors:active){.bubble,.panel,.launcher,.send,.buy{border:1px solid CanvasText}.thumb{background:CanvasText}
 .typing .label{background:none;-webkit-text-fill-color:CanvasText}.typing .mark{background:CanvasText}}
 `;
 
@@ -332,13 +346,95 @@ transition-duration:.01ms!important}
     if (text != null) node.textContent = text;
     return node;
   }
-  function escapeHtml(text) {
-    return text.replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
+  /* links:start — el texto de un mensaje, armado con nodos: nada se interpreta como HTML
+     (decisión 103). Los tests lo corren con Node. */
+  var LINK = /\[([^\]\n]{1,120})\]\(([^)\s]+)\)|\bhttps?:\/\/[^\s<>"'`]+/gi;
+  function safeUrl(raw) {
+    try { var u = new URL(raw); } catch (e) { return null; }
+    return /^https?:$/.test(u.protocol) && u.hostname ? u : null;
   }
-  // Negrita estilo WhatsApp (*texto*) y saltos de línea; todo lo demás se muestra como texto.
-  function format(text) {
-    return escapeHtml(text).replace(/\*(\S(?:[^*\n]*\S)?)\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
+  // A una URL suelta no se le pega la puntuación de la frase. Un ")" queda si cierra uno suyo.
+  function trimUrl(raw) {
+    for (var c; (c = raw.slice(-1)) && /[.,;:!?'"\])]/.test(c);) {
+      if (c === ")" && raw.split("(").length >= raw.split(")").length) break;
+      raw = raw.slice(0, -1);
+    }
+    return raw;
   }
+  function parseLinks(text) {
+    var parts = [], last = 0, m;
+    LINK.lastIndex = 0;
+    while ((m = LINK.exec(text))) {
+      var raw = m[2] || trimUrl(m[0]), url = safeUrl(raw);
+      if (!url) continue;
+      if (m.index > last) parts.push({ text: text.slice(last, m.index) });
+      parts.push({ url: url, label: m[1] || "" });
+      last = LINK.lastIndex = m.index + (m[2] ? m[0].length : raw.length);
+    }
+    if (last < text.length) parts.push({ text: text.slice(last) });
+    return parts;
+  }
+  function bareHost(host) { return host.toLowerCase().replace(/^(\*|www)\./, ""); }
+  function ownHost(host, hosts) {
+    host = bareHost(host);
+    return (hosts || []).some(function (h) { h = bareHost(h); return host === h || host.slice(-h.length - 1) === "." + h; });
+  }
+  function money(total, currency, lang) {
+    try { return new Intl.NumberFormat(lang === "en" ? "en-US" : "es-AR", { style: "currency", currency: currency }).format(total); }
+    catch (e) { return total + " " + currency; }
+  }
+  // Negrita estilo WhatsApp (*texto*) y saltos de línea, como nodos de texto.
+  function addText(doc, box, text) {
+    text.split("\n").forEach(function (line, i) {
+      if (i) box.appendChild(doc.createElement("br"));
+      line.split(/\*(\S(?:[^*\n]*\S)?)\*/).forEach(function (piece, j) {
+        if (!piece) return;
+        if (j % 2) box.appendChild(doc.createElement("strong")).textContent = piece;
+        else box.appendChild(doc.createTextNode(piece));
+      });
+    });
+  }
+  function span(doc, cls, text) { var s = doc.createElement("span"); s.className = cls; s.textContent = text; return s; }
+  // o: { hosts, checkouts: [{url, total, currency}], buy, lang, plain }. Un link de compra
+  // (carrito o checkout) sale del texto y es un botón; los demás muestran el dominio.
+  function renderMessage(doc, text, o) {
+    var body = doc.createDocumentFragment(), buttons = [], pending = "", cut = false;
+    parseLinks(text).forEach(function (part) {
+      if (part.text != null) {
+        var t = part.text;  // sin el link: "link: ." -> "link."
+        if (cut && /^\s*[.,;!?]/.test(t)) { pending = pending.replace(/:$/, ""); t = t.replace(/^\s+/, ""); }
+        cut = false;
+        pending += t;
+        return;
+      }
+      var url = part.url, host = bareHost(url.hostname), own = ownHost(host, o.hosts);
+      var a = doc.createElement("a");
+      a.setAttribute("href", url.href);
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener noreferrer");
+      if (!o.plain && /\/(cart|checkouts?)(\/|$)/i.test(url.pathname)) {
+        var found = (o.checkouts || []).filter(function (c) { var u = safeUrl(c.url || ""); return u && u.href === url.href; })[0];
+        a.className = "buy";
+        a.appendChild(span(doc, "", o.buy + (found && found.total ? " · " + money(found.total, found.currency, o.lang) : "") + " →"));
+        if (!own) a.appendChild(span(doc, "dom", host));
+        buttons.push(a);
+        pending = pending.replace(/[ \t]+$/, "");
+        cut = true;
+        return;
+      }
+      addText(doc, body, pending);
+      pending = "";
+      a.className = "lnk";
+      a.setAttribute("title", url.href);
+      a.appendChild(doc.createTextNode(part.label || host));
+      if (part.label && !own) a.appendChild(span(doc, "dom", " · " + host));
+      else if (!part.label) a.appendChild(doc.createElement("i")).textContent = "↗";
+      body.appendChild(a);
+    });
+    addText(doc, body, buttons.length ? pending.replace(/\s+$/, "") : pending);
+    return { body: body, buttons: buttons };
+  }
+  /* links:end */
   // Un desplazamiento del propio widget (llega un mensaje) no muestra la barra.
   var quietUntil = 0, thumbTimer = null;
   function scrollDown() { quietUntil = Date.now() + 150; log.scrollTop = log.scrollHeight; }
@@ -388,9 +484,18 @@ transition-duration:.01ms!important}
     var row = el("div", "row " + item.kind + (item.failed ? " failed" : ""));
     if (item.kind === "human") row.appendChild(el("div", "who", T.team(cfg.name)));
     var bubble = el("div", "bubble");
-    bubble.innerHTML = format(item.text);
+    var shown = renderMessage(document, item.text, {
+      hosts: cfg.link_hosts, checkouts: item.checkouts, buy: T.buy, lang: lang, plain: item.kind === "user"
+    });
+    bubble.appendChild(shown.body);
     bubble.title = new Date(item.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     row.appendChild(bubble);
+    if (shown.buttons.length) {  // el botón de compra, debajo del texto
+      var acts = el("div", "acts");
+      shown.buttons.forEach(function (b) { acts.appendChild(b); });
+      if (cfg.purchase_note) acts.appendChild(el("div", "pnote", cfg.purchase_note));
+      row.appendChild(acts);
+    }
     if (item.failed) {
       var meta = el("div", "meta", T.notSent), retry = el("button", "link", T.retry);
       retry.type = "button";
@@ -400,9 +505,10 @@ transition-duration:.01ms!important}
     }
     log.appendChild(row);
   }
-  function add(kind, text, replies) {
+  function add(kind, text, replies, checkouts) {
     var item = { kind: kind, text: text, ts: Date.now() };
     if (replies && replies.length) item.replies = replies;
+    if (checkouts && checkouts.length) item.checkouts = checkouts;
     state.items.push(item);
     save();
     var shown = $(".chips");
@@ -587,7 +693,7 @@ transition-duration:.01ms!important}
       return readEvents(response, function (name, data) {
         if (name === "typing") showTyping();
         else if (name === "held") { answered = true; held = true; }
-        else if (name === "message") { answered = true; hideTyping(true); add("agent", data.text, data.replies); }
+        else if (name === "message") { answered = true; hideTyping(true); add("agent", data.text, data.replies, data.checkouts); }
         else if (name === "done") {
           var today = typeof data.remaining_today === "number" ? data.remaining_today : data.remaining;
           state.remaining = Math.min(data.remaining, today);
@@ -631,7 +737,7 @@ transition-duration:.01ms!important}
         seen.push(m.id);
         state.seenHuman = seen.slice(-50);
         hideTyping(true);
-        add(m.role === "agent" ? "agent" : "human", m.text);
+        add(m.role === "agent" ? "agent" : "human", m.text, null, m.checkouts);
       });
       // Modo supervisado: "Typing…" mientras la respuesta espera a una persona del equipo.
       if (!busy) {
@@ -703,7 +809,7 @@ transition-duration:.01ms!important}
     if (e.key === "Escape" && !embedded) { e.stopPropagation(); setOpen(false); }
     if (e.key !== "Tab" || embedded || !small.matches) return;
     // A pantalla completa el foco no sale del chat.
-    var items = Array.prototype.filter.call(panel.querySelectorAll("button,textarea,[tabindex]"), function (n) {
+    var items = Array.prototype.filter.call(panel.querySelectorAll("button,textarea,a[href],[tabindex]"), function (n) {
       return !n.disabled && n.offsetParent !== null;
     });
     var first = items[0], last = items[items.length - 1], active = shadow.activeElement;

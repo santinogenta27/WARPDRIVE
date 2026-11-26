@@ -42,6 +42,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 
 from app import i18n
 from app.agent.loop import Agent
+from app.channels import links
 from app.channels.base import InboundMessage, InvalidSignature
 from app.channels.inbound import handle_inbound
 from app.channels.web import widget
@@ -374,6 +375,10 @@ def widget_config(request: Request, deps: Deps, canal: str = "") -> JSONResponse
         origin, host = request.headers.get("origin"), request.headers.get("host", "")
         # Primeros pasos (decisión 074): pedido desde un dominio de la empresa = instalado.
         first_steps.note_widget_seen(conn, tenant_id, origin, found.domains)
+        # Links (decisión 103): los dominios propios no se marcan; en la prueba, una línea bajo
+        # el botón de compra.
+        link_hosts = [*links.trusted_hosts(conn, tenant_id), host.split(":")[0].lower()]
+        purchase_note = _purchase_note(conn, tenant_id)
     headers = {"Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"}
     if not widget.origin_allowed(origin, host, live):
         return JSONResponse({"allowed": False}, headers=headers)
@@ -389,9 +394,21 @@ def widget_config(request: Request, deps: Deps, canal: str = "") -> JSONResponse
             or (DEMO_SUGGESTIONS if slug == _slug(deps, "") else []),
             "limit": MESSAGE_LIMIT,
             "lang": found.language,
+            "link_hosts": list(dict.fromkeys(h for h in link_hosts if h)),
+            "purchase_note": purchase_note,
         },
         headers=headers,
     )
+
+
+def _purchase_note(conn: psycopg.Connection, tenant_id: uuid.UUID) -> str:
+    """En una prueba gratis con tienda real, qué abre el botón de compra (decisión 103)."""
+    from app.trial import service as trial
+
+    found = trial.for_tenant(conn, tenant_id)
+    if found is None or not trial.has_real_store(found.products or []):
+        return ""
+    return trial.purchase_note(found.language)
 
 
 @router.get("/chat/widget/logo/{slug}", include_in_schema=False)
@@ -489,6 +506,8 @@ def _process(
             from app.trial import service as trial
 
             trial.count_message(conn, tenant_id)
+        # El total de cada link de compra, para el botón del widget (decisión 103).
+        channel.checkouts = [links.checkouts(conn, tenant_id, text) for text in channel.outbox]
         return {
             "remaining": MESSAGE_LIMIT - usage.session - 1,
             "remaining_today": max(deps.ip_daily_limit - usage.ip - 1, 0),
@@ -533,8 +552,10 @@ async def _stream(
         )
         yield _event("error", {"message": i18n.text(language, "chat_error")})
         return
-    for text in channel.outbox:
-        yield _event("message", {"text": text, **quick_replies(text)})
+    found = channel.checkouts
+    for n, text in enumerate(channel.outbox):
+        extra = {"checkouts": found[n]} if n < len(found) and found[n] else {}
+        yield _event("message", {"text": text, **quick_replies(text), **extra})
     if remaining.pop("held", 0):
         # Modo supervisado (decisión 072): la respuesta espera a una persona del equipo. La
         # página sigue mostrando "escribiendo…" y la trae de /chat/updates.
@@ -594,10 +615,12 @@ def updates(
                 " and d.status = 'pending' and c.archived_at is null)",
                 (contact,),
             ).fetchone()
+        found = [links.checkouts(conn, tenant_id, row[1]) for row in rows]
     return {
         "messages": [
             {"id": str(message_id), "text": text, "at": at.isoformat(), "role": role}
-            for message_id, text, at, role in rows
+            | ({"checkouts": found[n]} if found[n] else {})
+            for n, (message_id, text, at, role) in enumerate(rows)
         ],
         "typing": bool(typing and typing[0]),
     }

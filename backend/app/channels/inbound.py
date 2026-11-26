@@ -17,6 +17,7 @@ from app import i18n
 from app.agent.loop import Agent
 from app.audit import log as audit_log
 from app.cases import supervision
+from app.channels import links
 from app.channels.base import (
     IGNORED_TYPES,
     UNSUPPORTED_MESSAGE,
@@ -75,6 +76,8 @@ def handle_inbound(
         # Modo supervisado (decisión 072): la respuesta espera a una persona del equipo.
         supervision.hold(conn, tenant_id, case_id, reply, channel=channel.kind)
         return True
+    if "whatsapp" in channel.kind:  # Twilio: cada link en su línea, corto (decisión 103)
+        reply = links.for_whatsapp(conn, tenant_id, reply)
     try:
         sent_id = channel.send(to=message.sender, body=reply)
     except SendError as error:

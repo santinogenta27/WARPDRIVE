@@ -307,13 +307,10 @@ def test_de_punta_a_punta_prueba_piloto_y_contacto(
     assert mate["price"] == 12500 and mate["image"].endswith("mate.jpg")
     cart = run("armar_carrito", {"items": [{"sku": mate["variants"][0]["sku"], "quantity": 1}]})
     assert cart.status == "executed"
-    assert cart.result["data"]["url"].startswith(
-        f"https://agente.example/demo/{state['chat_slug']}/cart/"
-    )
-    assert (
-        client.get(cart.result["data"]["url"].removeprefix("https://agente.example")).status_code
-        == 200
-    )
+    # Una tienda que no es Shopify: el link de compra lleva a la página real del producto, con el
+    # ref de la conversación (decisión 103).
+    url = cart.result["data"]["url"]
+    assert url.startswith(f"{mate['url']}?ref=ea-"), url
     refund = run("iniciar_reembolso", {"order_id": "DEMO-1002", "amount": 1})
     assert refund.status == "approval_required", refund
 

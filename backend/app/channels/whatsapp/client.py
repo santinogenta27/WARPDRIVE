@@ -1,9 +1,11 @@
 """Cliente de la WhatsApp Cloud API (Graph API de Meta) para enviar mensajes."""
 
+import re
 from typing import Any
 
 import httpx
 
+_URL = re.compile(r"\bhttps?://\S", re.I)
 GRAPH_URL = "https://graph.facebook.com"
 GRAPH_VERSION = "v27.0"  # la más reciente según el changelog de la Graph API (noviembre de 2026)
 NOT_IN_ALLOWED_LIST = 131030
@@ -23,8 +25,10 @@ class WhatsAppClient:
         self._version = version
 
     def send_text(self, *, token: str, phone_number_id: str, to: str, body: str) -> str:
-        """Envía un mensaje libre (dentro de la ventana de 24 h). Devuelve el wamid."""
-        message = {"type": "text", "text": {"preview_url": False, "body": body}}
+        """Envía un mensaje libre (dentro de la ventana de 24 h). Devuelve el wamid. Con un link,
+        WhatsApp muestra su vista previa (decisión 103)."""
+        preview = bool(_URL.search(body))
+        message = {"type": "text", "text": {"preview_url": preview, "body": body}}
         return self._send(token, phone_number_id, to, message)
 
     def send_template(

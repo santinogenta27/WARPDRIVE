@@ -11,6 +11,7 @@ import re
 import time
 import uuid
 from collections.abc import Mapping
+from typing import Any
 
 from app.channels.base import InboundMessage, InvalidSignature
 from app.contacts import WEB_PREFIX
@@ -42,6 +43,8 @@ class WebChannel:
     def __init__(self, address: str = DEMO_ADDRESS) -> None:
         self.address = address
         self.outbox: list[str] = []
+        # Por mensaje del outbox, el total de sus links de compra (decisión 103).
+        self.checkouts: list[list[dict[str, Any]]] = []
 
     def receive(self, url: str, body: bytes, headers: Mapping[str, str]) -> list[InboundMessage]:
         token = session_token(body)
