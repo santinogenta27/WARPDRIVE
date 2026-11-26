@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.channels.links import router as links_router
 from app.channels.twilio.webhook import router as twilio_router
 from app.channels.web.routes import router as web_router
 from app.channels.whatsapp.webhook import router as whatsapp_router
@@ -41,6 +42,7 @@ app = FastAPI(title="Enterprise Data AI", lifespan=lifespan)
 app.include_router(whatsapp_router)
 app.include_router(twilio_router)
 app.include_router(web_router)
+app.include_router(links_router)  # links cortos de WhatsApp, /go/{código} (decisión 103)
 app.include_router(panel_router)
 app.include_router(company_router)
 app.include_router(home_router)  # Home (decisión 085)

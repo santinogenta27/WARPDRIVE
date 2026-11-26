@@ -23,14 +23,18 @@ _CHECKS = [
 
 EMPTY = "respuesta vacía"
 ISSUES = (EMPTY, *(name for name, _ in _CHECKS))  # lo que puede devolver `problem`
+# Una URL (un slug o un parámetro como utm_source) puede llevar guiones bajos: no es el nombre
+# de una herramienta (decisión 103).
+_URL = re.compile(r"\bhttps?://[^\s<>()\[\]]+", re.I)
 
 
 def problem(message: str) -> str | None:
     """Por qué el mensaje no se le puede mandar al cliente, o None si se puede."""
     if not message.strip():
         return EMPTY
+    without_urls = _URL.sub(" ", message)
     for name, pattern in _CHECKS:
-        if pattern.search(message):
+        if pattern.search(without_urls if name == "nombre de herramienta" else message):
             return name
     return None
 

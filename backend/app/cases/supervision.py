@@ -206,7 +206,10 @@ def deliver(
             ).fetchone()
         if row is None or not row[0]:
             raise LookupError("El caso no tiene un contacto de WhatsApp")
-        sid = twilio.send(to=json.loads(decrypt(row[0]))["wa_id"], body=text)
+        from app.channels import links
+
+        body = links.for_whatsapp(conn, tenant_id, text)  # cada link en su línea (decisión 103)
+        sid = twilio.send(to=json.loads(decrypt(row[0]))["wa_id"], body=body)
         audit_log.record(
             conn, tenant_id, case_id, "draft_delivered", {"sid": sid, "channel": channel}
         )

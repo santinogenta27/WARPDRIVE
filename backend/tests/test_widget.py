@@ -126,7 +126,8 @@ def test_el_widget_es_un_solo_archivo_liviano_y_sin_dependencias(world: World) -
     assert response.headers["content-type"].startswith("application/javascript")
     assert "max-age" in response.headers["cache-control"]
     script = response.text
-    assert len(script.encode()) < 45_000  # chico: sin minificar entra en una sola respuesta
+    # Chico: sin minificar entra en una sola respuesta (con los links, decisión 103, 50 KB).
+    assert len(script.encode()) < 50_000
     assert "attachShadow" in script  # aislado del CSS del sitio
     assert "prefers-reduced-motion" in script and "prefers-color-scheme" in script
     assert "backdrop-filter" in script and "safe-area-inset-bottom" in script

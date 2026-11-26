@@ -60,9 +60,13 @@ class Product:
     variants: tuple[str, ...] = ()
     price_max: float | None = None  # con variantes de distinto precio
     source: str = ""
+    # Shopify (decisión 103): la variante real para el carrito de la tienda. `variant_id`, la
+    # primera disponible; `variant_ids`, por cada opción de `variants`.
+    variant_id: str = ""
+    variant_ids: tuple[tuple[str, str], ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        found = {
             "name": self.name,
             "short": short_name(self.name),
             "price": self.price,
@@ -77,6 +81,10 @@ class Product:
             "variants": list(self.variants),
             "source": self.source,
         }
+        if self.variant_id:
+            found["variant_id"] = self.variant_id
+            found["variant_ids"] = dict(self.variant_ids)
+        return found
 
 
 # -- texto y precios -----------------------------------------------------------------------------
@@ -265,12 +273,21 @@ def _merge(members: list[Product]) -> Product:
     variants = list(dict.fromkeys([*colors, *(v for p in members for v in p.variants)]))
     prices = [p.price for p in members] + [p.price_max for p in members if p.price_max]
     availability = [p.available for p in members if p.available is not None]
+    # Las variantes reales de Shopify de cada miembro: el color lleva a la de su producto.
+    ids: dict[str, str] = {}
+    for p in [lead, *members]:
+        if p.variant_id and variant_name(p.name):
+            ids.setdefault(variant_name(p.name), p.variant_id)
+        for label, variant_id in p.variant_ids:
+            ids.setdefault(label, variant_id)
+    kept = variants[:MAX_VARIANTS]
     return replace(
         lead,
         name=base_name(lead.name) if colors else lead.name,
-        variants=tuple(variants[:MAX_VARIANTS]),
+        variants=tuple(kept),
         price_max=max(prices) if max(prices) > lead.price else None,
         available=any(availability) if availability else None,
+        variant_ids=tuple((label, ids[label]) for label in kept if label in ids),
     )
 
 
