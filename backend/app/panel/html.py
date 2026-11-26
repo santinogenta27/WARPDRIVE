@@ -301,6 +301,7 @@ SECTIONS: list[tuple[str, str, str, list[Tab]]] = [
         [
             ("settings", "Team", "/panel/settings"),
             ("settings/usage", "Usage & model", "/panel/settings/usage"),
+            ("settings/spending", "Usage", "/panel/settings/spending"),
             ("settings/data", "Your data", "/panel/settings/data"),
         ],
     ),

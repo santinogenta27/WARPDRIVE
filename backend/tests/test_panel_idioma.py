@@ -51,6 +51,7 @@ PAGES = [
     "insights/results",
     "settings",
     "settings/usage",
+    "settings/spending",  # decisión 102
     "settings/data",
 ]
 ENGLISH = re.compile(
